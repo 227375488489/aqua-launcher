@@ -16,6 +16,10 @@
   <img alt="License" src="https://img.shields.io/badge/License-MIT-5be9dc?style=flat-square" />
 </p>
 
+<p align="center">
+  <a href="https://github.com/227375488489/aqua-launcher/releases/latest"><img alt="Скачать" src="https://img.shields.io/badge/Скачать-aqua--launcher.exe-5be9dc?style=for-the-badge" /></a>
+</p>
+
 ![Главный экран](docs/screenshots/home.png)
 
 ## Возможности
