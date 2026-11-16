@@ -35,7 +35,14 @@ const snapshots = [
   "26.4-snapshot-8", "26.4-snapshot-7", "26.4-snapshot-6", "1.21.9-pre1", "25w45a",
 ].map((id, i) => ({ id, kind: "snapshot", releaseTime: date(base - (i + 1) * 2 * day) }));
 
-const all = [...snapshots, ...releases].sort(
+const oldies = [
+  ["b1.7.3", "old_beta", 700],
+  ["b1.2_01", "old_beta", 718],
+  ["a1.2.6", "old_alpha", 742],
+  ["c0.30_01c", "old_alpha", 760],
+].map(([id, kind, days]) => ({ id, kind, releaseTime: date(base - days * day) }));
+
+const all = [...snapshots, ...oldies, ...releases].sort(
   (a, b) => Date.parse(b.releaseTime) - Date.parse(a.releaseTime),
 );
 
@@ -68,6 +75,9 @@ let lastVersion = "1.21.8";
 let running = false;
 let runTimer = null;
 
+const demoQuery = new URLSearchParams(location.search);
+const pick = (key, fallback) => demoQuery.get(key) ?? fallback;
+
 let settings = {
   gameDir: null,
   memoryMb: 4096,
@@ -82,9 +92,44 @@ let settings = {
   height: 530,
   fullscreen: false,
   msClientId: "00000000402b5328",
+  uiTheme: pick("theme", "dark"),
+  uiAccent: pick("accent", "aqua"),
+  uiRadius: pick("radius", "soft"),
+  uiDensity: pick("density", "normal"),
+  uiFont: pick("font", "manrope"),
+  uiScale: Number(pick("scale", "100")),
+  uiWallpaper: pick("wall", "deep"),
+  uiWallpaperPath: null,
+  uiWallpaperBlur: 18,
+  uiWallpaperDim: 45,
+  uiSidebar: pick("side", "left"),
+  uiSidebarMode: pick("rail", "full"),
+  uiMotion: pick("motion", "on") !== "off",
+  strictMods: true,
+  language: "ru",
+  strictMods: true,
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const MODS = [
+  { id: "AANobbMI", title: "Sodium", author: "jellysquid3", icon: "https://cdn.modrinth.com/data/AANobbMI/295862f4724dc3f78df3447ad6072b2dcd3ef0c9_96.webp", downloads: 253106880, kind: "mod" },
+  { id: "YL57xq9U", title: "Iris Shaders", author: "coderbot", icon: null, downloads: 84210330, kind: "mod" },
+  { id: "gvQqBUqZ", title: "Lithium", author: "jellysquid3", icon: null, downloads: 120884410, kind: "mod" },
+  { id: "P7dR8mSH", title: "Fabric API", author: "modmuss50", icon: null, downloads: 411002934, kind: "mod" },
+  { id: "mOgUt4GM", title: "Mod Menu", author: "Prospector", icon: null, downloads: 196441288, kind: "mod" },
+  { id: "1bokaNcj", title: "Xaero's Minimap", author: "xaero96", icon: null, downloads: 31288402, kind: "mod" },
+  { id: "u6dRKJwZ", title: "Just Enough Items", author: "mezz", icon: null, downloads: 288114900, kind: "mod" },
+  { id: "LNytGWDc", title: "Create", author: "simibubi", icon: null, downloads: 68320911, kind: "mod" },
+];
+
+const INSTALLED_MODS = [
+  { file: "fabric-api-0.130.0+26.3.jar", name: "Fabric API", id: "fabric-api", version: "0.130.0", loader: "fabric", size: 1930482, depends: [], risk: "low", notes: [] },
+  { file: "iris-fabric-1.11.7+mc26.3.jar", name: "Iris Shaders", id: "iris", version: "1.11.7", loader: "fabric", size: 2741882, depends: ["sodium"], risk: "low", notes: [] },
+  { file: "lithium-fabric-0.18.4+mc26.3.jar", name: "Lithium", id: "lithium", version: "0.18.4", loader: "fabric", size: 641220, depends: [], risk: "low", notes: [] },
+  { file: "sodium-extra-0.6.3.jar", name: "Sodium Extra", id: "sodium-extra", version: "0.6.3", loader: "fabric", size: 318442, depends: ["sodium", "fabric-api"], risk: "medium", notes: ["sodium_extra.class — работает с памятью напрямую"] },
+  { file: "sodium-fabric-0.9.3.jar", name: "Sodium", id: "sodium", version: "0.9.3", loader: "fabric", size: 1914521, depends: [], risk: "low", notes: [] },
+];
 
 async function install(id) {
   const known = all.find((v) => v.id === id);
@@ -266,6 +311,58 @@ const handlers = {
   async win_toggle_maximize() {},
   async win_close() {},
   version_banners: () => banners(),
+
+  modrinth_search: ({ query, kind }) => {
+    const term = (query ?? "").toLowerCase();
+    return MODS.filter(
+      (m) => (kind === "mod" || m.kind === kind) && (!term || m.title.toLowerCase().includes(term)),
+    );
+  },
+  mods_list: () => INSTALLED_MODS,
+  mods_health: () => ({
+    total: INSTALLED_MODS.length,
+    missing: [{ modName: "Sodium Extra", modId: "sodium-extra", need: "fabric-api" }],
+  }),
+  async mods_install({ project }) {
+    await sleep(900);
+    const found = MODS.find((m) => m.id === project);
+    return { installed: [`${project}-1.0.jar`], notes: found ? [] : ["Зависимость не найдена"] };
+  },
+  async mods_repair() {
+    await sleep(700);
+    return { installed: ["fabric-api-0.130.0.jar"], notes: [] };
+  },
+  async mods_remove() {
+    await sleep(200);
+    return null;
+  },
+
+  system_report: () => ({
+    specs: {
+      cpu: "AMD Ryzen 5 5600 6-Core Processor",
+      cores: 6,
+      threads: 12,
+      ramGb: 16,
+      gpu: "NVIDIA GeForce RTX 3060",
+      vramGb: 12,
+      diskFreeGb: 214,
+      diskTotalGb: 930,
+      os: "Windows x86_64",
+    },
+    recommendation: {
+      tier: "high",
+      memoryMb: 6144,
+      renderDistance: 16,
+      width: 1920,
+      height: 1080,
+      shaders: [
+        { id: "none", fpsLow: 520, fpsHigh: 820, verdict: "easily" },
+        { id: "light", fpsLow: 170, fpsHigh: 240, verdict: "easily" },
+        { id: "balanced", fpsLow: 110, fpsHigh: 160, verdict: "easily" },
+        { id: "heavy", fpsLow: 58, fpsHigh: 82, verdict: "fine" },
+      ],
+    },
+  }),
 };
 
 const BANNER_FALLBACK = [
@@ -314,7 +411,7 @@ async function invoke(cmd, payload) {  const fn = handlers[cmd];
 }
 
 window.__TAURI__ = {
-  core: { invoke },
+  core: { invoke, convertFileSrc: (path) => path },
   event: { listen, emit },
   opener: {
     openUrl: async (url) => {

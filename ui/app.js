@@ -47,6 +47,12 @@ const S = {
   boot: null,
   remote: [],
   banners: new Map(),
+  system: null,
+  mods: [],
+  installedMods: [],
+  modHealth: null,
+  modsLoaded: false,
+  modsBusy: false,
   selected: null,
   query: "",
   filter: "release",
@@ -103,8 +109,12 @@ function go(page) {
   $("#view").scrollTop = 0;
 
   if (page === "library") renderLibrary();
+  if (page === "mods") refreshMods(false);
   if (page === "accounts") renderAccountList();
-  if (page === "settings") fillSettings();
+  if (page === "settings") {
+    fillSettings();
+    renderSystem();
+  }
 }
 
 /* ---------- данные ---------- */
@@ -119,7 +129,7 @@ const activeAccount = () =>
 async function refreshBoot() {
   S.boot = await invoke("bootstrap");
   S.selected = S.selected ?? S.boot.lastVersion ?? S.boot.local?.[0]?.id ?? null;
-  renderHomeStats();
+  applyAppearance(S.boot.settings);
   renderAccountChip();
   renderAccountList();
   renderLatest();
@@ -178,13 +188,131 @@ function plural(n, forms) {
   return forms[2];
 }
 
-function renderHomeStats() {
-  if (!S.boot) return;
-  const installed = S.boot.local?.length ?? 0;
-  $("#stat-installed").textContent = String(installed);
-  $("#stat-installed-unit").textContent = plural(installed, ["версия", "версии", "версий"]);
-  $("#stat-accounts").textContent = String(S.boot.accounts?.length ?? 0);
-  $("#stat-memory").textContent = String(Math.round((S.boot.settings?.memoryMb ?? 4096) / 1024));
+/* ---------- оформление ---------- */
+
+const ACCENTS = ["aqua", "mint", "azure", "gold", "rose"];
+const rootEl = document.documentElement;
+const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+function themeOf(choice) {
+  if (choice === "system") return darkQuery.matches ? "dark" : "light";
+  return choice === "light" ? "light" : "dark";
+}
+
+function fileUrl(path) {
+  const core = window.__TAURI__?.core;
+  return core?.convertFileSrc ? core.convertFileSrc(path) : path;
+}
+
+function applyWallpaper(s) {
+  const ocean = document.querySelector(".ocean");
+  if (!ocean) return;
+  const wall = s.uiWallpaper || "deep";
+  rootEl.dataset.wall = wall;
+  rootEl.style.setProperty("--wall-blur", `${Number(s.uiWallpaperBlur ?? 18)}px`);
+  rootEl.style.setProperty("--wall-dim", String(Number(s.uiWallpaperDim ?? 45) / 100));
+  const path = (s.uiWallpaperPath || "").trim();
+  if (wall === "custom" && path) {
+    ocean.style.setProperty("--wall-image", `url("${fileUrl(path)}")`);
+    ocean.style.setProperty("--wall-opacity", "0.85");
+    ocean.classList.add("has-wall");
+  } else {
+    ocean.style.removeProperty("--wall-image");
+    ocean.classList.remove("has-wall");
+  }
+}
+
+function applyAppearance(s) {
+  if (!s) return;
+  rootEl.dataset.theme = themeOf(s.uiTheme);
+  rootEl.dataset.accent = ACCENTS.includes(s.uiAccent) ? s.uiAccent : "aqua";
+  rootEl.dataset.radius = ["sharp", "soft", "round"].includes(s.uiRadius) ? s.uiRadius : "soft";
+  rootEl.dataset.density = ["compact", "normal", "wide"].includes(s.uiDensity) ? s.uiDensity : "normal";
+  rootEl.dataset.font = s.uiFont === "system" ? "system" : "manrope";
+  rootEl.dataset.side = s.uiSidebar === "right" ? "right" : "left";
+  rootEl.dataset.rail = s.uiSidebarMode === "icons" ? "icons" : "full";
+  rootEl.dataset.motion = s.uiMotion === false ? "off" : "on";
+  const scale = Math.min(115, Math.max(85, Number(s.uiScale) || 100));
+  rootEl.style.setProperty("--zoom", String(scale / 100));
+  applyWallpaper(s);
+}
+
+darkQuery.addEventListener("change", () => {
+  const s = S.boot?.settings;
+  if (s && s.uiTheme === "system") applyAppearance(s);
+});
+
+/* ---------- компьютер ---------- */
+
+const SHADER_NAMES = {
+  none: "Без шейдеров",
+  light: "Лёгкие шейдеры",
+  balanced: "Средние шейдеры",
+  heavy: "Тяжёлые шейдеры",
+};
+
+const VERDICTS = {
+  easily: ["ok", "легко"],
+  fine: ["ok", "комфортно"],
+  tight: ["mid", "на грани"],
+  no: ["bad", "тяжело"],
+};
+
+async function loadSystem(refresh = false) {
+  try {
+    S.system = await invoke("system_report", { refresh });
+    renderSystem();
+  } catch {
+    S.system = null;
+    $("#system-reco").textContent = "Не удалось опросить оборудование";
+  }
+}
+
+function renderSystem() {
+  const data = S.system;
+  if (!data) return;
+  const s = data.specs;
+  const ram = s.ramGb ? `${s.ramGb} ГБ` : "—";
+  const disk = s.diskFreeGb ? `${s.diskFreeGb} из ${s.diskTotalGb} ГБ свободно` : "—";
+  const full = [
+    ["Процессор", s.cpu || "—"],
+    ["Видеокарта", s.gpu || "—"],
+    ["Память", ram],
+    ["Диск", disk],
+  ];
+  const row = ([k, v]) =>
+    `<div class="spec-row"><span>${k}</span><b title="${esc(v)}">${esc(v)}</b></div>`;
+  $("#system-specs").innerHTML = full.map(row).join("");
+  $("#pc-specs").innerHTML = full.slice(0, 3).map(row).join("");
+
+  $("#shader-estimates").innerHTML = data.recommendation.shaders
+    .map((x) => {
+      const [cls, label] = VERDICTS[x.verdict] ?? ["mid", "—"];
+      return `<div class="fps-row">
+        <span class="fps-name">${SHADER_NAMES[x.id] ?? esc(x.id)}</span>
+        <span class="fps-value">${x.fpsLow}–${x.fpsHigh} FPS</span>
+        <span class="pill ${cls}">${label}</span>
+      </div>`;
+    })
+    .join("");
+
+  const r = data.recommendation;
+  $("#system-reco").textContent = `Память ${Math.round((r.memoryMb / 1024) * 10) / 10} ГБ · ${r.width}×${r.height} · ${r.renderDistance} чанков`;
+}
+
+function applyRecommendation() {
+  const r = S.system?.recommendation;
+  if (!r) {
+    toast("Оборудование ещё не проверено", "error");
+    return;
+  }
+  const gb = Math.min(16, Math.max(1, Math.round(r.memoryMb / 1024)));
+  $("#memory-range").value = String(gb);
+  $("#memory-value").textContent = `${gb} ГБ`;
+  $("#res-width").value = String(r.width);
+  $("#res-height").value = String(r.height);
+  markDirty();
+  toast("Рекомендации применены — не забудьте сохранить");
 }
 
 function renderAccountChip() {
@@ -341,8 +469,9 @@ function syncPlay() {
 
 function filteredVersions() {
   const query = S.query.trim().toLowerCase();
+  const kindOf = (v) => (v.kind === "old_alpha" || v.kind === "old_beta" ? "old" : v.kind);
   return S.remote.filter((v) => {
-    if (S.filter !== "all" && v.kind !== S.filter) return false;
+    if (S.filter !== "all" && kindOf(v) !== S.filter) return false;
     if (query && !v.id.toLowerCase().includes(query)) return false;
     return true;
   });
@@ -398,6 +527,223 @@ function renderLibrary() {
     .join("");
 
   $("#library-more").hidden = items.length <= S.shown;
+}
+
+/* ---------- моды ---------- */
+
+const MOD_KINDS = { mod: "моды", resourcepack: "ресурспаки", shader: "шейдеры" };
+const RISK_LABEL = { low: "безопасно", medium: "внимание", high: "опасно" };
+const PLATFORM_DEPS = ["minecraft", "java", "forge", "neoforge", "fabricloader", "fabric-api"];
+
+const num = new Intl.NumberFormat("ru-RU");
+
+function modArt(src, title) {
+  if (src) {
+    return `<img class="mod-art" src="${esc(src)}" alt="" loading="lazy" decoding="async" />`;
+  }
+  return `<span class="mod-art is-empty">${esc((title ?? "?").slice(0, 2))}</span>`;
+}
+
+function renderModResults() {
+  const box = $("#mods-results");
+  if (!S.mods.length) {
+    box.innerHTML = `<p class="empty-inline">Ничего не найдено. Измените запрос или выберите другую версию.</p>`;
+    return;
+  }
+  box.innerHTML = S.mods
+    .map(
+      (m) => `<div class="mod-row">
+        ${modArt(m.icon, m.title)}
+        <div class="mod-main">
+          <div class="mod-title">${esc(m.title)}</div>
+          <div class="mod-sub">${esc(m.author)} · ${num.format(m.downloads ?? 0)} загрузок</div>
+        </div>
+        <button class="btn btn-small" data-mod-install="${esc(m.id)}" data-mod-title="${esc(m.title)}">Установить</button>
+      </div>`,
+    )
+    .join("");
+}
+
+async function searchMods() {
+  const query = $("#mods-search").value.trim();
+  const kind = segValue("#mods-kind", "data-kind") ?? "mod";
+  $("#mods-note").textContent = "Поиск…";
+  try {
+    const list = await invoke("modrinth_search", {
+      query,
+      kind,
+      version: S.selected,
+      loader: kind === "mod" ? "fabric" : null,
+    });
+    S.mods = list;
+    $("#mods-note").textContent = `${list.length} результатов · ${MOD_KINDS[kind]}`;
+    $("#mods-sub").textContent = S.selected
+      ? `${MOD_KINDS[kind]} для ${S.selected} · Fabric`
+      : `${MOD_KINDS[kind]} · выберите версию, чтобы видеть совместимые сборки`;
+    renderModResults();
+  } catch (e) {
+    S.mods = [];
+    $("#mods-note").textContent = "";
+    renderModResults();
+    toast(friendly(e), "error");
+  }
+}
+
+function renderInstalledMods() {
+  const list = S.installedMods;
+  $("#mods-count").textContent = list.length ? `${list.length} файлов` : "";
+  const health = S.modHealth;
+  const box = $("#mods-health");
+  if (health && health.missing.length) {
+    box.hidden = false;
+    box.innerHTML = `${icon("i-alert")}
+      <div>
+        <strong>Не хватает ${health.missing.length} ${plural(health.missing.length, ["зависимости", "зависимостей", "зависимостей"])}</strong>
+        <span>${esc(health.missing.slice(0, 4).map((m) => m.need).join(", "))}</span>
+      </div>
+      <button class="btn btn-small" id="mods-repair-inline">Починить</button>`;
+  } else {
+    box.hidden = true;
+    box.innerHTML = "";
+  }
+
+  $("#mods-list").innerHTML =
+    list
+      .map(
+        (m) => `<div class="mod-row" data-mod-info="${esc(m.file)}" role="button" tabindex="0">
+        ${modArt(null, m.name)}
+        <div class="mod-main">
+          <div class="mod-title">${esc(m.name)}${m.version ? ` <span class="mod-ver">${esc(m.version)}</span>` : ""}</div>
+          <div class="mod-sub">${esc(m.file)}</div>
+        </div>
+        <span class="pill ${m.risk === "low" ? "ok" : m.risk === "medium" ? "mid" : "bad"}">${RISK_LABEL[m.risk] ?? m.risk}</span>
+        <button class="icon-btn" data-mod-remove="${esc(m.file)}" title="Удалить">${icon("i-trash")}</button>
+      </div>`,
+      )
+      .join("") ||
+    `<p class="empty-inline">Пока пусто. Установите мод слева — зависимости приедут вместе с ним.</p>`;
+}
+
+async function loadMods() {
+  try {
+    const [list, health] = await Promise.all([invoke("mods_list"), invoke("mods_health")]);
+    S.installedMods = list;
+    S.modHealth = health;
+    renderInstalledMods();
+  } catch (e) {
+    toast(friendly(e), "error");
+  }
+}
+
+async function refreshMods(forceSearch = false) {
+  await loadMods();
+  if (forceSearch || !S.modsLoaded) {
+    S.modsLoaded = true;
+    await searchMods();
+  }
+}
+
+function openModInfo(file) {
+  const mod = S.installedMods.find((m) => m.file === file);
+  if (!mod) return;
+  const id = (mod.id || "").toLowerCase();
+  const dependents = S.installedMods.filter(
+    (m) =>
+      m.file !== file &&
+      m.depends.some((d) => {
+        const key = d.toLowerCase();
+        return key === id || key === mod.name.toLowerCase();
+      }),
+  );
+  const needs = mod.depends.filter((d) => !PLATFORM_DEPS.includes(d.toLowerCase()));
+  openModal(`<div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <h2>${esc(mod.name)}</h2>
+      <button class="modal-close" data-close aria-label="Закрыть">${icon("i-close")}</button>
+    </div>
+    <p class="modal-text">${esc(mod.file)} · ${fmtBytes(mod.size)} · ${RISK_LABEL[mod.risk] ?? mod.risk}</p>
+    <p class="modal-text">${
+      needs.length
+        ? `<strong>Нужны для работы:</strong> ${esc(needs.join(", "))}`
+        : "Дополнительных зависимостей нет."
+    }</p>
+    <p class="modal-text">${
+      dependents.length
+        ? `<strong>От него зависят:</strong> ${esc(dependents.map((m) => m.name).join(", "))}. Если удалить, эти моды перестанут запускаться.`
+        : "Другие моды от него не зависят — удаление безопасно."
+    }</p>
+    ${mod.notes.length ? `<ul class="modal-list">${mod.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
+    <div class="modal-actions">
+      <button class="btn" data-close>Закрыть</button>
+    </div>
+  </div>`);
+}
+
+async function installMod(project, title) {
+  if (S.modsBusy) return;
+  if (!S.selected) {
+    toast("Сначала выберите версию игры", "error");
+    go("library");
+    return;
+  }
+  S.modsBusy = true;
+  $$("[data-mod-install]").forEach((b) => (b.disabled = true));
+  toast(`Устанавливаем ${title}…`);
+  showBar("Моды", `Загрузка · ${title}`, 0);
+  try {
+    const out = await invoke("mods_install", {
+      project,
+      version: S.selected,
+      loader: "fabric",
+    });
+    await refreshMods();
+    toast(
+      out.installed.length
+        ? `Готово: ${out.installed.length} ${plural(out.installed.length, ["файл", "файла", "файлов"])} в папке mods`
+        : "Ничего не установлено",
+      out.installed.length ? "ok" : "error",
+    );
+    if (out.notes.length) toast(out.notes[0], "error");
+  } catch (e) {
+    toast(friendly(e), "error");
+  } finally {
+    S.modsBusy = false;
+    hideBar();
+    $$("[data-mod-install]").forEach((b) => (b.disabled = false));
+  }
+}
+
+async function removeMod(file) {
+  const mod = S.installedMods.find((m) => m.file === file);
+  confirmAction(
+    "Удалить мод?",
+    `${mod?.name ?? file} будет удалён из папки mods.`,
+    async () => {
+      try {
+        await invoke("mods_remove", { file });
+        await refreshMods();
+        toast("Мод удалён");
+      } catch (e) {
+        toast(friendly(e), "error");
+      }
+    },
+    "Удалить",
+  );
+}
+
+async function repairMods() {
+  if (!S.selected) {
+    toast("Сначала выберите версию игры", "error");
+    return;
+  }
+  toast("Проверяем зависимости…");
+  try {
+    const out = await invoke("mods_repair", { version: S.selected, loader: "fabric" });
+    await refreshMods();
+    toast(out.installed.length ? `Доставлено файлов: ${out.installed.length}` : "Сборка в порядке");
+  } catch (e) {
+    toast(friendly(e), "error");
+  }
 }
 
 /* ---------- аккаунты ---------- */
@@ -460,8 +806,37 @@ function fillSettings() {
   setSwitch("#auto-java-switch", s.autoJava);
   setSwitch("#fullscreen-switch", s.fullscreen);
   setSwitch("#close-switch", s.closeOnLaunch);
+
+  // оформление
+  setSeg("#theme-choice", "data-theme-choice", s.uiTheme ?? "dark");
+  setSeg("#accent-choice", "data-accent", s.uiAccent ?? "aqua");
+  setSeg("#radius-choice", "data-radius", s.uiRadius ?? "soft");
+  setSeg("#density-choice", "data-density", s.uiDensity ?? "normal");
+  setSeg("#font-choice", "data-font", s.uiFont ?? "manrope");
+  setSeg("#side-choice", "data-side", s.uiSidebar ?? "left");
+  setSeg("#rail-choice", "data-rail", s.uiSidebarMode ?? "full");
+  setSwitch("#motion-switch", s.uiMotion !== false);
+  setSwitch("#strict-switch", s.strictMods !== false);
+  $("#scale-range").value = String(s.uiScale ?? 100);
+  $("#scale-value").textContent = `${s.uiScale ?? 100}%`;
+  $("#wall-blur").value = String(s.uiWallpaperBlur ?? 18);
+  $("#wall-blur-value").textContent = `${s.uiWallpaperBlur ?? 18} px`;
+  $("#wall-dim").value = String(s.uiWallpaperDim ?? 45);
+  $("#wall-dim-value").textContent = `${s.uiWallpaperDim ?? 45}%`;
+  $("#wall-path").value = s.uiWallpaperPath ?? "";
+  S.wallCustom = s.uiWallpaper === "custom";
+  setSeg("#wall-choice", "data-wall", S.wallCustom ? null : (s.uiWallpaper ?? "deep"));
   markDirty(false);
 }
+
+function setSeg(sel, attr, value) {
+  document.querySelectorAll(`${sel} [${attr}]`).forEach((btn) => {
+    btn.classList.toggle("is-active", btn.getAttribute(attr) === value);
+  });
+}
+
+const segValue = (sel, attr) =>
+  $(`${sel} [${attr}].is-active`)?.getAttribute(attr) ?? null;
 
 function setSwitch(sel, on) {
   $(sel).setAttribute("aria-checked", on ? "true" : "false");
@@ -486,6 +861,20 @@ function readSettings() {
     fullscreen: switchOn("#fullscreen-switch"),
     closeOnLaunch: switchOn("#close-switch"),
     customResolution: true,
+    uiTheme: segValue("#theme-choice", "data-theme-choice") ?? "dark",
+    uiAccent: segValue("#accent-choice", "data-accent") ?? "aqua",
+    uiRadius: segValue("#radius-choice", "data-radius") ?? "soft",
+    uiDensity: segValue("#density-choice", "data-density") ?? "normal",
+    uiFont: segValue("#font-choice", "data-font") ?? "manrope",
+    uiScale: Number($("#scale-range").value) || 100,
+    uiWallpaper: S.wallCustom ? "custom" : (segValue("#wall-choice", "data-wall") ?? "deep"),
+    uiWallpaperPath: $("#wall-path").value.trim() || null,
+    uiWallpaperBlur: Number($("#wall-blur").value) || 0,
+    uiWallpaperDim: Number($("#wall-dim").value) || 0,
+    uiSidebar: segValue("#side-choice", "data-side") ?? "left",
+    uiSidebarMode: segValue("#rail-choice", "data-rail") ?? "full",
+    uiMotion: switchOn("#motion-switch"),
+  strictMods: switchOn("#strict-switch"),
   };
 }
 
@@ -863,6 +1252,50 @@ function bindStatic() {
     renderLibrary();
   });
 
+  let modTimer = 0;
+  $("#mods-search").addEventListener("input", () => {
+    clearTimeout(modTimer);
+    modTimer = setTimeout(searchMods, 350);
+  });
+
+  $("#mods-kind").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-kind]");
+    if (!button) return;
+    setSeg("#mods-kind", "data-kind", button.dataset.kind);
+    searchMods();
+  });
+
+  $("#mods-results").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-mod-install]");
+    if (!button || button.disabled) return;
+    installMod(button.dataset.modInstall, button.dataset.modTitle);
+  });
+
+  $("#mods-list").addEventListener("click", (event) => {
+    const remove = event.target.closest("[data-mod-remove]");
+    if (remove) {
+      event.stopPropagation();
+      removeMod(remove.dataset.modRemove);
+      return;
+    }
+    const row = event.target.closest("[data-mod-info]");
+    if (row) openModInfo(row.dataset.modInfo);
+  });
+
+  $("#mods-list").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const row = event.target.closest("[data-mod-info]");
+    if (!row) return;
+    event.preventDefault();
+    openModInfo(row.dataset.modInfo);
+  });
+
+  $("#mods-repair").addEventListener("click", repairMods);
+
+  $("#mods-health").addEventListener("click", (event) => {
+    if (event.target.closest("#mods-repair-inline")) repairMods();
+  });
+
   $("#version-grid").addEventListener(
     "error",
     (event) => {
@@ -976,13 +1409,74 @@ function bindStatic() {
   ["#workers-input", "#jvm-args", "#java-path", "#game-dir", "#res-width", "#res-height"].forEach(
     (sel) => $(sel).addEventListener("input", () => markDirty()),
   );
+  // ---- оформление: живое превью ----
+  const preview = () => applyAppearance(readSettings());
+  const watchSeg = (sel, attr) =>
+    $(sel).addEventListener("click", (event) => {
+      const btn = event.target.closest(`[${attr}]`);
+      if (!btn) return;
+      setSeg(sel, attr, btn.getAttribute(attr));
+      if (sel === "#wall-choice") S.wallCustom = false;
+      preview();
+      markDirty();
+    });
+
+  watchSeg("#theme-choice", "data-theme-choice");
+  watchSeg("#accent-choice", "data-accent");
+  watchSeg("#radius-choice", "data-radius");
+  watchSeg("#density-choice", "data-density");
+  watchSeg("#font-choice", "data-font");
+  watchSeg("#side-choice", "data-side");
+  watchSeg("#rail-choice", "data-rail");
+  watchSeg("#wall-choice", "data-wall");
+
+  $("#scale-range").addEventListener("input", (event) => {
+    $("#scale-value").textContent = `${event.target.value}%`;
+    preview();
+    markDirty();
+  });
+
+  $("#wall-blur").addEventListener("input", (event) => {
+    $("#wall-blur-value").textContent = `${event.target.value} px`;
+    preview();
+    markDirty();
+  });
+
+  $("#wall-dim").addEventListener("input", (event) => {
+    $("#wall-dim-value").textContent = `${event.target.value}%`;
+    preview();
+    markDirty();
+  });
+
+  $("#motion-switch").addEventListener("click", () => {
+    preview();
+  });
+
+  $("#wall-pick").addEventListener("click", () => {
+    const path = $("#wall-path").value.trim();
+    if (!path) {
+      toast("Укажите путь к картинке", "error");
+      return;
+    }
+    S.wallCustom = true;
+    setSeg("#wall-choice", "data-wall", null);
+    preview();
+    markDirty();
+  });
+
+  $("#pc-refresh").addEventListener("click", () => loadSystem(true));
+  $("#system-apply").addEventListener("click", () => {
+    if (location.hash !== "#settings") go("settings");
+    applyRecommendation();
+  });
+
   $("#settings-save").addEventListener("click", async () => {
     const settings = readSettings();
     try {
       await invoke("save_settings", { settings });
       S.boot.settings = { ...S.boot.settings, ...settings };
       markDirty(false);
-      renderHomeStats();
+      applyAppearance(S.boot.settings);
       toast("Настройки сохранены");
     } catch (err) {
       toast(friendly(err), "error");
@@ -1035,6 +1529,17 @@ async function bindBackend() {
       ? `${payload.current} / ${payload.total}${total ? ` · ${fmtBytes(payload.bytes)} из ${fmtBytes(total)}` : ""}`
       : "";
     showBar(payload.label || "Загрузка", detail, percent);
+  });
+
+  await listen("mods://progress", ({ payload }) => {
+    const total = payload.bytes || 0;
+    $("#download-fill").style.width = total ? `${Math.min(100, (payload.done / total) * 100)}%` : "0%";
+    $("#download-percent").textContent = total
+      ? `${Math.round((payload.done / total) * 100)}%`
+      : "";
+    $("#download-detail").textContent = total
+      ? `${fmtBytes(payload.done)} из ${fmtBytes(total)}`
+      : "";
   });
 
   await listen("game://log", ({ payload }) => {
@@ -1096,9 +1601,10 @@ async function init() {
   syncPlay();
   loadRemote(false);
   loadBanners();
+  loadSystem(false);
 
   const initial = location.hash.replace("#", "");
-  if (["home", "library", "accounts", "settings"].includes(initial)) go(initial);
+  if (["home", "library", "mods", "accounts", "settings"].includes(initial)) go(initial);
 }
 
 init();

@@ -6,6 +6,7 @@ mod mc;
 mod net;
 mod paths;
 mod state;
+mod system;
 
 use state::AppState;
 
@@ -17,6 +18,13 @@ fn main() {
             commands::bootstrap,
             commands::remote_versions,
             commands::version_banners,
+            commands::system_report,
+            commands::modrinth_search,
+            commands::mods_install,
+            commands::mods_repair,
+            commands::mods_health,
+            commands::mods_list,
+            commands::mods_remove,
             commands::install_version,
             commands::launch,
             commands::stop_game,

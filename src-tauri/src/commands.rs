@@ -10,6 +10,7 @@ use crate::mc::install::{self, Installer};
 use crate::mc::launch;
 use crate::mc::manifest;
 use crate::mc::content;
+use crate::mc::mods;
 use crate::mc::version::VersionMeta;
 use crate::mc::java;
 use crate::state::{Account, AppState, Config, GameHandle, Settings};
@@ -101,10 +102,107 @@ pub async fn remote_versions(
 }
 
 #[tauri::command]
+pub fn system_report(refresh: bool) -> crate::system::Report {
+    crate::system::report(refresh)
+}
+
+#[tauri::command]
 pub async fn version_banners(
     state: State<'_, AppState>,
 ) -> Result<Vec<content::Banner>, String> {
     content::get(&state.http).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn modrinth_search(
+    state: State<'_, AppState>,
+    query: String,
+    kind: String,
+    version: Option<String>,
+    loader: Option<String>,
+) -> Result<Vec<mods::Hit>, String> {
+    mods::search(
+        &state.http,
+        &query,
+        &kind,
+        version.as_deref(),
+        loader.as_deref(),
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn mods_install(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    project: String,
+    version: String,
+    loader: String,
+) -> Result<mods::InstallOutcome, String> {
+    let cfg = state.snapshot();
+    let root = cfg.game_root();
+    let workers = cfg.settings.download_workers as usize;
+    let handle = app.clone();
+    let progress = std::sync::Arc::new(move |done: usize, bytes: u64| {
+        let _ = handle.emit(
+            "mods://progress",
+            serde_json::json!({ "done": done, "bytes": bytes }),
+        );
+    });
+    let outcome = mods::install(&state.http, &root, &project, &version, &loader, workers, progress)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if cfg.settings.strict_mods {
+        let blocked: Vec<mods::InstalledMod> = mods::list(&root)
+            .into_iter()
+            .filter(|m| m.risk == "high" && outcome.installed.contains(&m.file))
+            .collect();
+
+        if !blocked.is_empty() {
+            for m in &blocked {
+                let _ = mods::remove(&root, &m.file);
+            }
+            let names: Vec<String> = blocked.iter().map(|m| m.name.clone()).collect();
+            return Err(format!(
+                "Строгий режим: моды с доступом к системе не установлены — {}. Отключите его в настройках, если доверяете источнику.",
+                names.join(", ")
+            ));
+        }
+    }
+
+    Ok(outcome)
+}
+
+#[tauri::command]
+pub async fn mods_repair(
+    state: State<'_, AppState>,
+    version: String,
+    loader: String,
+) -> Result<mods::InstallOutcome, String> {
+    let cfg = state.snapshot();
+    let root = cfg.game_root();
+    let workers = cfg.settings.download_workers as usize;
+    let progress = std::sync::Arc::new(|_: usize, _: u64| {});
+    mods::repair(&state.http, &root, &version, &loader, workers, progress)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn mods_health(state: State<'_, AppState>) -> mods::Health {
+    mods::health(&state.snapshot().game_root())
+}
+
+#[tauri::command]
+pub fn mods_list(state: State<'_, AppState>) -> Vec<mods::InstalledMod> {
+    mods::list(&state.snapshot().game_root())
+}
+
+#[tauri::command]
+pub fn mods_remove(state: State<'_, AppState>, file: String) -> Result<(), String> {
+    mods::remove(&state.snapshot().game_root(), &file).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

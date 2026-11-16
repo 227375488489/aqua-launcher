@@ -22,6 +22,23 @@ pub struct Settings {
     pub height: u32,
     pub fullscreen: bool,
     pub ms_client_id: String,
+    // --- оформление ---
+    pub ui_theme: String,
+    pub ui_accent: String,
+    pub ui_radius: String,
+    pub ui_density: String,
+    pub ui_font: String,
+    pub ui_scale: u32,
+    pub ui_wallpaper: String,
+    pub ui_wallpaper_path: Option<String>,
+    pub ui_wallpaper_blur: u32,
+    pub ui_wallpaper_dim: u32,
+    pub ui_sidebar: String,
+    pub ui_sidebar_mode: String,
+    pub ui_motion: bool,
+    pub language: String,
+    // --- безопасность ---
+    pub strict_mods: bool,
 }
 
 impl Default for Settings {
@@ -40,6 +57,21 @@ impl Default for Settings {
             height: 530,
             fullscreen: false,
             ms_client_id: "00000000402b5328".into(),
+            ui_theme: "dark".into(),
+            ui_accent: "aqua".into(),
+            ui_radius: "soft".into(),
+            ui_density: "normal".into(),
+            ui_font: "manrope".into(),
+            ui_scale: 100,
+            ui_wallpaper: "deep".into(),
+            ui_wallpaper_path: None,
+            ui_wallpaper_blur: 18,
+            ui_wallpaper_dim: 45,
+            ui_sidebar: "left".into(),
+            ui_sidebar_mode: "full".into(),
+            ui_motion: true,
+            language: "auto".into(),
+            strict_mods: true,
         }
     }
 }
