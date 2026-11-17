@@ -309,5 +309,14 @@ export default {
     resetStats: "Скинути статистику?",
     resetStatsText: "Час у грі та лічильники запусків буде очищено.",
   },
+  project: {
+    followers: "підписників",
+    license: "ліцензія",
+    updated: "оновлено",
+    about: "Опис",
+    versions: "Версії",
+    contents: "Моди в збірці",
+    noContents: "У цій збірці немає файлів для завантаження.",
+  },
   lang: { auto: "Як у системі" },
 };

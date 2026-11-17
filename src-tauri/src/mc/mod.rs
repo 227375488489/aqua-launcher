@@ -7,5 +7,6 @@ pub mod launch;
 pub mod manifest;
 pub mod modpack;
 pub mod mods;
+pub mod project;
 pub mod rules;
 pub mod version;

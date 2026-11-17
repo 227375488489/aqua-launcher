@@ -14,6 +14,7 @@ use crate::mc::content;
 use crate::mc::fabric;
 use crate::mc::modpack;
 use crate::mc::mods;
+use crate::mc::project;
 use crate::mc::version::{self, VersionMeta};
 use crate::mc::java;
 use crate::state::{Account, AppState, Config, GameHandle, Profile, Settings, Stats};
@@ -643,6 +644,29 @@ pub async fn modpack_search(
 }
 
 #[tauri::command]
+pub async fn modrinth_project(
+    state: State<'_, AppState>,
+    project: String,
+) -> Result<project::ProjectDetail, String> {
+    project::fetch(&state.http, &project)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn modpack_contents(
+    state: State<'_, AppState>,
+    project: String,
+) -> Result<Vec<modpack::PackContent>, String> {
+    let cfg = state.snapshot();
+    let root = cfg.game_root();
+    crate::paths::ensure_dir(&root).map_err(|e| e.to_string())?;
+    modpack::contents(&state.http, &root, &project)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn modpack_install(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -755,6 +779,63 @@ pub fn stats_reset(state: State<'_, AppState>) -> Result<Config, String> {
     state
         .update(|c| c.stats = Stats::default())
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn check_update(state: State<'_, AppState>) -> Result<UpdateInfo, String> {
+    let current = env!("CARGO_PKG_VERSION").to_string();
+    let res = state
+        .http
+        .get("https://api.github.com/repos/227375488489/aqua-launcher/releases/latest")
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|e| format!("update_network:{e}"))?;
+    if !res.status().is_success() {
+        return Err(format!("update_http:{}", res.status().as_u16()));
+    }
+    let value: serde_json::Value = res.json().await.map_err(|e| format!("update_parse:{e}"))?;
+    let latest = value["tag_name"]
+        .as_str()
+        .unwrap_or_default()
+        .trim_start_matches(['v', 'V'])
+        .to_string();
+    let url = value["html_url"].as_str().unwrap_or_default().to_string();
+    let notes = value["body"].as_str().unwrap_or_default().to_string();
+    let published = value["published_at"].as_str().map(str::to_string);
+    let available = version_greater(&latest, &current);
+    Ok(UpdateInfo { current, latest, url, notes, published, available })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateInfo {
+    pub current: String,
+    pub latest: String,
+    pub url: String,
+    pub notes: String,
+    pub published: Option<String>,
+    pub available: bool,
+}
+
+fn version_greater(a: &str, b: &str) -> bool {
+    let parse = |value: &str| -> Vec<u32> {
+        value
+            .split(|c: char| !c.is_ascii_digit())
+            .filter(|part| !part.is_empty())
+            .map(|part| part.parse::<u32>().unwrap_or(0))
+            .collect()
+    };
+    let left = parse(a);
+    let right = parse(b);
+    for index in 0..left.len().max(right.len()) {
+        let x = left.get(index).copied().unwrap_or(0);
+        let y = right.get(index).copied().unwrap_or(0);
+        if x != y {
+            return x > y;
+        }
+    }
+    false
 }
 
 #[tauri::command]

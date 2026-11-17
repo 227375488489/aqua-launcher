@@ -309,5 +309,14 @@ export default {
     resetStats: "Zresetować statystyki?",
     resetStatsText: "Czas gry i liczniki uruchomień zostaną wyczyszczone.",
   },
+  project: {
+    followers: "obserwujących",
+    license: "licencja",
+    updated: "zaktualizowano",
+    about: "Opis",
+    versions: "Wersje",
+    contents: "Mody w paczce",
+    noContents: "Ta paczka nie zawiera plików do pobrania.",
+  },
   lang: { auto: "Język systemu" },
 };

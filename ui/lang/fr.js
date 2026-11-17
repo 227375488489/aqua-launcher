@@ -309,5 +309,14 @@ export default {
     resetStats: "Réinitialiser les statistiques ?",
     resetStatsText: "Le temps de jeu et les compteurs seront effacés.",
   },
+  project: {
+    followers: "abonnés",
+    license: "licence",
+    updated: "mis à jour",
+    about: "À propos",
+    versions: "Versions",
+    contents: "Mods du modpack",
+    noContents: "Ce modpack ne contient aucun fichier téléchargeable.",
+  },
   lang: { auto: "Langue du système" },
 };

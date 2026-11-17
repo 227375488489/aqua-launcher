@@ -114,10 +114,10 @@ function sdTriangle(px, py, ax, ay, bx, by, cx, cy) {
 
 // --- droplet --------------------------------------------------------------
 const DX = 0.5;
-const DY = 0.475;
-const DR = 0.208;
-const TIP = 1.85;
-const CONE = 0.92;
+const DY = 0.5;
+const DR = 0.265;
+const TIP = 1.62;
+const CONE = 0.9;
 
 function droplet(du, dv) {
   let inside = 0;
@@ -178,8 +178,8 @@ function sample(u, v) {
 
   // water lines beneath the drop, clipped inside the tile
   for (const [base, amp, alpha, width, phase] of [
-    [0.838, 0.022, 0.34, 0.0045, 0.5],
-    [0.895, 0.018, 0.16, 0.0035, 1.9],
+    [0.625, 0.032, 0.85, 0.015, 0.4],
+    [0.715, 0.028, 0.8, 0.014, 2.5],
   ]) {
     const wave = base + Math.sin((u - 0.5) * Math.PI * 3.1 + phase) * amp;
     const d = Math.abs(v - wave);
@@ -206,74 +206,95 @@ function sample(u, v) {
   const edge = clamp(inside / 0.006, 0, 1);
   if (edge <= 0) return [r, g, b];
 
-  // glass fill: bright crest, teal body, deep blue tail
+  // droplet: deep royal blue on the left, cyan glass on the right
   const ft = clamp((dv + TIP) / (TIP + 1), 0, 1);
   let dr;
   let dg;
   let db;
-  if (ft < 0.42) {
-    const k = smooth(0, 0.42, ft);
-    dr = mix(224, 128, k);
-    dg = mix(255, 249, k);
-    db = mix(252, 240, k);
-  } else if (ft < 0.78) {
-    const k = (ft - 0.42) / 0.36;
-    dr = mix(128, 62, k);
-    dg = mix(249, 226, k);
-    db = mix(240, 218, k);
+  if (ft < 0.3) {
+    const k = smooth(0, 0.3, ft);
+    dr = mix(176, 74, k);
+    dg = mix(250, 208, k);
+    db = mix(255, 248, k);
+  } else if (ft < 0.74) {
+    const k = (ft - 0.3) / 0.44;
+    dr = mix(74, 18, k);
+    dg = mix(208, 116, k);
+    db = mix(248, 226, k);
   } else {
-    const k = (ft - 0.78) / 0.22;
-    dr = mix(62, 20, k);
-    dg = mix(226, 138, k);
-    db = mix(218, 190, k);
+    const k = (ft - 0.74) / 0.26;
+    dr = mix(18, 5, k);
+    dg = mix(116, 44, k);
+    db = mix(226, 132, k);
+  }
+
+  // left flank falls into deep navy
+  const side = smooth(0.46, 0.08, u) * 0.55;
+  dr = mix(dr, 6, side);
+  dg = mix(dg, 36, side);
+  db = mix(db, 122, side);
+
+  // bright inner droplet, offset to the right
+  const iu = (u - 0.548) / 0.14;
+  const iv = (v - 0.425) / 0.14;
+  const shine = droplet(iu, iv);
+  if (shine > 0) {
+    const k = smooth(0, 0.12, shine) * 0.78;
+    const it = clamp((iv + TIP) / (TIP + 1), 0, 1);
+    dr = mix(dr, mix(238, 96, it), k);
+    dg = mix(dg, mix(255, 230, it), k);
+    db = mix(db, 255, k);
   }
 
   // light gathering along the lower belly
-  const lower = smooth(0.1, 1.0, dv) * 0.22;
-  dr = mix(dr, 156, lower);
-  dg = mix(dg, 250, lower);
-  db = mix(db, 244, lower);
+  const lower = smooth(0.2, 0.95, dv) * 0.12;
+  dr = mix(dr, 52, lower);
+  dg = mix(dg, 176, lower);
+  db = mix(db, 232, lower);
 
   // inner shadow toward the silhouette
-  const inner = 1 - smooth(0.0, 0.16, inside);
-  dr = mix(dr, 14, inner * 0.35);
-  dg = mix(dg, 70, inner * 0.35);
-  db = mix(db, 88, inner * 0.35);
+  const inner = 1 - smooth(0.0, 0.14, inside);
+  dr = mix(dr, 6, inner * 0.32);
+  dg = mix(dg, 40, inner * 0.32);
+  db = mix(db, 96, inner * 0.32);
 
   // specular streak down the left flank
-  const ax = (du + 0.4) * 0.93 + (dv + 0.32) * 0.37;
-  const ay = -(du + 0.4) * 0.37 + (dv + 0.32) * 0.93;
-  const spec = 1 - Math.hypot(ax / 0.26, ay / 0.58);
+  const ax = (du + 0.42) * 0.93 + (dv + 0.3) * 0.37;
+  const ay = -(du + 0.42) * 0.37 + (dv + 0.3) * 0.93;
+  const spec = 1 - Math.hypot(ax / 0.22, ay / 0.56);
   if (spec > 0) {
-    const k = Math.pow(spec, 0.55) * 0.7;
+    const k = Math.pow(spec, 0.6) * 0.5;
     dr = mix(dr, 255, k);
     dg = mix(dg, 255, k);
     db = mix(db, 255, k);
   }
 
   // crisp rim light
-  const rim = clamp(1 - inside / 0.03, 0, 1) * 0.45;
-  dr = mix(dr, 236, rim);
-  dg = mix(dg, 255, rim);
-  db = mix(db, 252, rim);
+  const rim = clamp(1 - inside / 0.03, 0, 1) * 0.5;
+  dr = mix(dr, 168, rim);
+  dg = mix(dg, 250, rim);
+  db = mix(db, 255, rim);
 
-  // play cutout, filled with the deep background and a light rim
-  const tri = sdTriangle(u, v, ...TRI[0], ...TRI[1], ...TRI[2]) - 0.006;
-  if (tri < 0.012) {
-    const cut = clamp(-tri / 0.004, 0, 1);
-    const [br, bg, bb] = background(u, v);
-    let cr = br * 0.42;
-    let cg = bg * 0.42 + 4;
-    let cb = bb * 0.42 + 10;
-    // faint cyan bounce just outside the cutout edge
-    const glow = clamp(1 - Math.abs(tri) / 0.022, 0, 1) * 0.5;
-    dr = mix(dr, 190, glow);
-    dg = mix(dg, 255, glow);
-    db = mix(db, 250, glow);
-    dr = mix(dr, cr, cut);
-    dg = mix(dg, cg, cut);
-    db = mix(db, cb, cut);
+  // two white wave gaps sweeping across the lower half (as in the logo)
+  for (const [base, amp, alpha, width, phase] of [
+    [0.625, 0.032, 1, 0.026, 0.4],
+    [0.715, 0.028, 1, 0.023, 2.5],
+  ]) {
+    const wave = base + Math.sin((u - 0.5) * Math.PI * 2.3 + phase) * amp;
+    const d = Math.abs(v - wave);
+    if (d < width) {
+      const k = smooth(width, 0, d) * alpha;
+      dr = mix(dr, 244, k);
+      dg = mix(dg, 255, k);
+      db = mix(db, 255, k);
+    }
   }
+
+  // deep water body below the second wave
+  const deep = smooth(0.735, 0.86, v);
+  dr = mix(dr, 4, deep * 0.75);
+  dg = mix(dg, 28, deep * 0.75);
+  db = mix(db, 96, deep * 0.75);
 
   return [
     mix(r, dr, edge),

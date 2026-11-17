@@ -309,5 +309,14 @@ export default {
     resetStats: "Statistik zurücksetzen?",
     resetStatsText: "Spielzeit und Startzähler werden gelöscht.",
   },
+  project: {
+    followers: "Follower",
+    license: "Lizenz",
+    updated: "aktualisiert",
+    about: "Info",
+    versions: "Versionen",
+    contents: "Mods in diesem Modpack",
+    noContents: "Dieses Modpack enthält keine herunterladbaren Dateien.",
+  },
   lang: { auto: "Systemsprache" },
 };

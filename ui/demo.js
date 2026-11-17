@@ -239,7 +239,7 @@ const handlers = {
       gameDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher\\minecraft" : "/home/sviat/.local/share/AquaLauncher/minecraft",
       activeDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher\\minecraft\\profiles\\instance-vanilla" : "/home/sviat/.local/share/AquaLauncher/minecraft/profiles/instance-vanilla",
       dataDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher" : "/home/sviat/.local/share/AquaLauncher",
-      appVersion: "3.0.1",
+      appVersion: "3.1.0",
       running,
       lastVersion,
       profiles,
@@ -268,17 +268,18 @@ const handlers = {
     return loaderId;
   },
 
-  async launch({ version }) {
+  async launch({ id, version }) {
+    const target = id ?? version;
     if (running) throw new Error("game_already_running");
-    if (!local.some((v) => v.id === version)) throw new Error("version_not_installed");
-    running = version;
-    lastVersion = version;
+    if (!local.some((v) => v.id === target)) throw new Error("version_not_installed");
+    running = target;
+    lastVersion = target;
     stats.launches += 1;
     stats.sessions += 1;
     stats.lastPlayed = now();
-    emit("game://started", { version });
+    emit("game://started", { version: target });
     clearInterval(runTimer);
-    runTimer = setInterval(() => emit("game://log", logLine(version)), 1200);
+    runTimer = setInterval(() => emit("game://log", logLine(target)), 1200);
     return null;
   },
 
@@ -395,9 +396,59 @@ const handlers = {
     return config();
   },
 
+  check_update() {
+    return {
+      current: "3.0.2",
+      latest: "3.1.0",
+      url: "https://github.com/227375488489/aqua-launcher/releases/latest",
+      notes: "",
+      published: date(Date.now() - 3 * day),
+      available: true,
+    };
+  },
+
   modpack_search({ query }) {
     const term = (query ?? "").toLowerCase();
     return MODS.filter((m) => m.kind === "modpack" && (!term || m.title.toLowerCase().includes(term) || m.description.toLowerCase().includes(term)));
+  },
+
+  modrinth_project({ project }) {
+    const hit = MODS.find((m) => m.id === project || m.slug === project) || MODS[0];
+    const shots = [
+      "https://images.unsplash.com/photo-1607853202273-797f1c22a38e?w=900&q=80",
+      "https://images.unsplash.com/photo-1493711662062-fa541adb3fc8?w=900&q=80",
+      "https://images.unsplash.com/photo-1552820728-8b83bb6b773f?w=900&q=80",
+    ];
+    return {
+      ...hit,
+      followers: Math.round((hit.downloads || 0) / 42),
+      body: `# ${hit.title}\n\n${hit.description}\n\n## What's inside\n\n- Carefully tuned configs for smooth framerates\n- Updated world generation and visuals\n- Works with shaders and resource packs\n\n## Notes\n\nDrop the pack into Aqua Launcher, press install, and the launcher creates an isolated instance with the right loader and Java runtime.`,
+      gameVersions: ["26.3", "1.21.8", "1.21.1"],
+      loaders: hit.kind === "modpack" ? ["fabric"] : ["fabric", "quilt"],
+      clientSide: "required",
+      serverSide: "optional",
+      published: date(Date.now() - 420 * day),
+      updated: date(Date.now() - 6 * day),
+      license: "MIT",
+      sourceUrl: "https://github.com/example/project",
+      issuesUrl: "",
+      wikiUrl: "",
+      gallery: shots.map((url, index) => ({ url, featured: index === 0, title: index === 0 ? "Overview" : "", description: "" })),
+      versions: [
+        { id: `${hit.id}-v3`, name: `${hit.title} 3.2`, number: "3.2.0", gameVersions: ["26.3"], loaders: ["fabric"], published: date(Date.now() - 6 * day), downloads: 1_204_311, file: `${hit.slug}-3.2.0.mrpack`, size: 18_400_000 },
+        { id: `${hit.id}-v2`, name: `${hit.title} 3.1`, number: "3.1.0", gameVersions: ["1.21.8"], loaders: ["fabric"], published: date(Date.now() - 74 * day), downloads: 2_840_112, file: `${hit.slug}-3.1.0.mrpack`, size: 17_200_000 },
+      ],
+    };
+  },
+
+  modpack_contents() {
+    return MODS.filter((m) => m.kind === "mod").slice(0, 8).map((m) => ({
+      id: m.id,
+      title: m.title,
+      slug: m.slug,
+      icon: m.icon,
+      file: `mods/${m.slug}.jar`,
+    }));
   },
 
   async modpack_install({ project }) {

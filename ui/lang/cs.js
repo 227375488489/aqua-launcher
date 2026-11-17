@@ -309,5 +309,14 @@ export default {
     resetStats: "Resetovat statistiky?",
     resetStatsText: "Čas ve hře a počítadla spuštění budou vymazány.",
   },
+  project: {
+    followers: "sledujících",
+    license: "licence",
+    updated: "aktualizováno",
+    about: "Popis",
+    versions: "Verze",
+    contents: "Mody v balíčku",
+    noContents: "Tento balíček neobsahuje žádné soubory ke stažení.",
+  },
   lang: { auto: "Jazyk systému" },
 };

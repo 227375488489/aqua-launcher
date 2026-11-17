@@ -27,6 +27,8 @@ pub struct Settings {
     // --- оформление ---
     pub ui_theme: String,
     pub ui_accent: String,
+    /// Пользовательский цвет акцента (#rrggbb), если ui_accent == "custom".
+    pub ui_accent_custom: String,
     pub ui_radius: String,
     pub ui_density: String,
     pub ui_font: String,
@@ -51,6 +53,10 @@ pub struct Settings {
     pub ui_glass: u32,
     /// left | center | right
     pub ui_play_position: String,
+    /// Показывать снапшоты в списках версий.
+    pub show_snapshots: bool,
+    /// Показывать alpha/beta и старые релизы.
+    pub show_old: bool,
     // --- безопасность ---
     pub strict_mods: bool,
 }
@@ -73,6 +79,7 @@ impl Default for Settings {
             ms_client_id: "00000000402b5328".into(),
             ui_theme: "dark".into(),
             ui_accent: "aqua".into(),
+            ui_accent_custom: "#5ce8dc".into(),
             ui_radius: "soft".into(),
             ui_density: "normal".into(),
             ui_font: "manrope".into(),
@@ -91,6 +98,8 @@ impl Default for Settings {
             ui_grain: true,
             ui_glass: 62,
             ui_play_position: "left".into(),
+            show_snapshots: true,
+            show_old: true,
             strict_mods: true,
         }
     }

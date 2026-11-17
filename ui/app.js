@@ -11,14 +11,51 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const APP_VERSION = "3.0.1";
+const APP_VERSION = "3.1.0";
 const NAV_DEFAULT = ["home", "library", "instances", "discover", "accounts"];
 const WIDGET_DEFAULT = ["stats", "pc", "latest", "instances", "console"];
 const LINKS = {
   github: "https://github.com/227375488489/aqua-launcher",
   modrinth: "https://modrinth.com",
 };
-const ACCENT_NAMES = ["aqua", "mint", "azure", "violet", "rose", "amber", "lime", "ice"];
+const ACCENT_NAMES = ["aqua", "mint", "azure", "violet", "rose", "amber", "lime", "ice", "crimson", "sky", "sand", "plum", "custom"];
+
+function hexRgb(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [n >> 16 & 255, n >> 8 & 255, n & 255];
+}
+function rgbHsl([r, g, b]) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  if (!d) return [0, 0, l];
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [h * 60, s, l];
+}
+function hslHex(h, s, l) {
+  h = ((h % 360) + 360) % 360; s = Math.min(1, Math.max(0, s)); l = Math.min(1, Math.max(0, l));
+  const k = (n) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  const v = (x) => Math.round(x * 255).toString(16).padStart(2, "0");
+  return `#${v(f(0))}${v(f(8))}${v(f(4))}`;
+}
+function accentVars(hex) {
+  const rgb = hexRgb(hex);
+  if (!rgb) return null;
+  const [h, s, l] = rgbHsl(rgb);
+  const ink = l > 0.58 ? "#04161d" : "#eefbff";
+  return {
+    accent: `#${rgb.map((x) => x.toString(16).padStart(2, "0")).join("")}`,
+    accent2: hslHex(h + 16, Math.min(1, s + 0.06), Math.min(0.78, l + 0.07)),
+    soft: `rgba(${rgb[0]},${rgb[1]},${rgb[2]},.15)`,
+    ink,
+  };
+}
 
 const S = {
   boot: null,
@@ -160,7 +197,37 @@ function fallbackAvatar(seed) {
 }
 function artFor(seed) {
   const hue = [...String(seed || "aqua")].reduce((a, c) => a + c.charCodeAt(0) * 7, 0) % 360;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="hsl(${hue},55%,42%)"/><stop offset="1" stop-color="hsl(${(hue + 70) % 360},60%,24%)"/></linearGradient></defs><rect width="96" height="96" fill="url(#g)"/><circle cx="30" cy="28" r="26" fill="rgba(255,255,255,.1)"/><circle cx="76" cy="72" r="34" fill="rgba(255,255,255,.06)"/></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="hsl(${hue},55%,42%)"/><stop offset="1" stop-color="hsl(${(hue + 70) % 360},60%,24%)"/></linearGradient></defs><rect width="96" height="96" fill="url(#g)"/><circle cx="30" cy="28" r="26" fill="#ffffff" fill-opacity=".1"/><circle cx="76" cy="72" r="34" fill="#ffffff" fill-opacity=".06"/></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+function versionArt(id) {
+  const seed = String(id || "minecraft");
+  let hash = 0;
+  for (const ch of seed) hash = (hash * 31 + ch.charCodeAt(0)) % 360;
+  const hue = hash;
+  const blocks = Array.from({ length: 26 }, (_, i) => {
+    const x = ((i * 53 + seed.length * 7) % 92) / 100 * 640;
+    const y = ((i * 37 + 11) % 80) / 100 * 320;
+    const size = 26 + (i % 5) * 18;
+    const o = 0.05 + ((i * 13) % 7) / 70;
+    return `<rect x="${x.toFixed(0)}" y="${y.toFixed(0)}" width="${size}" height="${size}" rx="4" fill="#d9fbff" opacity="${o.toFixed(2)}"/>`;
+  }).join("");
+  const safe = seed.replace(/[<>&"']/g, "");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="320" viewBox="0 0 640 320">
+    <defs>
+      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+        <stop stop-color="hsl(${hue},52%,25%)"/><stop offset=".55" stop-color="hsl(${(hue + 26) % 360},48%,15%)"/><stop offset="1" stop-color="hsl(${(hue + 60) % 360},40%,9%)"/>
+      </linearGradient>
+      <radialGradient id="glow" cx="78%" cy="8%" r="70%">
+        <stop stop-color="hsl(${(hue + 30) % 360},80%,60%)" stop-opacity=".45"/><stop offset="1" stop-color="hsl(${(hue + 30) % 360},80%,60%)" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <rect width="640" height="320" fill="url(#bg)"/>
+    ${blocks}
+    <rect width="640" height="320" fill="url(#glow)"/>
+    <text x="34" y="252" font-family="Manrope,Segoe UI,Arial,sans-serif" font-size="96" font-weight="800" letter-spacing="-4" fill="#effdff" opacity=".94">${safe}</text>
+    <text x="37" y="286" font-family="Manrope,Segoe UI,Arial,sans-serif" font-size="12" font-weight="700" letter-spacing="6" fill="#bfe6ee" opacity=".72">MINECRAFT</text>
+  </svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 function fileUrl(path) {
@@ -193,8 +260,10 @@ function toast(message, kind = "ok") {
 
 function setStatus(text, mode = "ready") {
   const chip = $("#status");
+  if (!chip) return;
   chip.dataset.mode = mode;
-  $("#status-text").textContent = text;
+  const label = $("#status-text");
+  if (label) label.textContent = text;
 }
 
 function friendly(err) {
@@ -235,8 +304,18 @@ function resolveTheme(theme) {
 
 function applyAppearance(s) {
   const root = document.documentElement;
+  const custom = s.uiAccent === "custom" ? accentVars(s.uiAccentCustom) : null;
+  if (custom) {
+    root.style.setProperty("--accent", custom.accent);
+    root.style.setProperty("--accent-2", custom.accent2);
+    root.style.setProperty("--accent-soft", custom.soft);
+    root.style.setProperty("--accent-ink", custom.ink);
+    root.dataset.accent = "custom";
+  } else {
+    ["--accent", "--accent-2", "--accent-soft", "--accent-ink"].forEach((key) => root.style.removeProperty(key));
+    root.dataset.accent = ACCENT_NAMES.includes(s.uiAccent) && s.uiAccent !== "custom" ? s.uiAccent : "aqua";
+  }
   root.dataset.theme = resolveTheme(s.uiTheme || "dark");
-  root.dataset.accent = ACCENT_NAMES.includes(s.uiAccent) ? s.uiAccent : "aqua";
   root.dataset.radius = s.uiRadius || "soft";
   root.dataset.density = s.uiDensity || "normal";
   root.dataset.font = s.uiFont === "system" ? "system" : "manrope";
@@ -394,9 +473,9 @@ function renderHero() {
     img.style.display = "";
     media.style.background = "";
   } else {
-    img.removeAttribute("src");
-    img.style.display = "none";
-    media.style.background = `radial-gradient(120% 160% at 78% 18%,var(--accent-soft),transparent 60%),linear-gradient(140deg,#0d2b39,#07141c 60%,#0b2230)`;
+    img.src = id ? versionArt(id) : "";
+    img.style.display = id ? "" : "none";
+    media.style.background = "";
   }
   const profile = S.profiles.find((p) => p.versionId === id) || null;
   $("#version-current").textContent = id || t("common.none");
@@ -423,10 +502,16 @@ function renderHero() {
   syncPlay();
 }
 
+function visibleBySettings(v) {
+  const kind = String(v.kind || "");
+  if (kind === "snapshot" && S.settings.showSnapshots === false) return false;
+  if (kind.startsWith("old") && S.settings.showOld === false) return false;
+  return true;
+}
 function renderVersionMenu() {
   const menu = $("#version-menu");
   const installed = sortVersions([...S.local], "new");
-  const available = sortVersions(S.remote.filter((v) => !isInstalled(v.id)), "new").slice(0, 18);
+  const available = sortVersions(S.remote.filter((v) => !isInstalled(v.id) && visibleBySettings(v)), "new").slice(0, 18);
   const item = (id, kind, sub, loader) => `<button class="menu-item ${S.selected === id ? "is-on" : ""}" data-pick="${esc(id)}">
     <span class="mi-main"><b>${esc(id)}</b><small>${esc(sub)}</small></span>
     ${loader ? `<span class="chip">${esc(loader)}</span>` : ""}
@@ -635,6 +720,7 @@ function filteredVersions() {
     if (S.libFilter === "release" && v.kind !== "release") return false;
     if (S.libFilter === "snapshot" && v.kind !== "snapshot") return false;
     if (S.libFilter === "old" && !String(v.kind || "").startsWith("old")) return false;
+    if (S.libFilter === "all" && !visibleBySettings(v)) return false;
     if (q && !String(v.id).toLowerCase().includes(q)) return false;
     return true;
   });
@@ -655,7 +741,7 @@ function renderLibrary() {
     const banner = bannerForRelease(baseOf(v.id)) || bannerForRelease(v.id);
     const thumb = banner?.image
       ? `<img src="${esc(banner.image)}" alt="" loading="lazy">`
-      : `<div class="vcard-fallback" style="position:absolute;inset:0;background:radial-gradient(120% 130% at 80% 0%,var(--accent-soft),transparent 62%),linear-gradient(140deg,#0f2c3a,#08161f)"></div>`;
+      : `<img src="${versionArt(v.id)}" alt="" loading="lazy">`;
     return `<article class="vcard ${installed ? "is-installed" : ""}" data-version="${esc(v.id)}">
       <div class="vcard-thumb">${thumb}<span class="vcard-kind chip ${v.kind === "release" ? "ok" : ""}">${esc(kindLabel(v.kind))}</span></div>
       <div class="vcard-body">
@@ -801,7 +887,7 @@ async function launchSelected() {
   S.launching = true;
   syncPlay();
   try {
-    await invoke("launch", { version: S.selected });
+    await invoke("launch", { id: S.selected });
     toast(t("toast.launched"));
   } catch (err) {
     toast(friendly(err), "err");
@@ -970,6 +1056,113 @@ async function installModpack(hit) {
   } catch (err) {
     hideBar();
     toast(friendly(err), "err");
+  }
+}
+
+function mdToHtml(markdown) {
+  const lines = String(markdown || "").split(/\r?\n/);
+  const out = [];
+  let list = false;
+  const closeList = () => { if (list) { out.push("</ul>"); list = false; } };
+  const inline = (text) => esc(text)
+    .replace(/!\[[^\]]*\]\(([^)]+)\)/g, "")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" data-ext="$2">$1</a>')
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) { closeList(); continue; }
+    if (/^#{1,3}\s/.test(line)) {
+      closeList();
+      const level = line.match(/^#+/)[0].length;
+      out.push(`<h${level + 2}>${inline(line.replace(/^#+\s*/, ""))}</h${level + 2}>`);
+    } else if (/^[-*]\s/.test(line)) {
+      if (!list) { out.push("<ul>"); list = true; }
+      out.push(`<li>${inline(line.replace(/^[-*]\s*/, ""))}</li>`);
+    } else {
+      closeList();
+      out.push(`<p>${inline(line)}</p>`);
+    }
+  }
+  closeList();
+  return out.join("");
+}
+
+async function openProject(id, kindHint) {
+  const hit = S.discoverResults.find((r) => r.id === id || r.slug === id);
+  const kind = kindHint || hit?.kind || S.discoverKind;
+  openModal(`<div class="pd-loading"><span class="spinner"></span><span>${esc(t("common.loading"))}</span></div>`);
+  try {
+    const [detail, contents] = await Promise.all([
+      invoke("modrinth_project", { project: id }),
+      kind === "modpack" ? invoke("modpack_contents", { project: id }).catch(() => []) : Promise.resolve([]),
+    ]);
+    const gallery = detail.gallery || [];
+    const cover = gallery[0]?.url || detail.icon || artFor(detail.title);
+    const shotHtml = gallery.length
+      ? `<div class="pd-shots">${gallery.map((shot, index) => `<button class="pd-shot ${index === 0 ? "is-on" : ""}" data-shot="${esc(shot.url)}"><img src="${esc(shot.url)}" alt="" loading="lazy" data-seed="${esc(detail.title)}"></button>`).join("")}</div>`
+      : "";
+    const contentsHtml = kind === "modpack"
+      ? `<div class="pd-section"><div class="pd-section-head"><b>${esc(t("project.contents"))}</b><span>${i18n.number(contents.length)}</span></div><div class="pd-contents">${contents.length
+          ? contents.map((item) => `<button class="pd-content" data-content-id="${esc(item.id)}"><img src="${esc(item.icon || artFor(item.title))}" alt="" loading="lazy" data-seed="${esc(item.title)}"><span>${esc(item.title)}</span></button>`).join("")
+          : `<p class="pd-muted">${esc(t("project.noContents"))}</p>`}</div></div>`
+      : "";
+    const versions = (detail.versions || []).slice(0, 8);
+    const versionsHtml = versions.length
+      ? `<div class="pd-section"><div class="pd-section-head"><b>${esc(t("project.versions"))}</b><span>${i18n.number(versions.length)}</span></div><div class="pd-versions">${versions.map((v) => `<div class="pd-version"><div><b>${esc(v.number || v.name)}</b><small>${esc((v.gameVersions || []).slice(0, 4).join(", "))} · ${esc((v.loaders || []).join(", "))}</small></div><span>${i18n.date(v.published)}</span><span>${i18n.bytes(v.size || 0)}</span></div>`).join("")}</div></div>`
+      : "";
+    const installLabel = kind === "modpack" ? t("discover.installPack") : t("common.install");
+    openModal(`
+      <button class="win-btn pd-close" data-close aria-label="${esc(t("common.cancel"))}"><svg class="ico"><use href="#i-close"></use></svg></button>
+      <div class="pd-hero">
+        <img class="pd-cover" id="pd-cover" src="${esc(cover)}" alt="" data-seed="${esc(detail.title)}">
+        <div class="pd-headline">
+          <img class="pd-icon" src="${esc(detail.icon || artFor(detail.title))}" alt="" data-seed="${esc(detail.title)}">
+          <div>
+            <h2>${esc(detail.title)}</h2>
+            <p>${esc(detail.description || "")}</p>
+            <div class="pd-tags">${(detail.categories || []).slice(0, 5).map((c) => `<span class="tag">${esc(c)}</span>`).join("")}</div>
+          </div>
+        </div>
+        <div class="pd-stats">
+          <span><b>${i18n.number(detail.downloads || 0)}</b>${esc(t("common.downloads"))}</span>
+          <span><b>${i18n.number(detail.followers || 0)}</b>${esc(t("project.followers"))}</span>
+          <span><b>${esc(detail.license || "—")}</b>${esc(t("project.license"))}</span>
+          <span><b>${esc(i18n.date(detail.updated))}</b>${esc(t("project.updated"))}</span>
+        </div>
+        <div class="pd-actions">
+          <button class="btn btn-primary" data-project-install="${esc(detail.id || id)}"><svg class="ico"><use href="#i-download"></use></svg><span>${esc(installLabel)}</span></button>
+          ${detail.sourceUrl ? `<button class="btn btn-soft" data-ext="${esc(detail.sourceUrl)}"><svg class="ico"><use href="#i-external"></use></svg><span>Source</span></button>` : ""}
+        </div>
+      </div>
+      ${shotHtml}
+      <div class="pd-body">
+        <div class="pd-section pd-about"><div class="pd-section-head"><b>${esc(t("project.about"))}</b></div><div class="pd-markdown">${mdToHtml(detail.body)}</div></div>
+        ${contentsHtml}
+        ${versionsHtml}
+      </div>
+    `, () => {
+      const coverImg = $("#pd-cover");
+      $$(".pd-shot").forEach((btn) => btn.addEventListener("click", () => {
+        $$(".pd-shot").forEach((b) => b.classList.toggle("is-on", b === btn));
+        if (coverImg) coverImg.src = btn.dataset.shot;
+      }));
+      $("[data-project-install]")?.addEventListener("click", async () => {
+        closeModal();
+        await installProject(hit || { id, title: detail.title, kind });
+      });
+      $$("[data-content-id]").forEach((btn) => btn.addEventListener("click", () => {
+        const item = contents.find((x) => x.id === btn.dataset.contentId);
+        if (item?.id) openProject(item.id, "mod");
+      }));
+      $$("[data-ext]").forEach((el) => el.addEventListener("click", (e) => {
+        e.preventDefault();
+        openUrl(el.dataset.ext);
+      }));
+      $$("img[data-seed]", $("#modal-root")).forEach((img) => img.addEventListener("error", () => { img.src = artFor(img.dataset.seed); }, { once: true }));
+    }, true);
+  } catch (err) {
+    openModal(`<div class="pd-error"><p>${esc(friendly(err))}</p><button class="btn btn-soft" data-close>${esc(t("common.cancel"))}</button></div>`);
   }
 }
 
@@ -1259,6 +1452,8 @@ function fillSettings() {
   lang.value = s.language || "auto";
   setSegmented("#theme-choice", "data-theme-choice", s.uiTheme || "dark");
   setSegmented("#accent-choice", "data-accent", s.uiAccent || "aqua");
+  const customInput = $("#accent-custom");
+  if (customInput) customInput.value = hexRgb(s.uiAccentCustom) ? s.uiAccentCustom : "#5ce8dc";
   setSegmented("#radius-choice", "data-radius-choice", s.uiRadius || "soft");
   setSegmented("#density-choice", "data-density-choice", s.uiDensity || "normal");
   setSegmented("#bg-choice", "data-bg-choice", s.uiBackground || "ocean");
@@ -1284,6 +1479,8 @@ function fillSettings() {
   setSwitch("#motion-switch", s.uiMotion !== false);
   setSwitch("#fullscreen-switch", Boolean(s.fullscreen));
   setSwitch("#close-switch", Boolean(s.closeOnLaunch));
+  setSwitch("#snapshots-switch", s.showSnapshots !== false);
+  setSwitch("#old-switch", s.showOld !== false);
   setSwitch("#flags-switch", s.optimizedFlags !== false);
   setSwitch("#auto-java-switch", s.autoJava !== false);
   setSwitch("#strict-switch", s.strictMods !== false);
@@ -1380,6 +1577,29 @@ function renderOrderList(host, items, labelOf, onChange) {
   };
 }
 
+async function checkUpdate(manual = false) {
+  const state = $("#update-state");
+  if (manual && state) state.textContent = t("common.loading");
+  try {
+    const info = await invoke("check_update");
+    S.update = info;
+    if (info?.available) {
+      const banner = $("#update-banner");
+      if (banner) banner.hidden = false;
+      const label = $("#update-version");
+      if (label) label.textContent = `v${info.latest}`;
+      if (state) state.textContent = t("update.available", { version: `v${info.latest}` });
+      if (manual) toast(t("update.available", { version: `v${info.latest}` }));
+    } else {
+      if (state) state.textContent = t("update.latest");
+      if (manual) toast(t("update.latest"));
+    }
+  } catch {
+    if (state) state.textContent = t("update.failed");
+    if (manual) toast(t("update.failed"), "err");
+  }
+}
+
 function bindSettings() {
   $("#settings-tabs").addEventListener("click", (e) => {
     const tab = e.target.closest("[data-tab]");
@@ -1398,7 +1618,20 @@ function bindSettings() {
   });
 
   bindSegChoice("#theme-choice", "data-theme-choice", "uiTheme", (v) => { applyAppearance(S.settings); });
-  bindSegChoice("#accent-choice", "data-accent", "uiAccent", () => applyAppearance(S.settings));
+  bindSegChoice("#accent-choice", "data-accent", "uiAccent", (value) => {
+    if (value === "custom") {
+      S.settings.uiAccentCustom = $("#accent-custom")?.value || S.settings.uiAccentCustom || "#5ce8dc";
+    }
+    applyAppearance(S.settings);
+  });
+  $("#accent-custom").addEventListener("input", (e) => {
+    S.settings.uiAccent = "custom";
+    S.settings.uiAccentCustom = e.target.value;
+    setSegmented("#accent-choice", "data-accent", "custom");
+    applyAppearance(S.settings);
+    markDirty();
+  });
+  $("#accent-custom").addEventListener("click", (e) => e.stopPropagation());
   bindSegChoice("#radius-choice", "data-radius-choice", "uiRadius", () => applyAppearance(S.settings));
   bindSegChoice("#density-choice", "data-density-choice", "uiDensity", () => applyAppearance(S.settings));
   bindSegChoice("#bg-choice", "data-bg-choice", "uiBackground", () => applyAppearance(S.settings));
@@ -1454,6 +1687,8 @@ function bindSettings() {
   bindSwitch("#motion-switch", "uiMotion", () => applyAppearance(S.settings));
   bindSwitch("#fullscreen-switch", "fullscreen");
   bindSwitch("#close-switch", "closeOnLaunch");
+  bindSwitch("#snapshots-switch", "showSnapshots", () => { renderAll(); });
+  bindSwitch("#old-switch", "showOld", () => { renderAll(); });
   bindSwitch("#flags-switch", "optimizedFlags");
   bindSwitch("#auto-java-switch", "autoJava");
   bindSwitch("#strict-switch", "strictMods");
@@ -1497,6 +1732,9 @@ function bindSettings() {
       toast(t("toast.offline"), "err");
     }
   });
+  $("#update-check").addEventListener("click", () => checkUpdate(true));
+  $("#update-open").addEventListener("click", () => openUrl(S.update?.url || `${LINKS.github}/releases/latest`));
+  $("#update-hide").addEventListener("click", () => { $("#update-banner").hidden = true; });
   $$("[data-open]").forEach((btn) => btn.addEventListener("click", async () => {
     try { await invoke("open_dir", { kind: btn.dataset.open }); } catch (err) { toast(friendly(err), "err"); }
   }));
@@ -1655,9 +1893,13 @@ function bindDiscover() {
   $("#discover-refresh").addEventListener("click", () => searchDiscover());
   $("#discover-results").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-install]");
-    if (!btn) return;
-    const hit = S.discoverResults.find((r) => r.id === btn.dataset.install);
-    if (hit) installProject(hit);
+    if (btn) {
+      const hit = S.discoverResults.find((r) => r.id === btn.dataset.install);
+      if (hit) installProject(hit);
+      return;
+    }
+    const card = e.target.closest("[data-project]");
+    if (card) openProject(card.dataset.project);
   });
   $("#fabric-create").addEventListener("click", createFabricProfile);
   $("#mods-repair").addEventListener("click", repairMods);
@@ -1666,9 +1908,9 @@ function bindDiscover() {
 
 /* ------------------------------------------------------------------ modal */
 
-function openModal(html, bind) {
+function openModal(html, bind, wide = false) {
   const root = $("#modal-root");
-  root.innerHTML = `<div class="modal">${html}</div>`;
+  root.innerHTML = `<div class="modal ${wide ? "modal-wide" : ""}">${html}</div>`;
   root.hidden = false;
   root.onclick = (e) => {
     if (e.target === root) closeModal();
@@ -1784,7 +2026,11 @@ async function bindBackend() {
 /* ------------------------------------------------------------------ static bindings */
 
 function bindStatic() {
-  $$("[data-nav]").forEach((el) => el.addEventListener("click", () => go(el.dataset.nav)));
+  $("#rail-nav").addEventListener("click", (e) => {
+    const item = e.target.closest("[data-nav]");
+    if (item) go(item.dataset.nav);
+  });
+  $("#nav-settings").addEventListener("click", () => go("settings"));
   $("#account-card").addEventListener("click", () => go("accounts"));
   $("#play-btn").addEventListener("click", handlePlay);
   $("#fabric-btn").addEventListener("click", installFabric);
@@ -1853,6 +2099,7 @@ async function init() {
     await bindBackend();
     loadRemote();
     loadMods();
+    checkUpdate();
   } catch (err) {
     console.error(err);
     setStatus(t("status.offline"), "error");

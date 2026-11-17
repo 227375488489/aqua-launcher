@@ -1,7 +1,7 @@
 //! Сборки Modrinth (.mrpack): поиск, скачивание файлов и оверрайдов в изолированный профиль.
 
 use anyhow::{anyhow, Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
@@ -186,6 +186,116 @@ fn extract_overrides(
         count += 1;
     }
     Ok(count)
+}
+
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PackContent {
+    pub id: String,
+    pub title: String,
+    pub slug: String,
+    pub icon: Option<String>,
+    pub file: String,
+}
+
+#[derive(Deserialize, Default)]
+struct MiniProject {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    slug: String,
+    #[serde(default, rename = "icon_url")]
+    icon: Option<String>,
+}
+
+/// Содержимое сборки: список модов из `modrinth.index.json` без установки.
+pub async fn contents(client: &reqwest::Client, root: &Path, project: &str) -> Result<Vec<PackContent>> {
+    let list = versions(client, project).await?;
+    let chosen = list
+        .iter()
+        .find(|v| v.files.iter().any(|f| f.filename.ends_with(".mrpack")))
+        .or_else(|| list.first())
+        .ok_or_else(|| anyhow!("У сборки нет версий"))?;
+    let file = chosen
+        .files
+        .iter()
+        .find(|f| f.filename.ends_with(".mrpack"))
+        .ok_or_else(|| anyhow!("В версии сборки нет .mrpack файла"))?;
+
+    let cache = root.join("cache").join("packs");
+    std::fs::create_dir_all(&cache)?;
+    let archive_path = cache.join(format!("inspect-{}.mrpack", slugify(project)));
+    if !archive_path.exists() {
+        net::download_to(client, &file.url, archive_path.clone(), file.hashes.sha1.clone()).await?;
+    }
+
+    let file_handle = std::fs::File::open(&archive_path)?;
+    let mut archive = zip::ZipArchive::new(file_handle)?;
+    let index = read_index(&mut archive)?;
+
+    let mut ids: Vec<String> = Vec::new();
+    for item in &index.files {
+        if let Some(id) = project_id(&item.downloads) {
+            if !ids.iter().any(|existing| existing == &id) {
+                ids.push(id);
+            }
+        }
+    }
+    if ids.is_empty() {
+        return Ok(index
+            .files
+            .iter()
+            .filter_map(|f| {
+                let name = f.path.rsplit('/').next().unwrap_or(&f.path).to_string();
+                (!name.is_empty()).then(|| PackContent {
+                    id: String::new(),
+                    title: name,
+                    slug: String::new(),
+                    icon: None,
+                    file: f.path.clone(),
+                })
+            })
+            .collect());
+    }
+
+    let payload: Vec<MiniProject> = client
+        .get(format!("{API}/projects"))
+        .query(&[("ids", serde_json::to_string(&ids)?)])
+        .header("User-Agent", UA)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    let mut by_id = std::collections::HashMap::new();
+    for item in payload {
+        by_id.insert(item.id.clone(), item);
+    }
+
+    Ok(index
+        .files
+        .iter()
+        .filter_map(|f| {
+            let id = project_id(&f.downloads)?;
+            let meta = by_id.get(&id)?;
+            Some(PackContent {
+                id: meta.id.clone(),
+                title: meta.title.clone(),
+                slug: meta.slug.clone(),
+                icon: meta.icon.clone(),
+                file: f.path.clone(),
+            })
+        })
+        .collect())
+}
+
+fn project_id(downloads: &[String]) -> Option<String> {
+    let url = downloads.first()?;
+    let rest = url.split("/data/").nth(1)?;
+    let id = rest.split('/').next()?;
+    (!id.is_empty()).then(|| id.to_string())
 }
 
 /// Ставит сборку и создаёт для неё отдельный профиль. Возвращает профиль.
