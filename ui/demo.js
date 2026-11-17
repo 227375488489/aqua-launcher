@@ -1,4 +1,4 @@
-﻿// Demo backend for previewing the interface in a normal browser.
+// Demo backend for previewing the interface in a normal browser.
 // The desktop build never loads this file: window.__TAURI__ already exists there.
 
 const listeners = new Map();
@@ -239,7 +239,7 @@ const handlers = {
       gameDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher\\minecraft" : "/home/sviat/.local/share/AquaLauncher/minecraft",
       activeDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher\\minecraft\\profiles\\instance-vanilla" : "/home/sviat/.local/share/AquaLauncher/minecraft/profiles/instance-vanilla",
       dataDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher" : "/home/sviat/.local/share/AquaLauncher",
-      appVersion: "3.0.0",
+      appVersion: "3.0.1",
       running,
       lastVersion,
       profiles,

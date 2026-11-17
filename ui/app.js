@@ -11,7 +11,7 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const APP_VERSION = "3.0.0";
+const APP_VERSION = "3.0.1";
 const NAV_DEFAULT = ["home", "library", "instances", "discover", "accounts"];
 const WIDGET_DEFAULT = ["stats", "pc", "latest", "instances", "console"];
 const LINKS = {
@@ -1178,7 +1178,7 @@ function renderAccounts() {
     const active = S.active === a.id;
     return `<article class="acard ${active ? "is-active" : ""}">
       <img src="${esc(avatarFor(a))}" alt="" data-seed="${esc(a.name)}">
-      <div class="am"><h3>${esc(a.name)}</h3><p>${esc(isMsAccount(a) ? t("accounts.msKind") : t("accounts.offlineKind"))}${active ? ` · ${t("common.active")}` : ""}</p></div>
+      <div class="am"><h3>${esc(a.name)}</h3><p>${esc(isMsAccount(a) ? t("accounts.msKind") : t("accounts.offlineKind"))}</p></div>
       <div class="acard-actions">
         ${active ? `<span class="chip chip-soft">${esc(t("common.active"))}</span>` : `<button class="btn btn-soft btn-sm" data-account-use="${esc(a.id)}">${esc(t("accounts.activate"))}</button>`}
         <button class="btn btn-quiet icon-only" data-account-remove="${esc(a.id)}" title="${esc(t("common.remove"))}"><svg class="ico"><use href="#i-trash"></use></svg></button>
