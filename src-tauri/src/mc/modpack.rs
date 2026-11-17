@@ -196,9 +196,12 @@ pub struct PackContent {
     pub slug: String,
     pub icon: Option<String>,
     pub file: String,
+    pub kind: String,
+    pub client: String,
+    pub server: String,
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, Clone)]
 struct MiniProject {
     #[serde(default)]
     id: String,
@@ -208,6 +211,10 @@ struct MiniProject {
     slug: String,
     #[serde(default, rename = "icon_url")]
     icon: Option<String>,
+    #[serde(default)]
+    client_side: String,
+    #[serde(default)]
+    server_side: String,
 }
 
 /// Содержимое сборки: список модов из `modrinth.index.json` без установки.
@@ -247,16 +254,7 @@ pub async fn contents(client: &reqwest::Client, root: &Path, project: &str) -> R
         return Ok(index
             .files
             .iter()
-            .filter_map(|f| {
-                let name = f.path.rsplit('/').next().unwrap_or(&f.path).to_string();
-                (!name.is_empty()).then(|| PackContent {
-                    id: String::new(),
-                    title: name,
-                    slug: String::new(),
-                    icon: None,
-                    file: f.path.clone(),
-                })
-            })
+            .filter_map(|f| pack_entry(f, None))
             .collect());
     }
 
@@ -278,17 +276,42 @@ pub async fn contents(client: &reqwest::Client, root: &Path, project: &str) -> R
         .files
         .iter()
         .filter_map(|f| {
-            let id = project_id(&f.downloads)?;
-            let meta = by_id.get(&id)?;
-            Some(PackContent {
-                id: meta.id.clone(),
-                title: meta.title.clone(),
-                slug: meta.slug.clone(),
-                icon: meta.icon.clone(),
-                file: f.path.clone(),
-            })
+            let meta = project_id(&f.downloads).and_then(|id| by_id.get(&id).cloned());
+            pack_entry(f, meta)
         })
         .collect())
+}
+
+fn pack_entry(file: &PackFile, meta: Option<MiniProject>) -> Option<PackContent> {
+    let name = file.path.rsplit('/').next().unwrap_or(&file.path).to_string();
+    if name.is_empty() {
+        return None;
+    }
+    let kind = if file.path.starts_with("mods/") {
+        "mod"
+    } else if file.path.starts_with("resourcepacks/") {
+        "resourcepack"
+    } else if file.path.starts_with("shaderpacks/") {
+        "shader"
+    } else if file.path.starts_with("datapacks/") {
+        "datapack"
+    } else {
+        "other"
+    };
+    let (id, title, slug, icon, client, server) = match meta {
+        Some(m) => (m.id, m.title, m.slug, m.icon, m.client_side, m.server_side),
+        None => (String::new(), name.clone(), String::new(), None, String::new(), String::new()),
+    };
+    Some(PackContent {
+        id,
+        title,
+        slug,
+        icon,
+        file: file.path.clone(),
+        kind: kind.into(),
+        client: if client.is_empty() { "optional".into() } else { client },
+        server: if server.is_empty() { "optional".into() } else { server },
+    })
 }
 
 fn project_id(downloads: &[String]) -> Option<String> {
@@ -346,10 +369,8 @@ pub async fn install(
         .cloned()
         .ok_or_else(|| anyhow!("В сборке не указана версия Minecraft"))?;
 
-    for unsupported in ["forge", "neoforge", "quilt-loader"] {
-        if index.dependencies.contains_key(unsupported) {
-            return Err(anyhow!("modpack_loader_unsupported:{unsupported}"));
-        }
+    if index.dependencies.contains_key("quilt-loader") {
+        return Err(anyhow!("modpack_loader_unsupported:quilt-loader"));
     }
 
     let name = if index.name.trim().is_empty() {
@@ -373,25 +394,44 @@ pub async fn install(
     let profile_dir = profiles_dir.join(&id);
     std::fs::create_dir_all(&profile_dir)?;
 
-    // Загрузчик (пока поддерживается Fabric; ванильные сборки тоже работают).
-    let version_id = match index.dependencies.get("fabric-loader") {
-        Some(loader) => {
-            fabric::install(app, client, root, &game, Some(loader), settings).await?
+    // Загрузчик: Fabric, Forge, NeoForge или ваниль.
+    let version_id = if let Some(loader) = index.dependencies.get("forge") {
+        super::forge::install(
+            app,
+            client,
+            root,
+            &game,
+            super::forge::Flavor::Forge,
+            Some(loader),
+            settings,
+        )
+        .await?
+    } else if let Some(loader) = index.dependencies.get("neoforge") {
+        super::forge::install(
+            app,
+            client,
+            root,
+            &game,
+            super::forge::Flavor::NeoForge,
+            Some(loader),
+            settings,
+        )
+        .await?
+    } else if let Some(loader) = index.dependencies.get("fabric-loader") {
+        fabric::install(app, client, root, &game, Some(loader), settings).await?
+    } else {
+        if !install::is_installed(root, &game) {
+            Installer::new(
+                app.clone(),
+                client,
+                root.to_path_buf(),
+                settings.clone(),
+                game.clone(),
+            )
+            .run()
+            .await?;
         }
-        None => {
-            if !install::is_installed(root, &game) {
-                Installer::new(
-                    app.clone(),
-                    client,
-                    root.to_path_buf(),
-                    settings.clone(),
-                    game.clone(),
-                )
-                .run()
-                .await?;
-            }
-            game.clone()
-        }
+        game.clone()
     };
 
     // Файлы сборки.
@@ -455,5 +495,6 @@ pub async fn install(
         dir: format!("profiles/{id}"),
         icon,
         created_at: now_secs(),
+        options: Default::default(),
     })
 }

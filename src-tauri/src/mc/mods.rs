@@ -113,21 +113,29 @@ pub async fn search(
         facets.push(vec![format!("categories:{}", l)]);
     }
     let facets = serde_json::to_string(&facets)?;
-    let res = client
-        .get(format!("{}/search", API))
-        .header("User-Agent", UA)
-        .query(&[
-            ("query", query.to_string()),
-            ("limit", "30".to_string()),
-            ("facets", facets),
-        ])
-        .send()
-        .await
-        .context("Modrinth недоступен")?
-        .error_for_status()
-        .context("Modrinth вернул ошибку")?;
-    let body: SearchRes = res.json().await.context("Не удалось прочитать ответ Modrinth")?;
-    Ok(body.hits)
+    let mut last_error = None;
+    for attempt in 0..3u64 {
+        let response = client
+            .get(format!("{}/search", API))
+            .header("User-Agent", UA)
+            .query(&[
+                ("query", query.to_string()),
+                ("limit", "30".to_string()),
+                ("facets", facets.clone()),
+            ])
+            .send()
+            .await;
+        match response {
+            Ok(res) if res.status().is_success() => match res.json::<SearchRes>().await {
+                Ok(body) => return Ok(body.hits),
+                Err(err) => last_error = Some(anyhow!("Не удалось прочитать ответ Modrinth: {err}")),
+            },
+            Ok(res) => last_error = Some(anyhow!("Modrinth вернул ошибку {}", res.status())),
+            Err(err) => last_error = Some(anyhow!("Modrinth недоступен: {err}")),
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(350 * (attempt + 1))).await;
+    }
+    Err(last_error.unwrap_or_else(|| anyhow!("Modrinth недоступен")))
 }
 
 async fn versions(

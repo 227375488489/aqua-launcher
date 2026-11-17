@@ -65,6 +65,7 @@ let profiles = [
     dir: "profiles/instance-vanilla",
     icon: null,
     createdAt: now() - 40 * 86_400,
+    options: { maxFps: 120, vsync: false, music: false },
   },
   {
     id: "pack-fabulously-optimized",
@@ -239,7 +240,7 @@ const handlers = {
       gameDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher\\minecraft" : "/home/sviat/.local/share/AquaLauncher/minecraft",
       activeDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher\\minecraft\\profiles\\instance-vanilla" : "/home/sviat/.local/share/AquaLauncher/minecraft/profiles/instance-vanilla",
       dataDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher" : "/home/sviat/.local/share/AquaLauncher",
-      appVersion: "3.1.0",
+      appVersion: "0.1.0",
       running,
       lastVersion,
       profiles,
@@ -264,6 +265,16 @@ const handlers = {
     const loaderId = `fabric-loader-${loader || "0.16.10"}-${id}`;
     if (!local.some((v) => v.id === loaderId)) {
       local = [{ id: loaderId, kind: "release", java: 21, size: 498_000_000, loader: "fabric" }, ...local];
+    }
+    return loaderId;
+  },
+
+  async loader_install({ id, loader }) {
+    await runInstall("version", id);
+    const name = loader === "neoforge" ? "neoforge" : loader === "forge" ? "forge" : "fabric";
+    const loaderId = name === "fabric" ? `fabric-loader-0.16.10-${id}` : `${name}-${id}-47.4.13`;
+    if (!local.some((v) => v.id === loaderId)) {
+      local = [{ id: loaderId, kind: "release", java: 21, size: 520_000_000, loader: name }, ...local];
     }
     return loaderId;
   },
@@ -349,6 +360,10 @@ const handlers = {
     await sleep(200);
     return UNSPLASH;
   },
+  async pick_java() {
+    await sleep(120);
+    return "C:\\Program Files\\GraalVM\\graalvm-jdk-21\\bin\\java.exe";
+  },
 
   async check_java({ path }) {
     await sleep(400);
@@ -366,18 +381,31 @@ const handlers = {
     return config();
   },
 
+  profile_options({ id }) {
+    return profiles.find((p) => p.id === id)?.options || {};
+  },
+
+  profile_set_options({ id, options }) {
+    const profile = profiles.find((p) => p.id === id);
+    if (profile) profile.options = options || {};
+    return config();
+  },
+
   profile_create({ name, versionId }) {
     if (!name || !name.trim()) throw new Error("profile_name_empty");
     if (!local.some((v) => v.id === versionId)) throw new Error("version_not_installed");
     const id = `instance-${Date.now()}`;
+    const lower = versionId.toLowerCase();
+    const loader = lower.includes("neoforge") ? "neoforge" : lower.includes("forge") ? "forge" : lower.includes("fabric") ? "fabric" : "vanilla";
     const profile = {
       id,
       name: name.trim(),
       versionId,
-      loader: versionId.includes("fabric") ? "fabric" : "vanilla",
+      loader,
       dir: `profiles/${id}`,
       icon: null,
       createdAt: now(),
+      options: {},
     };
     profiles = [...profiles, profile];
     activeProfile = id;
@@ -398,8 +426,8 @@ const handlers = {
 
   check_update() {
     return {
-      current: "3.1.0",
-      latest: "3.1.0",
+      current: "0.1.0",
+      latest: "0.1.0",
       url: "https://github.com/227375488489/aqua-launcher/releases/latest",
       notes: "",
       published: date(Date.now() - 3 * day),
@@ -436,19 +464,31 @@ const handlers = {
       gallery: shots.map((url, index) => ({ url, featured: index === 0, title: index === 0 ? "Overview" : "", description: "" })),
       versions: [
         { id: `${hit.id}-v3`, name: `${hit.title} 3.2`, number: "3.2.0", gameVersions: ["26.3"], loaders: ["fabric"], published: date(Date.now() - 6 * day), downloads: 1_204_311, file: `${hit.slug}-3.2.0.mrpack`, size: 18_400_000 },
-        { id: `${hit.id}-v2`, name: `${hit.title} 3.1`, number: "3.1.0", gameVersions: ["1.21.8"], loaders: ["fabric"], published: date(Date.now() - 74 * day), downloads: 2_840_112, file: `${hit.slug}-3.1.0.mrpack`, size: 17_200_000 },
+        { id: `${hit.id}-v2`, name: `${hit.title} 3.1`, number: "0.1.0", gameVersions: ["1.21.8"], loaders: ["fabric"], published: date(Date.now() - 74 * day), downloads: 2_840_112, file: `${hit.slug}-3.1.0.mrpack`, size: 17_200_000 },
       ],
     };
   },
 
   modpack_contents() {
-    return MODS.filter((m) => m.kind === "mod").slice(0, 8).map((m) => ({
-      id: m.id,
-      title: m.title,
-      slug: m.slug,
-      icon: m.icon,
-      file: `mods/${m.slug}.jar`,
-    }));
+    const mods = MODS.filter((m) => m.kind === "mod").slice(0, 8);
+    const extras = [
+      { id: "faithful", title: "Faithful 32x", slug: "faithful-32x", icon: null, kind: "resourcepack", file: "resourcepacks/Faithful_32x.zip" },
+      { id: "complementary", title: "Complementary Shaders", slug: "complementary", icon: null, kind: "shader", file: "shaderpacks/ComplementaryReimagined.zip" },
+      { id: "datapack-x", title: "Terralith", slug: "terralith", icon: null, kind: "datapack", file: "datapacks/terralith.zip" },
+    ];
+    return [
+      ...mods.map((m, i) => ({
+        id: m.id,
+        title: m.title,
+        slug: m.slug,
+        icon: m.icon,
+        file: `mods/${m.slug}-1.${i + 2}.jar`,
+        kind: "mod",
+        client: i === 0 ? "required" : "optional",
+        server: i === 0 ? "unsupported" : "optional",
+      })),
+      ...extras,
+    ].map((x) => ({ client: "optional", server: "optional", ...x }));
   },
 
   async modpack_install({ project }) {

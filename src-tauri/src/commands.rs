@@ -12,7 +12,9 @@ use crate::mc::launch;
 use crate::mc::manifest;
 use crate::mc::content;
 use crate::mc::fabric;
+use crate::mc::forge;
 use crate::mc::modpack;
+use crate::mc::options;
 use crate::mc::mods;
 use crate::mc::project;
 use crate::mc::version::{self, VersionMeta};
@@ -312,16 +314,24 @@ pub async fn launch(app: AppHandle, state: State<'_, AppState>, id: String) -> R
     }
 
     let (meta, jar_version) = version::resolve(&root, &id).map_err(|e| e.to_string())?;
-    let game_dir = cfg
-        .active_profile()
-        .filter(|p| p.version_id == id)
+    let profile = cfg.active_profile().filter(|p| p.version_id == id);
+    let game_dir = profile
         .map(|p| cfg.profile_root(p))
         .unwrap_or_else(|| root.clone());
     let _ = crate::paths::ensure_dir(&game_dir);
 
+    let instance_options = profile.map(|p| p.options.clone()).unwrap_or_default();
+    let _ = options::apply(&game_dir, &instance_options);
+
     let java_path = java::ensure(&app, &state.http, &root, &cfg.settings, meta.java_major())
         .await
         .map_err(|e| e.to_string())?;
+
+    if instance_options.gpu.as_deref() == Some("high") {
+        options::gpu_preference(&java_path, true);
+    } else if instance_options.gpu.as_deref() == Some("default") {
+        options::gpu_preference(&java_path, false);
+    }
 
     let plan = launch::build(
         &root,
@@ -610,6 +620,21 @@ pub async fn pick_wallpaper(app: AppHandle) -> Option<String> {
 }
 
 #[tauri::command]
+pub async fn pick_java(app: AppHandle) -> Option<String> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .pick_file(move |path| {
+            let _ = tx.send(path);
+        });
+    rx.await
+        .ok()
+        .flatten()
+        .and_then(|p| p.into_path().ok())
+        .map(|p| p.display().to_string())
+}
+
+#[tauri::command]
 pub fn check_java(path: String) -> Option<u32> {
     let path = PathBuf::from(path);
     if !path.exists() {
@@ -631,6 +656,35 @@ pub async fn fabric_install(
     fabric::install(&app, &state.http, &root, &id, loader.as_deref(), &cfg.settings)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn loader_install(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    loader: String,
+    version: Option<String>,
+) -> Result<String, String> {
+    let cfg = state.snapshot();
+    let root = cfg.game_root();
+    crate::paths::ensure_dir(&root).map_err(|e| e.to_string())?;
+    match loader.trim().to_lowercase().as_str() {
+        "forge" => {
+            forge::install(&app, &state.http, &root, &id, forge::Flavor::Forge, version.as_deref(), &cfg.settings)
+                .await
+                .map_err(|e| e.to_string())
+        }
+        "neoforge" => {
+            forge::install(&app, &state.http, &root, &id, forge::Flavor::NeoForge, version.as_deref(), &cfg.settings)
+                .await
+                .map_err(|e| e.to_string())
+        }
+        "fabric" | "" => fabric::install(&app, &state.http, &root, &id, version.as_deref(), &cfg.settings)
+            .await
+            .map_err(|e| e.to_string()),
+        other => Err(format!("loader_unknown:{other}")),
+    }
 }
 
 #[tauri::command]
@@ -727,7 +781,12 @@ pub fn profile_create(
     let id = format!("instance-{stamp}");
     let dir = format!("profiles/{id}");
     crate::paths::ensure_dir(&cfg.game_root().join(&dir)).map_err(|e| e.to_string())?;
-    let loader = if version_id.to_ascii_lowercase().contains("fabric") {
+    let lower = version_id.to_ascii_lowercase();
+    let loader = if lower.contains("neoforge") {
+        "neoforge"
+    } else if lower.contains("forge") {
+        "forge"
+    } else if lower.contains("fabric") {
         "fabric"
     } else {
         "vanilla"
@@ -743,7 +802,38 @@ pub fn profile_create(
                 dir,
                 icon: None,
                 created_at: stamp,
+                options: crate::state::InstanceOptions::default(),
             });
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn profile_options(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<crate::state::InstanceOptions, String> {
+    let cfg = state.snapshot();
+    cfg.profile(&id)
+        .map(|p| p.options.clone())
+        .ok_or_else(|| "profile_not_found".to_string())
+}
+
+#[tauri::command]
+pub fn profile_set_options(
+    state: State<'_, AppState>,
+    id: String,
+    options: crate::state::InstanceOptions,
+) -> Result<Config, String> {
+    let cfg = state.snapshot();
+    if cfg.profile(&id).is_none() {
+        return Err("profile_not_found".into());
+    }
+    state
+        .update(|c| {
+            if let Some(profile) = c.profiles.iter_mut().find(|p| p.id == id) {
+                profile.options = options.clone();
+            }
         })
         .map_err(|e| e.to_string())
 }
@@ -784,9 +874,15 @@ pub fn stats_reset(state: State<'_, AppState>) -> Result<Config, String> {
 #[tauri::command]
 pub async fn check_update(state: State<'_, AppState>) -> Result<UpdateInfo, String> {
     let current = env!("CARGO_PKG_VERSION").to_string();
+    let beta = current.starts_with("0.");
+    let endpoint = if beta {
+        "https://api.github.com/repos/227375488489/aqua-launcher/releases?per_page=30"
+    } else {
+        "https://api.github.com/repos/227375488489/aqua-launcher/releases/latest"
+    };
     let res = state
         .http
-        .get("https://api.github.com/repos/227375488489/aqua-launcher/releases/latest")
+        .get(endpoint)
         .header("Accept", "application/vnd.github+json")
         .send()
         .await
@@ -795,14 +891,35 @@ pub async fn check_update(state: State<'_, AppState>) -> Result<UpdateInfo, Stri
         return Err(format!("update_http:{}", res.status().as_u16()));
     }
     let value: serde_json::Value = res.json().await.map_err(|e| format!("update_parse:{e}"))?;
-    let latest = value["tag_name"]
+    let chosen = if beta {
+        value.as_array().and_then(|list| {
+            list.iter().find(|item| {
+                let tag = item["tag_name"].as_str().unwrap_or_default();
+                let draft = item["draft"].as_bool().unwrap_or(false);
+                !draft && tag.trim_start_matches(['v', 'V']).starts_with("0.")
+            })
+        })
+    } else {
+        Some(&value)
+    };
+    let Some(release) = chosen else {
+        return Ok(UpdateInfo {
+            latest: current.clone(),
+            current,
+            url: String::new(),
+            notes: String::new(),
+            published: None,
+            available: false,
+        });
+    };
+    let latest = release["tag_name"]
         .as_str()
         .unwrap_or_default()
         .trim_start_matches(['v', 'V'])
         .to_string();
-    let url = value["html_url"].as_str().unwrap_or_default().to_string();
-    let notes = value["body"].as_str().unwrap_or_default().to_string();
-    let published = value["published_at"].as_str().map(str::to_string);
+    let url = release["html_url"].as_str().unwrap_or_default().to_string();
+    let notes = release["body"].as_str().unwrap_or_default().to_string();
+    let published = release["published_at"].as_str().map(str::to_string);
     let available = version_greater(&latest, &current);
     Ok(UpdateInfo { current, latest, url, notes, published, available })
 }

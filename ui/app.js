@@ -11,7 +11,8 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const APP_VERSION = "3.1.0";
+const APP_VERSION = "0.1.0";
+const APP_LABEL = "0.1 Beta";
 const NAV_DEFAULT = ["home", "library", "instances", "discover", "accounts"];
 const WIDGET_DEFAULT = ["stats", "pc", "latest", "instances", "console"];
 const LINKS = {
@@ -19,6 +20,20 @@ const LINKS = {
   modrinth: "https://modrinth.com",
 };
 const ACCENT_NAMES = ["aqua", "mint", "azure", "violet", "rose", "amber", "lime", "ice", "crimson", "sky", "sand", "plum", "custom"];
+const THEMES = [
+  { id: "ocean", bg: "ocean", accent: "aqua", light: false },
+  { id: "aurora", bg: "aurora", accent: "mint", light: false },
+  { id: "nebula", bg: "nebula", accent: "violet", light: false },
+  { id: "sunset", bg: "sunset", accent: "amber", light: false },
+  { id: "sakura", bg: "sakura", accent: "rose", light: false },
+  { id: "forest", bg: "forest", accent: "lime", light: false },
+  { id: "cyber", bg: "cyber", accent: "sky", light: false },
+  { id: "ember", bg: "ember", accent: "crimson", light: false },
+  { id: "candy", bg: "candy", accent: "plum", light: false },
+  { id: "ice", bg: "ice", accent: "ice", light: false },
+  { id: "midnight", bg: "midnight", accent: "azure", light: false },
+  { id: "daylight", bg: "plain", accent: "sand", light: true },
+];
 
 function hexRgb(hex) {
   const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
@@ -367,10 +382,10 @@ function applyBoot(boot, resetSelected = false) {
   i18n.init(lang);
   i18n.apply(document);
   $("#app-version")?.remove();
-  $("#rail-version").textContent = `${APP_VERSION}`;
+  $("#rail-version").textContent = APP_LABEL;
   $("#rail-platform").textContent = platformLabel(S.platform);
-  $("#version-chip").textContent = `v${APP_VERSION}`;
-  $("#about-version").textContent = APP_VERSION;
+  $("#version-chip").textContent = `v${APP_LABEL}`;
+  $("#about-version").textContent = APP_LABEL;
   $("#game-dir").textContent = boot.gameDir || "—";
   applyAppearance(S.settings);
   renderAccountChip();
@@ -927,13 +942,14 @@ async function installFabric() {
   }
 }
 
-async function createFabricProfile() {
+async function installDiscoverLoader() {
   const base = baseOf(S.selected || S.remote.find((v) => v.kind === "release")?.id || "1.21.8");
-  showBar("download", base, 0);
+  const loader = S.discoverLoader || "fabric";
+  showBar("loader", base, 0);
   try {
-    const loaderId = await invoke("fabric_install", { id: base, loader: null });
+    const loaderId = await invoke("loader_install", { id: base, loader, version: null });
     await refreshBoot();
-    await invoke("profile_create", { name: `Fabric ${base}`, versionId: loaderId });
+    await invoke("profile_create", { name: `${loaderLabel(loader)} ${base}`, versionId: loaderId });
     await refreshBoot();
     S.selected = loaderId;
     renderAll();
@@ -945,8 +961,13 @@ async function createFabricProfile() {
   }
 }
 
-function hasFabricProfile() {
-  return S.profiles.some((p) => p.loader === "modpack" || /fabric|quilt/i.test(p.loader) || /fabric|quilt/i.test(p.versionId));
+function hasLoaderProfile() {
+  const wanted = (S.discoverLoader || "fabric").toLowerCase();
+  return S.profiles.some((p) => {
+    const text = `${p.loader} ${p.versionId}`.toLowerCase();
+    if (wanted === "forge") return text.includes("forge") && !text.includes("neoforge");
+    return text.includes(wanted);
+  });
 }
 
 /* ------------------------------------------------------------------ discover */
@@ -955,7 +976,7 @@ function planDiscoverVisibility() {
   const kind = S.discoverKind;
   $("#discover-version-wrap").hidden = kind === "modpack" || kind === "shader";
   $("#discover-loader-wrap").hidden = kind !== "mod";
-  $("#fabric-notice").hidden = !(kind === "mod" && !hasFabricProfile());
+  $("#fabric-notice").hidden = !(kind === "mod" && !hasLoaderProfile());
 }
 
 async function searchDiscover() {
@@ -1022,7 +1043,7 @@ function renderDiscoverResults() {
 async function installProject(hit) {
   if (!hit?.id) return;
   if (S.discoverKind === "modpack") return installModpack(hit);
-  if (S.discoverKind === "mod" && !hasFabricProfile()) {
+  if (S.discoverKind === "mod" && !hasLoaderProfile()) {
     planDiscoverVisibility();
     toast(t("errors.needFabric"), "err");
     return;
@@ -1099,19 +1120,56 @@ async function openProject(id, kindHint) {
     ]);
     const gallery = detail.gallery || [];
     const cover = gallery[0]?.url || detail.icon || artFor(detail.title);
+    const latest = (detail.versions || [])[0] || null;
     const shotHtml = gallery.length
       ? `<div class="pd-shots">${gallery.map((shot, index) => `<button class="pd-shot ${index === 0 ? "is-on" : ""}" data-shot="${esc(shot.url)}"><img src="${esc(shot.url)}" alt="" loading="lazy" data-seed="${esc(detail.title)}"></button>`).join("")}</div>`
       : "";
-    const contentsHtml = kind === "modpack"
-      ? `<div class="pd-section"><div class="pd-section-head"><b>${esc(t("project.contents"))}</b><span>${i18n.number(contents.length)}</span></div><div class="pd-contents">${contents.length
-          ? contents.map((item) => `<button class="pd-content" data-content-id="${esc(item.id)}"><img src="${esc(item.icon || artFor(item.title))}" alt="" loading="lazy" data-seed="${esc(item.title)}"><span>${esc(item.title)}</span></button>`).join("")
-          : `<p class="pd-muted">${esc(t("project.noContents"))}</p>`}</div></div>`
+
+    const kindMeta = [
+      ["mod", t("project.mods")],
+      ["resourcepack", t("project.resourcepacks")],
+      ["shader", t("project.shaders")],
+      ["datapack", t("project.datapacks")],
+      ["other", t("project.other")],
+    ];
+    const counts = Object.fromEntries(kindMeta.map(([k]) => [k, contents.filter((c) => c.kind === k).length]));
+    const kinds = kindMeta.filter(([k]) => counts[k] > 0);
+    const tabsHtml = kind === "modpack"
+      ? `<div class="pd-subtabs" id="pd-kinds">
+          <button class="pd-subtab is-on" data-pdkind="mod">${esc(t("project.mods"))} <i>${counts.mod || 0}</i></button>
+          ${kinds.filter(([k]) => k !== "mod").map(([k, label]) => `<button class="pd-subtab" data-pdkind="${k}">${esc(label)} <i>${counts[k]}</i></button>`).join("")}
+        </div>`
       : "";
-    const versions = (detail.versions || []).slice(0, 8);
+    const contentPanel = kind === "modpack"
+      ? `<div class="pd-panel" data-pdpanel="content" hidden>
+          <div class="pd-content-tools">${tabsHtml}<div class="pd-search"><svg class="ico"><use href="#i-search"></use></svg><input id="pd-content-search" type="search" placeholder="${esc(t("project.search"))}" autocomplete="off"></div></div>
+          <div class="pd-rows" id="pd-rows"></div>
+        </div>`
+      : "";
+    const tabBar = `<div class="pd-tabs">
+      <button class="pd-tab is-on" data-pdtab="overview">${esc(t("project.overview"))}</button>
+      ${kind === "modpack" ? `<button class="pd-tab" data-pdtab="content">${esc(t("project.content"))} <i>${contents.length}</i></button>` : ""}
+      <button class="pd-tab" data-pdtab="versions">${esc(t("project.versions"))}</button>
+    </div>`;
+
+    const versions = (detail.versions || []).slice(0, 12);
     const versionsHtml = versions.length
-      ? `<div class="pd-section"><div class="pd-section-head"><b>${esc(t("project.versions"))}</b><span>${i18n.number(versions.length)}</span></div><div class="pd-versions">${versions.map((v) => `<div class="pd-version"><div><b>${esc(v.number || v.name)}</b><small>${esc((v.gameVersions || []).slice(0, 4).join(", "))} · ${esc((v.loaders || []).join(", "))}</small></div><span>${i18n.date(v.published)}</span><span>${i18n.bytes(v.size || 0)}</span></div>`).join("")}</div></div>`
-      : "";
-    const installLabel = kind === "modpack" ? t("discover.installPack") : t("common.install");
+      ? versions.map((v) => `<div class="pd-version"><div><b>${esc(v.number || v.name)}</b><small>${esc((v.gameVersions || []).slice(0, 4).join(", "))} · ${esc((v.loaders || []).join(", "))}</small></div><span>${esc(v.file || "")}</span><span>${i18n.date(v.published)}</span><span>${i18n.bytes(v.size || 0)}</span></div>`).join("")
+      : `<p class="pd-muted">${esc(t("project.noContents"))}</p>`;
+
+    const envLabel = (value) => {
+      const key = value === "required" ? "project.required" : value === "unsupported" ? "project.unsupported" : "project.optional";
+      return t(key);
+    };
+    const row = (item) => `<button class="pd-row" ${item.id ? `data-content-id="${esc(item.id)}"` : ""}>
+      <img src="${esc(item.icon || artFor(item.title))}" alt="" loading="lazy" data-seed="${esc(item.title)}">
+      <span class="pd-row-main"><b>${esc(item.title)}</b><small>${esc(item.file)}</small></span>
+      <span class="pd-row-env" title="${esc(t("project.client") + ": " + envLabel(item.client))}"><svg class="ico"><use href="#i-monitor"></use></svg><i class="${item.client === "unsupported" ? "off" : ""}"></i></span>
+      <span class="pd-row-env" title="${esc(t("project.server") + ": " + envLabel(item.server))}"><svg class="ico"><use href="#i-globe"></use></svg><i class="${item.server === "unsupported" ? "off" : ""}"></i></span>
+    </button>`;
+    const sorted = [...contents].sort((a, b) => a.title.localeCompare(b.title));
+    const initialRows = sorted.filter((c) => c.kind === "mod");
+
     openModal(`
       <button class="win-btn pd-close" data-close aria-label="${esc(t("common.cancel"))}"><svg class="ico"><use href="#i-close"></use></svg></button>
       <div class="pd-hero">
@@ -1121,25 +1179,31 @@ async function openProject(id, kindHint) {
           <div>
             <h2>${esc(detail.title)}</h2>
             <p>${esc(detail.description || "")}</p>
-            <div class="pd-tags">${(detail.categories || []).slice(0, 5).map((c) => `<span class="tag">${esc(c)}</span>`).join("")}</div>
+            <div class="pd-tags">${(detail.categories || []).slice(0, 6).map((c) => `<span class="tag">${esc(c)}</span>`).join("")}</div>
+            <div class="pd-fileline">${latest ? `${esc(latest.file || "")} · ${esc((latest.gameVersions || []).slice(0, 2).join(", "))} · ${esc((latest.loaders || []).join(", "))}` : ""}</div>
           </div>
         </div>
-        <div class="pd-stats">
-          <span><b>${i18n.number(detail.downloads || 0)}</b>${esc(t("common.downloads"))}</span>
-          <span><b>${i18n.number(detail.followers || 0)}</b>${esc(t("project.followers"))}</span>
-          <span><b>${esc(detail.license || "—")}</b>${esc(t("project.license"))}</span>
-          <span><b>${esc(i18n.date(detail.updated))}</b>${esc(t("project.updated"))}</span>
-        </div>
         <div class="pd-actions">
-          <button class="btn btn-primary" data-project-install="${esc(detail.id || id)}"><svg class="ico"><use href="#i-download"></use></svg><span>${esc(installLabel)}</span></button>
+          <button class="btn btn-primary" data-project-install="${esc(detail.id || id)}"><svg class="ico"><use href="#i-download"></use></svg><span>${esc(kind === "modpack" ? t("discover.installPack") : t("common.install"))}</span></button>
           ${detail.sourceUrl ? `<button class="btn btn-soft" data-ext="${esc(detail.sourceUrl)}"><svg class="ico"><use href="#i-external"></use></svg><span>Source</span></button>` : ""}
         </div>
       </div>
-      ${shotHtml}
+      ${tabBar}
       <div class="pd-body">
-        <div class="pd-section pd-about"><div class="pd-section-head"><b>${esc(t("project.about"))}</b></div><div class="pd-markdown">${mdToHtml(detail.body)}</div></div>
-        ${contentsHtml}
-        ${versionsHtml}
+        <div class="pd-panel" data-pdpanel="overview">
+          ${shotHtml}
+          <div class="pd-stats">
+            <span><b>${i18n.number(detail.downloads || 0)}</b>${esc(t("common.downloads"))}</span>
+            <span><b>${i18n.number(detail.followers || 0)}</b>${esc(t("project.followers"))}</span>
+            <span><b>${esc(detail.license || "—")}</b>${esc(t("project.license"))}</span>
+            <span><b>${esc(i18n.date(detail.updated))}</b>${esc(t("project.updated"))}</span>
+          </div>
+          <div class="pd-markdown">${mdToHtml(detail.body)}</div>
+        </div>
+        ${contentPanel}
+        <div class="pd-panel" data-pdpanel="versions" hidden>
+          <div class="pd-versions">${versionsHtml}</div>
+        </div>
       </div>
     `, () => {
       const coverImg = $("#pd-cover");
@@ -1151,10 +1215,30 @@ async function openProject(id, kindHint) {
         closeModal();
         await installProject(hit || { id, title: detail.title, kind });
       });
-      $$("[data-content-id]").forEach((btn) => btn.addEventListener("click", () => {
-        const item = contents.find((x) => x.id === btn.dataset.contentId);
-        if (item?.id) openProject(item.id, "mod");
+      $$("[data-pdtab]").forEach((btn) => btn.addEventListener("click", () => {
+        $$("[data-pdtab]").forEach((b) => b.classList.toggle("is-on", b === btn));
+        $$("[data-pdpanel]").forEach((p) => { p.hidden = p.dataset.pdpanel !== btn.dataset.pdtab; });
       }));
+      const rowsHost = $("#pd-rows");
+      let pdKind = "mod";
+      const paint = () => {
+        const query = ($("#pd-content-search")?.value || "").trim().toLowerCase();
+        const list = sorted.filter((c) => c.kind === pdKind && (!query || `${c.title} ${c.file}`.toLowerCase().includes(query)));
+        if (rowsHost) rowsHost.innerHTML = list.length ? list.map(row).join("") : `<p class="pd-muted">${esc(t("discover.noResults"))}</p>`;
+        $$("[data-content-id]", rowsHost || document).forEach((btn) => {
+          btn.onclick = () => { const item = contents.find((x) => x.id === btn.dataset.contentId); if (item?.id) openProject(item.id, "mod"); };
+        });
+      };
+      if (rowsHost) {
+        rowsHost.innerHTML = initialRows.length ? initialRows.map(row).join("") : "";
+        $$("[data-pdkind]").forEach((btn) => btn.addEventListener("click", () => {
+          pdKind = btn.dataset.pdkind;
+          $$("[data-pdkind]").forEach((b) => b.classList.toggle("is-on", b === btn));
+          paint();
+        }));
+        $("#pd-content-search")?.addEventListener("input", paint);
+        paint();
+      }
       $$("[data-ext]").forEach((el) => el.addEventListener("click", (e) => {
         e.preventDefault();
         openUrl(el.dataset.ext);
@@ -1263,6 +1347,7 @@ function renderInstances() {
         ${active
           ? `<button class="btn btn-primary" data-profile-play="${esc(p.id)}"><svg class="ico"><use href="#i-play"></use></svg><span>${esc(t("common.play"))}</span></button>`
           : `<button class="btn btn-soft" data-profile-activate="${esc(p.id)}"><svg class="ico"><use href="#i-check"></use></svg><span>${esc(t("instances.activate"))}</span></button>`}
+        <button class="btn btn-quiet icon-only" data-profile-options="${esc(p.id)}" title="${esc(t("opt.title"))}"><svg class="ico"><use href="#i-settings"></use></svg></button>
         <button class="btn btn-quiet icon-only" data-profile-open="${esc(p.id)}" title="${esc(t("instances.openFolder"))}"><svg class="ico"><use href="#i-folder"></use></svg></button>
         <button class="btn btn-quiet icon-only" data-profile-delete="${esc(p.id)}" title="${esc(t("common.delete"))}"><svg class="ico"><use href="#i-trash"></use></svg></button>
       </div>
@@ -1279,6 +1364,8 @@ function bindInstances() {
     if (activate) return activateProfile(activate.dataset.profileActivate);
     const play = e.target.closest("[data-profile-play]");
     if (play) return activateProfile(play.dataset.profilePlay, true);
+    const options = e.target.closest("[data-profile-options]");
+    if (options) return openInstanceOptions(options.dataset.profileOptions);
     const open = e.target.closest("[data-profile-open]");
     if (open) {
       try { await invoke("open_profile", { id: open.dataset.profileOpen }); } catch (err) { toast(friendly(err), "err"); }
@@ -1331,6 +1418,93 @@ function createInstance() {
         renderAll();
         toast(t("toast.profileCreated"));
         loadMods();
+      } catch (err) {
+        toast(friendly(err), "err");
+      }
+    });
+  });
+}
+
+const MC_LANGUAGES = [
+  ["ru_ru", "Русский"], ["en_us", "English"], ["uk_ua", "Українська"], ["kk_kz", "Қазақша"],
+  ["pl_pl", "Polski"], ["cs_cz", "Čeština"], ["sk_sk", "Slovenčina"], ["fr_fr", "Français"],
+  ["de_de", "Deutsch"], ["it_it", "Italiano"], ["es_es", "Español"], ["pt_br", "Português (BR)"],
+  ["tr_tr", "Türkçe"], ["ja_jp", "日本語"], ["zh_cn", "简体中文"],
+];
+
+function optionField(key, label, control) {
+  return `<label class="opt-field"><span>${esc(label)}</span>${control}</label>`;
+}
+
+function optionSelect(key, label, entries, value) {
+  const current = value === undefined || value === null ? "" : String(value);
+  const options = [`<option value="">${esc(t("opt.default"))}</option>`]
+    .concat(entries.map(([val, text]) => `<option value="${esc(val)}" ${current === String(val) ? "selected" : ""}>${esc(text)}</option>`));
+  return optionField(key, label, `<select class="input" data-opt="${key}">${options.join("")}</select>`);
+}
+
+function optionNumber(key, label, value, min, max) {
+  return optionField(key, label, `<input class="input" type="number" min="${min}" max="${max}" data-optnum="${key}" value="${value ?? ""}" placeholder="${esc(t("opt.default"))}">`);
+}
+
+function openInstanceOptions(id) {
+  const profile = profileById(id);
+  if (!profile) return;
+  const o = profile.options || {};
+  const bool = (value) => (value === true ? "true" : value === false ? "false" : "");
+  const html = `
+    <h3>${esc(t("opt.title"))}</h3>
+    <p>${esc(t("opt.sub", { name: profile.name }))}</p>
+    <div class="opt-grid">
+      ${optionSelect("language", t("opt.language"), MC_LANGUAGES, o.language)}
+      ${optionNumber("maxFps", t("opt.maxFps"), o.maxFps, 10, 1000)}
+      ${optionSelect("vsync", "VSync", [["true", t("opt.on")], ["false", t("opt.off")]], o.vsync === undefined ? "" : bool(o.vsync))}
+      ${optionNumber("guiScale", t("opt.guiScale"), o.guiScale, 1, 4)}
+      ${optionNumber("renderDistance", t("opt.renderDistance"), o.renderDistance, 2, 32)}
+      ${optionSelect("graphics", t("opt.graphics"), [["fast", t("opt.fast")], ["fancy", t("opt.fancy")], ["fabulous", t("opt.fabulous")]], o.graphics)}
+      ${optionSelect("particles", t("opt.particles"), [["all", t("opt.particlesAll")], ["decreased", t("opt.particlesDecreased")], ["minimal", t("opt.particlesMinimal")]], o.particles)}
+      ${optionSelect("music", t("opt.music"), [["true", t("opt.on")], ["false", t("opt.off")]], bool(o.music))}
+      ${optionSelect("sound", t("opt.sound"), [["true", t("opt.on")], ["false", t("opt.off")]], bool(o.sound))}
+      ${optionSelect("fullscreen", "Fullscreen", [["true", t("opt.on")], ["false", t("opt.off")]], bool(o.fullscreen))}
+      ${optionSelect("gpu", t("opt.gpu"), [["high", t("opt.gpuHigh")], ["default", t("opt.gpuDefault")]], o.gpu)}
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-quiet" id="opt-reset">${esc(t("common.reset"))}</button>
+      <button class="btn btn-soft" data-close>${esc(t("common.cancel"))}</button>
+      <button class="btn btn-primary" id="opt-save">${esc(t("common.save"))}</button>
+    </div>`;
+  openModal(html, () => {
+    const collect = () => {
+      const result = {};
+      $$("[data-opt]").forEach((el) => {
+        const key = el.dataset.opt;
+        const value = el.value;
+        if (!value) return;
+        result[key] = value === "true" ? true : value === "false" ? false : value;
+      });
+      $$("[data-optnum]").forEach((el) => {
+        if (el.value === "") return;
+        const n = Number(el.value);
+        if (Number.isFinite(n)) result[el.dataset.optnum] = n;
+      });
+      return result;
+    };
+    $("#opt-save").addEventListener("click", async () => {
+      try {
+        await invoke("profile_set_options", { id, options: collect() });
+        await refreshBoot();
+        closeModal();
+        toast(t("toast.optionsSaved"));
+      } catch (err) {
+        toast(friendly(err), "err");
+      }
+    });
+    $("#opt-reset").addEventListener("click", async () => {
+      try {
+        await invoke("profile_set_options", { id, options: {} });
+        await refreshBoot();
+        closeModal();
+        toast(t("toast.optionsSaved"));
       } catch (err) {
         toast(friendly(err), "err");
       }
@@ -1454,6 +1628,13 @@ function fillSettings() {
   setSegmented("#accent-choice", "data-accent", s.uiAccent || "aqua");
   const customInput = $("#accent-custom");
   if (customInput) customInput.value = hexRgb(s.uiAccentCustom) ? s.uiAccentCustom : "#5ce8dc";
+  const themeHost = $("#theme-presets");
+  if (themeHost) {
+    themeHost.innerHTML = THEMES.map((theme) => {
+      const on = (s.uiBackground === theme.bg && s.uiAccent === theme.accent) || (theme.id === "ocean" && s.uiBackground === "ocean" && !THEMES.some((x) => x.bg === s.uiBackground && x.accent === s.uiAccent));
+      return `<button class="theme-card ${on ? "is-on" : ""}" data-theme-preset="${theme.id}"><span class="theme-swatch" data-swatch="${theme.id}"></span><span>${esc(t(`theme.${theme.id}`))}</span></button>`;
+    }).join("");
+  }
   setSegmented("#radius-choice", "data-radius-choice", s.uiRadius || "soft");
   setSegmented("#density-choice", "data-density-choice", s.uiDensity || "normal");
   setSegmented("#bg-choice", "data-bg-choice", s.uiBackground || "ocean");
@@ -1632,6 +1813,22 @@ function bindSettings() {
     markDirty();
   });
   $("#accent-custom").addEventListener("click", (e) => e.stopPropagation());
+  $("#theme-presets").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-theme-preset]");
+    if (!btn) return;
+    const theme = THEMES.find((x) => x.id === btn.dataset.themePreset);
+    if (!theme) return;
+    S.settings.uiBackground = theme.bg;
+    S.settings.uiAccent = theme.accent;
+    S.settings.uiTheme = theme.light ? "light" : "dark";
+    S.settings.uiWallpaperPath = null;
+    $$("#theme-presets .theme-card").forEach((el) => el.classList.toggle("is-on", el === btn));
+    setSegmented("#theme-choice", "data-theme-choice", S.settings.uiTheme);
+    setSegmented("#accent-choice", "data-accent", theme.accent);
+    setSegmented("#bg-choice", "data-bg-choice", theme.bg);
+    applyAppearance(S.settings);
+    markDirty();
+  });
   bindSegChoice("#radius-choice", "data-radius-choice", "uiRadius", () => applyAppearance(S.settings));
   bindSegChoice("#density-choice", "data-density-choice", "uiDensity", () => applyAppearance(S.settings));
   bindSegChoice("#bg-choice", "data-bg-choice", "uiBackground", () => applyAppearance(S.settings));
@@ -1709,6 +1906,17 @@ function bindSettings() {
   });
   $("#jvm-args").addEventListener("input", (e) => { S.settings.jvmArgs = e.target.value; markDirty(); });
   $("#java-path").addEventListener("input", (e) => { S.settings.javaPath = e.target.value; markDirty(); });
+  $("#java-browse").addEventListener("click", async () => {
+    try {
+      const path = await invoke("pick_java");
+      if (!path) return;
+      $("#java-path").value = path;
+      S.settings.javaPath = path;
+      markDirty();
+    } catch {
+      /* dialog cancelled */
+    }
+  });
   $("#java-check").addEventListener("click", async () => {
     const result = $("#java-result");
     result.textContent = t("common.loading");
@@ -1735,6 +1943,19 @@ function bindSettings() {
   $("#update-check").addEventListener("click", () => checkUpdate(true));
   $("#update-open").addEventListener("click", () => openUrl(S.update?.url || `${LINKS.github}/releases/latest`));
   $("#update-hide").addEventListener("click", () => { $("#update-banner").hidden = true; });
+  $("#update-notes")?.addEventListener("click", () => {
+    const info = S.update;
+    if (!info) return;
+    openModal(`
+      <h3>${esc(t("update.title"))} · v${esc(info.latest)}</h3>
+      <div class="pd-markdown" style="max-height:46vh;margin-top:10px">${mdToHtml(info.notes || info.url || "")}</div>
+      <div class="modal-actions">
+        <button class="btn btn-soft" data-close>${esc(t("common.cancel"))}</button>
+        <button class="btn btn-primary" id="update-modal-open">${esc(t("update.download"))}</button>
+      </div>`, () => {
+      $("#update-modal-open")?.addEventListener("click", () => openUrl(info.url));
+    });
+  });
   $$("[data-open]").forEach((btn) => btn.addEventListener("click", async () => {
     try { await invoke("open_dir", { kind: btn.dataset.open }); } catch (err) { toast(friendly(err), "err"); }
   }));
@@ -1901,7 +2122,7 @@ function bindDiscover() {
     const card = e.target.closest("[data-project]");
     if (card) openProject(card.dataset.project);
   });
-  $("#fabric-create").addEventListener("click", createFabricProfile);
+  $("#fabric-create").addEventListener("click", installDiscoverLoader);
   $("#mods-repair").addEventListener("click", repairMods);
   $("#settings-mods-repair").addEventListener("click", repairMods);
 }

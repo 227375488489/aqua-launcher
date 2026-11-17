@@ -1,12 +1,13 @@
-// Generates the Aqua Launcher icon set without external dependencies.
+// Builds the Aqua Launcher icon set from tools/logo-source.png.
 // Usage: node tools/make-icons.mjs
-import { deflateSync } from 'node:zlib';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { deflateSync, inflateSync } from "node:zlib";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 
-const OUT = join(import.meta.dirname, '..', 'src-tauri', 'icons');
-const UI = join(import.meta.dirname, '..', 'ui', 'assets');
-const SS = 4; // supersampling factor
+const ROOT = join(import.meta.dirname, "..");
+const OUT = join(ROOT, "src-tauri", "icons");
+const UI = join(ROOT, "ui", "assets");
+const SOURCE = join(import.meta.dirname, "logo-source.png");
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -27,7 +28,7 @@ function crc32(buf) {
 function chunk(type, data) {
   const len = Buffer.alloc(4);
   len.writeUInt32BE(data.length);
-  const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+  const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
   const crc = Buffer.alloc(4);
   crc.writeUInt32BE(crc32(body));
   return Buffer.concat([len, body, crc]);
@@ -47,21 +48,93 @@ function encodePng(width, height, rgba) {
   ihdr[9] = 6;
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    chunk('IHDR', ihdr),
-    chunk('IDAT', deflateSync(raw, { level: 9 })),
-    chunk('IEND', Buffer.alloc(0)),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", deflateSync(raw, { level: 9 })),
+    chunk("IEND", Buffer.alloc(0)),
   ]);
 }
 
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-const mix = (a, b, t) => a + (b - a) * t;
-const smooth = (edge0, edge1, x) => {
-  const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
-  return t * t * (3 - 2 * t);
-};
+// Minimal 8-bit PNG decoder (colour types 0, 2, 4, 6; no interlace).
+function decodePng(buf) {
+  if (buf.readUInt32BE(0) !== 0x89504e47) throw new Error("not a png");
+  let pos = 8;
+  let width = 0;
+  let height = 0;
+  let colorType = 0;
+  let depth = 0;
+  let interlace = 0;
+  const idat = [];
+  while (pos < buf.length) {
+    const len = buf.readUInt32BE(pos);
+    const type = buf.toString("ascii", pos + 4, pos + 8);
+    const data = buf.subarray(pos + 8, pos + 8 + len);
+    if (type === "IHDR") {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      depth = data[8];
+      colorType = data[9];
+      interlace = data[12];
+    } else if (type === "IDAT") {
+      idat.push(data);
+    } else if (type === "IEND") {
+      break;
+    }
+    pos += len + 12;
+  }
+  if (depth !== 8 || interlace !== 0) throw new Error(`unsupported png (depth ${depth}, interlace ${interlace})`);
+  const channels = colorType === 6 ? 4 : colorType === 2 ? 3 : colorType === 4 ? 2 : colorType === 0 ? 1 : 0;
+  if (!channels) throw new Error(`unsupported png colour type ${colorType}`);
+  const raw = inflateSync(Buffer.concat(idat));
+  const stride = width * channels;
+  const prev = Buffer.alloc(stride);
+  const cur = Buffer.alloc(stride);
+  const out = Buffer.alloc(width * height * 4);
+  let ptr = 0;
+  for (let y = 0; y < height; y++) {
+    const filter = raw[ptr++];
+    raw.copy(cur, 0, ptr, ptr + stride);
+    ptr += stride;
+    for (let x = 0; x < stride; x++) {
+      const a = x >= channels ? cur[x - channels] : 0;
+      const b = prev[x];
+      const c = x >= channels ? prev[x - channels] : 0;
+      const v = cur[x];
+      if (filter === 1) cur[x] = (v + a) & 255;
+      else if (filter === 2) cur[x] = (v + b) & 255;
+      else if (filter === 3) cur[x] = (v + ((a + b) >> 1)) & 255;
+      else if (filter === 4) {
+        const p = a + b - c;
+        const pa = Math.abs(p - a);
+        const pb = Math.abs(p - b);
+        const pc = Math.abs(p - c);
+        cur[x] = (v + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 255;
+      }
+    }
+    for (let x = 0; x < width; x++) {
+      const i = x * channels;
+      const o = (y * width + x) * 4;
+      if (channels >= 3) {
+        out[o] = cur[i];
+        out[o + 1] = cur[i + 1];
+        out[o + 2] = cur[i + 2];
+        out[o + 3] = channels === 4 ? cur[i + 3] : 255;
+      } else if (channels === 2) {
+        out[o] = out[o + 1] = out[o + 2] = cur[i];
+        out[o + 3] = cur[i + 1];
+      } else {
+        out[o] = out[o + 1] = out[o + 2] = cur[i];
+        out[o + 3] = 255;
+      }
+    }
+    cur.copy(prev);
+  }
+  return { width, height, data: out };
+}
 
-// --- tile mask ------------------------------------------------------------
-const RADIUS = 0.238;
+const src = decodePng(readFileSync(SOURCE));
+const RADIUS = 0.19;
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
 function squircle(u, v) {
   const q = 0.5 - RADIUS;
   const dx = Math.abs(u - 0.5) - q;
@@ -69,288 +142,45 @@ function squircle(u, v) {
   return Math.hypot(Math.max(dx, 0), Math.max(dy, 0)) - RADIUS;
 }
 
-// --- triangle SDF (for the play cutout) ----------------------------------
-function dot(ax, ay, bx, by) {
-  return ax * bx + ay * by;
-}
-function sdTriangle(px, py, ax, ay, bx, by, cx, cy) {
-  const e0x = bx - ax;
-  const e0y = by - ay;
-  const e1x = cx - bx;
-  const e1y = cy - by;
-  const e2x = ax - cx;
-  const e2y = ay - cy;
-  const v0x = px - ax;
-  const v0y = py - ay;
-  const v1x = px - bx;
-  const v1y = py - by;
-  const v2x = px - cx;
-  const v2y = py - cy;
-
-  const t0 = clamp(dot(v0x, v0y, e0x, e0y) / dot(e0x, e0y, e0x, e0y), 0, 1);
-  const t1 = clamp(dot(v1x, v1y, e1x, e1y) / dot(e1x, e1y, e1x, e1y), 0, 1);
-  const t2 = clamp(dot(v2x, v2y, e2x, e2y) / dot(e2x, e2y, e2x, e2y), 0, 1);
-
-  const q0x = v0x - e0x * t0;
-  const q0y = v0y - e0y * t0;
-  const q1x = v1x - e1x * t1;
-  const q1y = v1y - e1y * t1;
-  const q2x = v2x - e2x * t2;
-  const q2y = v2y - e2y * t2;
-
-  const s = Math.sign(e0x * e2y - e0y * e2x);
-  const c0 = s * (v0x * e0y - v0y * e0x);
-  const c1 = s * (v1x * e1y - v1y * e1x);
-  const c2 = s * (v2x * e2y - v2y * e2x);
-  const dist = Math.sqrt(
-    Math.min(
-      dot(q0x, q0y, q0x, q0y),
-      dot(q1x, q1y, q1x, q1y),
-      dot(q2x, q2y, q2x, q2y),
-    ),
-  );
-  return Math.min(c0, c1, c2) > 0 ? -dist : dist;
-}
-
-// --- droplet --------------------------------------------------------------
-const DX = 0.5;
-const DY = 0.5;
-const DR = 0.265;
-const TIP = 1.62;
-const CONE = 0.9;
-
-function droplet(du, dv) {
-  let inside = 0;
-  if (dv <= 0) {
-    const t = clamp(1 + dv / TIP, 0, 1);
-    inside = Math.pow(t, CONE) - Math.abs(du);
-  }
-  return Math.max(inside, 1 - Math.hypot(du, dv));
-}
-
-// --- palette --------------------------------------------------------------
-function background(u, v) {
-  const t = clamp(0.5 * u + 0.8 * v, 0, 1);
-  let r;
-  let g;
-  let b;
-  if (t < 0.55) {
-    const k = t / 0.55;
-    r = mix(17, 8, k);
-    g = mix(92, 48, k);
-    b = mix(112, 70, k);
-  } else {
-    const k = (t - 0.55) / 0.45;
-    r = mix(8, 2, k);
-    g = mix(48, 14, k);
-    b = mix(70, 25, k);
-  }
-
-  // cool halo behind the mark
-  const halo = smooth(0.62, 0.0, Math.hypot(u - 0.5, v - 0.44));
-  r += halo * 10;
-  g += halo * 34;
-  b += halo * 40;
-
-  // top-left glass sheen
-  const sheen = smooth(0.55, 0, Math.hypot(u - 0.16, v - 0.1));
-  r += sheen * 26;
-  g += sheen * 62;
-  b += sheen * 58;
-
-  // bottom vignette
-  const vig = smooth(0.42, 0.95, v);
-  r *= 1 - vig * 0.35;
-  g *= 1 - vig * 0.35;
-  b *= 1 - vig * 0.28;
-
-  return [r, g, b];
-}
-
-const TRI = [
-  [0.452, 0.389],
-  [0.452, 0.569],
-  [0.619, 0.479],
-];
-
-function sample(u, v) {
-  let [r, g, b] = background(u, v);
-
-  // water lines beneath the drop, clipped inside the tile
-  for (const [base, amp, alpha, width, phase] of [
-    [0.625, 0.032, 0.85, 0.015, 0.4],
-    [0.715, 0.028, 0.8, 0.014, 2.5],
-  ]) {
-    const wave = base + Math.sin((u - 0.5) * Math.PI * 3.1 + phase) * amp;
-    const d = Math.abs(v - wave);
-    if (d < width) {
-      const k = (1 - d / width) * alpha;
-      r = mix(r, 140, k);
-      g = mix(g, 252, k);
-      b = mix(b, 246, k);
-    }
-  }
-
-  // soft pool of light under the droplet
-  const pool = 1 - Math.hypot((u - DX) / 0.3, (v - 0.79) / 0.1);
-  if (pool > 0) {
-    const k = Math.pow(pool, 1.5) * 0.18;
-    r = mix(r, 86, k);
-    g = mix(g, 234, k);
-    b = mix(b, 226, k);
-  }
-
-  const du = (u - DX) / DR;
-  const dv = (v - DY) / DR;
-  const inside = droplet(du, dv);
-  const edge = clamp(inside / 0.006, 0, 1);
-  if (edge <= 0) return [r, g, b];
-
-  // droplet: deep royal blue on the left, cyan glass on the right
-  const ft = clamp((dv + TIP) / (TIP + 1), 0, 1);
-  let dr;
-  let dg;
-  let db;
-  if (ft < 0.3) {
-    const k = smooth(0, 0.3, ft);
-    dr = mix(176, 74, k);
-    dg = mix(250, 208, k);
-    db = mix(255, 248, k);
-  } else if (ft < 0.74) {
-    const k = (ft - 0.3) / 0.44;
-    dr = mix(74, 18, k);
-    dg = mix(208, 116, k);
-    db = mix(248, 226, k);
-  } else {
-    const k = (ft - 0.74) / 0.26;
-    dr = mix(18, 5, k);
-    dg = mix(116, 44, k);
-    db = mix(226, 132, k);
-  }
-
-  // left flank falls into deep navy
-  const side = smooth(0.46, 0.08, u) * 0.55;
-  dr = mix(dr, 6, side);
-  dg = mix(dg, 36, side);
-  db = mix(db, 122, side);
-
-  // bright inner droplet, offset to the right
-  const iu = (u - 0.548) / 0.14;
-  const iv = (v - 0.425) / 0.14;
-  const shine = droplet(iu, iv);
-  if (shine > 0) {
-    const k = smooth(0, 0.12, shine) * 0.78;
-    const it = clamp((iv + TIP) / (TIP + 1), 0, 1);
-    dr = mix(dr, mix(238, 96, it), k);
-    dg = mix(dg, mix(255, 230, it), k);
-    db = mix(db, 255, k);
-  }
-
-  // light gathering along the lower belly
-  const lower = smooth(0.2, 0.95, dv) * 0.12;
-  dr = mix(dr, 52, lower);
-  dg = mix(dg, 176, lower);
-  db = mix(db, 232, lower);
-
-  // inner shadow toward the silhouette
-  const inner = 1 - smooth(0.0, 0.14, inside);
-  dr = mix(dr, 6, inner * 0.32);
-  dg = mix(dg, 40, inner * 0.32);
-  db = mix(db, 96, inner * 0.32);
-
-  // specular streak down the left flank
-  const ax = (du + 0.42) * 0.93 + (dv + 0.3) * 0.37;
-  const ay = -(du + 0.42) * 0.37 + (dv + 0.3) * 0.93;
-  const spec = 1 - Math.hypot(ax / 0.22, ay / 0.56);
-  if (spec > 0) {
-    const k = Math.pow(spec, 0.6) * 0.5;
-    dr = mix(dr, 255, k);
-    dg = mix(dg, 255, k);
-    db = mix(db, 255, k);
-  }
-
-  // crisp rim light
-  const rim = clamp(1 - inside / 0.03, 0, 1) * 0.5;
-  dr = mix(dr, 168, rim);
-  dg = mix(dg, 250, rim);
-  db = mix(db, 255, rim);
-
-  // two white wave gaps sweeping across the lower half (as in the logo)
-  for (const [base, amp, alpha, width, phase] of [
-    [0.625, 0.032, 1, 0.026, 0.4],
-    [0.715, 0.028, 1, 0.023, 2.5],
-  ]) {
-    const wave = base + Math.sin((u - 0.5) * Math.PI * 2.3 + phase) * amp;
-    const d = Math.abs(v - wave);
-    if (d < width) {
-      const k = smooth(width, 0, d) * alpha;
-      dr = mix(dr, 244, k);
-      dg = mix(dg, 255, k);
-      db = mix(db, 255, k);
-    }
-  }
-
-  // deep water body below the second wave
-  const deep = smooth(0.735, 0.86, v);
-  dr = mix(dr, 4, deep * 0.75);
-  dg = mix(dg, 28, deep * 0.75);
-  db = mix(db, 96, deep * 0.75);
-
-  return [
-    mix(r, dr, edge),
-    mix(g, dg, edge),
-    mix(b, db, edge),
-  ];
-}
-
-function render(size, ss = SS) {
-  const hi = size * ss;
-  const buf = new Float32Array(hi * hi * 4);
-  const half = 0.5 / hi;
-  for (let y = 0; y < hi; y++) {
-    for (let x = 0; x < hi; x++) {
-      const u = (x + 0.5) / hi;
-      const v = (y + 0.5) / hi;
-      const sd = squircle(u, v);
-      const cov = clamp(0.5 - sd / (2 * half), 0, 1);
-      if (cov <= 0) continue;
-      const [r, g, b] = sample(u, v);
-      const i = (y * hi + x) * 4;
-      buf[i] = r * cov;
-      buf[i + 1] = g * cov;
-      buf[i + 2] = b * cov;
-      buf[i + 3] = cov;
-    }
-  }
-
+// Area-average the source into the target size, then mask to a squircle.
+function render(size) {
   const rgba = Buffer.alloc(size * size * 4);
-  const n = ss * ss;
+  const sx = src.width / size;
+  const sy = src.height / size;
   for (let y = 0; y < size; y++) {
+    const y0 = Math.floor(y * sy);
+    const y1 = Math.max(y0 + 1, Math.min(src.height, Math.ceil((y + 1) * sy)));
     for (let x = 0; x < size; x++) {
+      const x0 = Math.floor(x * sx);
+      const x1 = Math.max(x0 + 1, Math.min(src.width, Math.ceil((x + 1) * sx)));
       let r = 0;
       let g = 0;
       let b = 0;
-      let a = 0;
-      for (let sy = 0; sy < ss; sy++) {
-        for (let sx = 0; sx < ss; sx++) {
-          const i = ((y * ss + sy) * hi + (x * ss + sx)) * 4;
-          r += buf[i];
-          g += buf[i + 1];
-          b += buf[i + 2];
-          a += buf[i + 3];
+      let n = 0;
+      for (let py = y0; py < y1; py++) {
+        let i = (py * src.width + x0) * 4;
+        for (let px = x0; px < x1; px++) {
+          r += src.data[i];
+          g += src.data[i + 1];
+          b += src.data[i + 2];
+          i += 4;
+          n++;
         }
       }
-      r /= n;
-      g /= n;
-      b /= n;
-      a /= n;
       const o = (y * size + x) * 4;
-      if (a > 0) {
-        rgba[o] = clamp(Math.round(r / a), 0, 255);
-        rgba[o + 1] = clamp(Math.round(g / a), 0, 255);
-        rgba[o + 2] = clamp(Math.round(b / a), 0, 255);
+      rgba[o] = r / n;
+      rgba[o + 1] = g / n;
+      rgba[o + 2] = b / n;
+      // 4x4 mask supersampling for a clean rounded edge
+      let cov = 0;
+      for (let sy2 = 0; sy2 < 4; sy2++) {
+        for (let sx2 = 0; sx2 < 4; sx2++) {
+          const u = (x + (sx2 + 0.5) / 4) / size;
+          const v = (y + (sy2 + 0.5) / 4) / size;
+          if (squircle(u, v) <= 0) cov++;
+        }
       }
-      rgba[o + 3] = Math.round(a * 255);
+      rgba[o + 3] = Math.round((cov / 16) * 255);
     }
   }
   return encodePng(size, size, rgba);
@@ -373,13 +203,13 @@ function icns(entries) {
   const body = Buffer.concat(
     entries.map(([type, png]) => {
       const head = Buffer.alloc(8);
-      head.write(type, 0, 4, 'ascii');
+      head.write(type, 0, 4, "ascii");
       head.writeUInt32BE(png.length + 8, 4);
       return Buffer.concat([head, png]);
     }),
   );
   const head = Buffer.alloc(8);
-  head.write('icns', 0, 4, 'ascii');
+  head.write("icns", 0, 4, "ascii");
   head.writeUInt32BE(body.length + 8, 4);
   return Buffer.concat([head, body]);
 }
@@ -389,13 +219,11 @@ mkdirSync(UI, { recursive: true });
 
 const sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256];
 const images = new Map(sizes.map((size) => [size, render(size)]));
-
 const icoSizes = [16, 20, 24, 32, 40, 48, 64, 128, 256];
 const head = Buffer.alloc(6);
 head.writeUInt16LE(0, 0);
 head.writeUInt16LE(1, 2);
 head.writeUInt16LE(icoSizes.length, 4);
-
 let offset = 6 + icoSizes.length * 16;
 const entries = [];
 for (const size of icoSizes) {
@@ -403,31 +231,28 @@ for (const size of icoSizes) {
   entries.push(icoEntry(png, size, offset));
   offset += png.length;
 }
-writeFileSync(
-  join(OUT, 'icon.ico'),
-  Buffer.concat([head, ...entries, ...icoSizes.map((s) => images.get(s))]),
-);
+writeFileSync(join(OUT, "icon.ico"), Buffer.concat([head, ...entries, ...icoSizes.map((s) => images.get(s))]));
 
 const at = (size) => images.get(size);
-writeFileSync(join(OUT, '32x32.png'), at(32));
-writeFileSync(join(OUT, '128x128.png'), at(128));
-writeFileSync(join(OUT, '128x128@2x.png'), at(256));
-writeFileSync(join(OUT, 'icon.png'), at(256));
-writeFileSync(join(OUT, 'icon-256.png'), at(256));
-writeFileSync(join(OUT, 'icon-512.png'), render(512, 3));
-
-const icnsEntries = [
-  ['ic11', at(32)],
-  ['ic12', at(64)],
-  ['ic07', at(128)],
-  ['ic13', at(256)],
-  ['ic08', at(256)],
-  ['ic14', render(512, 3)],
-  ['ic09', render(512, 3)],
-  ['ic10', render(1024, 2)],
-];
-writeFileSync(join(OUT, 'icon.icns'), icns(icnsEntries));
-
-writeFileSync(join(UI, 'logo.png'), at(256));
-writeFileSync(join(UI, 'logo-64.png'), at(64));
-console.log('icons written:', sizes.join(', '), '+ icns');
+writeFileSync(join(OUT, "32x32.png"), at(32));
+writeFileSync(join(OUT, "128x128.png"), at(128));
+writeFileSync(join(OUT, "128x128@2x.png"), at(256));
+writeFileSync(join(OUT, "icon.png"), at(256));
+writeFileSync(join(OUT, "icon-256.png"), at(256));
+writeFileSync(join(OUT, "icon-512.png"), render(512));
+writeFileSync(
+  join(OUT, "icon.icns"),
+  icns([
+    ["ic11", at(32)],
+    ["ic12", at(64)],
+    ["ic07", at(128)],
+    ["ic13", at(256)],
+    ["ic08", at(256)],
+    ["ic14", render(512)],
+    ["ic09", render(512)],
+    ["ic10", render(1024)],
+  ]),
+);
+writeFileSync(join(UI, "logo.png"), render(256));
+writeFileSync(join(UI, "logo-64.png"), render(64));
+console.log("icons rebuilt from logo-source.png:", sizes.join(", "), "+ icns");

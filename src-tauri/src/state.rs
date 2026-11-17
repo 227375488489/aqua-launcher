@@ -105,6 +105,26 @@ impl Default for Settings {
     }
 }
 
+/// Базовые настройки Minecraft для конкретного инстанса.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(default, rename_all = "camelCase")]
+pub struct InstanceOptions {
+    pub language: Option<String>,
+    pub max_fps: Option<u32>,
+    pub vsync: Option<bool>,
+    pub gui_scale: Option<u32>,
+    pub render_distance: Option<u32>,
+    /// fast | fancy | fabulous
+    pub graphics: Option<String>,
+    /// all | decreased | minimal
+    pub particles: Option<String>,
+    pub music: Option<bool>,
+    pub sound: Option<bool>,
+    pub fullscreen: Option<bool>,
+    /// Windows: high | default
+    pub gpu: Option<String>,
+}
+
 /// Изолированная сборка: своя папка игры, свои моды и миры.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -121,6 +141,8 @@ pub struct Profile {
     pub icon: Option<String>,
     #[serde(default)]
     pub created_at: i64,
+    #[serde(default)]
+    pub options: InstanceOptions,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
