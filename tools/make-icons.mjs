@@ -2,9 +2,10 @@
 // Usage: node tools/make-icons.mjs
 import { deflateSync } from 'node:zlib';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 
 const OUT = join(import.meta.dirname, '..', 'src-tauri', 'icons');
+const UI = join(import.meta.dirname, '..', 'ui', 'assets');
 const SS = 4; // supersampling factor
 
 const CRC_TABLE = (() => {
@@ -54,123 +55,235 @@ function encodePng(width, height, rgba) {
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const mix = (a, b, t) => a + (b - a) * t;
+const smooth = (edge0, edge1, x) => {
+  const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
+};
 
-// --- squircle -------------------------------------------------------------
+// --- tile mask ------------------------------------------------------------
 const RADIUS = 0.238;
 function squircle(u, v) {
-  // signed distance, negative inside (u, v in 0..1)
   const q = 0.5 - RADIUS;
   const dx = Math.abs(u - 0.5) - q;
   const dy = Math.abs(v - 0.5) - q;
-  const outside = Math.hypot(Math.max(dx, 0), Math.max(dy, 0)) - RADIUS;
-  return outside;
+  return Math.hypot(Math.max(dx, 0), Math.max(dy, 0)) - RADIUS;
 }
 
-// --- mark -----------------------------------------------------------------
-const DROP_X = 0.5;
-const DROP_Y = 0.5;
-const DROP_R = 0.178; // radius of the round belly, in tile units
-const TIP = 2.0; // tip distance above the belly, in belly radii
-const CONE_P = 0.86;
+// --- triangle SDF (for the play cutout) ----------------------------------
+function dot(ax, ay, bx, by) {
+  return ax * bx + ay * by;
+}
+function sdTriangle(px, py, ax, ay, bx, by, cx, cy) {
+  const e0x = bx - ax;
+  const e0y = by - ay;
+  const e1x = cx - bx;
+  const e1y = cy - by;
+  const e2x = ax - cx;
+  const e2y = ay - cy;
+  const v0x = px - ax;
+  const v0y = py - ay;
+  const v1x = px - bx;
+  const v1y = py - by;
+  const v2x = px - cx;
+  const v2y = py - cy;
 
-function sample(u, v) {
-  // background
-  const t = clamp(u * 0.42 + v * 0.9, 0, 1);
-  let r = mix(14, 3, t);
-  let g = mix(72, 17, t);
-  let b = mix(92, 26, t);
+  const t0 = clamp(dot(v0x, v0y, e0x, e0y) / dot(e0x, e0y, e0x, e0y), 0, 1);
+  const t1 = clamp(dot(v1x, v1y, e1x, e1y) / dot(e1x, e1y, e1x, e1y), 0, 1);
+  const t2 = clamp(dot(v2x, v2y, e2x, e2y) / dot(e2x, e2y, e2x, e2y), 0, 1);
 
-  const glow = clamp(1 - Math.hypot(u - 0.26, v - 0.18) / 0.8, 0, 1);
-  r += glow * glow * 22;
-  g += glow * glow * 58;
-  b += glow * glow * 55;
+  const q0x = v0x - e0x * t0;
+  const q0y = v0y - e0y * t0;
+  const q1x = v1x - e1x * t1;
+  const q1y = v1y - e1y * t1;
+  const q2x = v2x - e2x * t2;
+  const q2y = v2y - e2y * t2;
 
-  // light pooling beneath the drop, so the mark sits in the tile
-  const pool = 1 - Math.hypot((u - DROP_X) / 0.34, (v - 0.84) / 0.13);
-  if (pool > 0) {
-    const k = Math.pow(pool, 1.6) * 0.16;
-    r = mix(r, 92, k);
-    g = mix(g, 224, k);
-    b = mix(b, 224, k);
-  }
+  const s = Math.sign(e0x * e2y - e0y * e2x);
+  const c0 = s * (v0x * e0y - v0y * e0x);
+  const c1 = s * (v1x * e1y - v1y * e1x);
+  const c2 = s * (v2x * e2y - v2y * e2x);
+  const dist = Math.sqrt(
+    Math.min(
+      dot(q0x, q0y, q0x, q0y),
+      dot(q1x, q1y, q1x, q1y),
+      dot(q2x, q2y, q2x, q2y),
+    ),
+  );
+  return Math.min(c0, c1, c2) > 0 ? -dist : dist;
+}
 
-  // two still water lines behind the drop
-  for (const [base, amp, alpha, width] of [
-    [0.825, 0.03, 0.28, 0.008],
-    [0.9, 0.024, 0.13, 0.006],
-  ]) {
-    const wave = base + Math.sin((u - 0.5) * Math.PI * 2.6 + 0.4) * amp;
-    const d = Math.abs(v - wave);
-    if (d < width) {
-      const k = (1 - d / width) * alpha;
-      r = mix(r, 130, k);
-      g = mix(g, 248, k);
-      b = mix(b, 242, k);
-    }
-  }
+// --- droplet --------------------------------------------------------------
+const DX = 0.5;
+const DY = 0.475;
+const DR = 0.208;
+const TIP = 1.85;
+const CONE = 0.92;
 
-  // droplet geometry
-  const du = (u - DROP_X) / DROP_R;
-  const dv = (v - DROP_Y) / DROP_R;
+function droplet(du, dv) {
   let inside = 0;
   if (dv <= 0) {
-    const hw = Math.pow(clamp(1 + dv / TIP, 0, 1), CONE_P);
-    inside = Math.max(inside, hw - Math.abs(du));
+    const t = clamp(1 + dv / TIP, 0, 1);
+    inside = Math.pow(t, CONE) - Math.abs(du);
   }
-  inside = Math.max(inside, 1 - Math.hypot(du, dv));
+  return Math.max(inside, 1 - Math.hypot(du, dv));
+}
 
-  if (inside > 0) {
-    const ft = clamp((dv + TIP) / (TIP + 1), 0, 1);
-    let dr;
-    let dg;
-    let db;
-    if (ft < 0.4) {
-      const k = ft / 0.4;
-      dr = mix(214, 104, k);
-      dg = mix(255, 242, k);
-      db = mix(250, 233, k);
-    } else {
-      const k = (ft - 0.4) / 0.6;
-      dr = mix(104, 26, k);
-      dg = mix(242, 164, k);
-      db = mix(233, 202, k);
-    }
-
-    // soft light pooling at the bottom of the drop
-    if (dv > 0.4) {
-      const k = clamp((dv - 0.4) / 0.8, 0, 1) * 0.2;
-      dr = mix(dr, 170, k);
-      dg = mix(dg, 252, k);
-      db = mix(db, 250, k);
-    }
-
-    // specular streak down the left flank
-    const ax = (du + 0.42) * 0.94 + (dv + 0.5) * 0.34;
-    const ay = -(du + 0.42) * 0.34 + (dv + 0.5) * 0.94;
-    const e = 1 - Math.hypot(ax / 0.3, ay / 0.62);
-    if (e > 0) {
-      const k = Math.pow(e, 0.6) * 0.62;
-      dr = mix(dr, 255, k);
-      dg = mix(dg, 255, k);
-      db = mix(db, 255, k);
-    }
-
-    // rim light along the silhouette
-    const rim = clamp(1 - inside / 0.07, 0, 1) * 0.26;
-    dr = mix(dr, 255, rim);
-    dg = mix(dg, 255, rim);
-    db = mix(db, 255, rim);
-
-    r = dr;
-    g = dg;
-    b = db;
+// --- palette --------------------------------------------------------------
+function background(u, v) {
+  const t = clamp(0.5 * u + 0.8 * v, 0, 1);
+  let r;
+  let g;
+  let b;
+  if (t < 0.55) {
+    const k = t / 0.55;
+    r = mix(17, 8, k);
+    g = mix(92, 48, k);
+    b = mix(112, 70, k);
+  } else {
+    const k = (t - 0.55) / 0.45;
+    r = mix(8, 2, k);
+    g = mix(48, 14, k);
+    b = mix(70, 25, k);
   }
+
+  // cool halo behind the mark
+  const halo = smooth(0.62, 0.0, Math.hypot(u - 0.5, v - 0.44));
+  r += halo * 10;
+  g += halo * 34;
+  b += halo * 40;
+
+  // top-left glass sheen
+  const sheen = smooth(0.55, 0, Math.hypot(u - 0.16, v - 0.1));
+  r += sheen * 26;
+  g += sheen * 62;
+  b += sheen * 58;
+
+  // bottom vignette
+  const vig = smooth(0.42, 0.95, v);
+  r *= 1 - vig * 0.35;
+  g *= 1 - vig * 0.35;
+  b *= 1 - vig * 0.28;
 
   return [r, g, b];
 }
 
-function render(size) {
-  const hi = size * SS;
+const TRI = [
+  [0.452, 0.389],
+  [0.452, 0.569],
+  [0.619, 0.479],
+];
+
+function sample(u, v) {
+  let [r, g, b] = background(u, v);
+
+  // water lines beneath the drop, clipped inside the tile
+  for (const [base, amp, alpha, width, phase] of [
+    [0.838, 0.022, 0.34, 0.0045, 0.5],
+    [0.895, 0.018, 0.16, 0.0035, 1.9],
+  ]) {
+    const wave = base + Math.sin((u - 0.5) * Math.PI * 3.1 + phase) * amp;
+    const d = Math.abs(v - wave);
+    if (d < width) {
+      const k = (1 - d / width) * alpha;
+      r = mix(r, 140, k);
+      g = mix(g, 252, k);
+      b = mix(b, 246, k);
+    }
+  }
+
+  // soft pool of light under the droplet
+  const pool = 1 - Math.hypot((u - DX) / 0.3, (v - 0.79) / 0.1);
+  if (pool > 0) {
+    const k = Math.pow(pool, 1.5) * 0.18;
+    r = mix(r, 86, k);
+    g = mix(g, 234, k);
+    b = mix(b, 226, k);
+  }
+
+  const du = (u - DX) / DR;
+  const dv = (v - DY) / DR;
+  const inside = droplet(du, dv);
+  const edge = clamp(inside / 0.006, 0, 1);
+  if (edge <= 0) return [r, g, b];
+
+  // glass fill: bright crest, teal body, deep blue tail
+  const ft = clamp((dv + TIP) / (TIP + 1), 0, 1);
+  let dr;
+  let dg;
+  let db;
+  if (ft < 0.42) {
+    const k = smooth(0, 0.42, ft);
+    dr = mix(224, 128, k);
+    dg = mix(255, 249, k);
+    db = mix(252, 240, k);
+  } else if (ft < 0.78) {
+    const k = (ft - 0.42) / 0.36;
+    dr = mix(128, 62, k);
+    dg = mix(249, 226, k);
+    db = mix(240, 218, k);
+  } else {
+    const k = (ft - 0.78) / 0.22;
+    dr = mix(62, 20, k);
+    dg = mix(226, 138, k);
+    db = mix(218, 190, k);
+  }
+
+  // light gathering along the lower belly
+  const lower = smooth(0.1, 1.0, dv) * 0.22;
+  dr = mix(dr, 156, lower);
+  dg = mix(dg, 250, lower);
+  db = mix(db, 244, lower);
+
+  // inner shadow toward the silhouette
+  const inner = 1 - smooth(0.0, 0.16, inside);
+  dr = mix(dr, 14, inner * 0.35);
+  dg = mix(dg, 70, inner * 0.35);
+  db = mix(db, 88, inner * 0.35);
+
+  // specular streak down the left flank
+  const ax = (du + 0.4) * 0.93 + (dv + 0.32) * 0.37;
+  const ay = -(du + 0.4) * 0.37 + (dv + 0.32) * 0.93;
+  const spec = 1 - Math.hypot(ax / 0.26, ay / 0.58);
+  if (spec > 0) {
+    const k = Math.pow(spec, 0.55) * 0.7;
+    dr = mix(dr, 255, k);
+    dg = mix(dg, 255, k);
+    db = mix(db, 255, k);
+  }
+
+  // crisp rim light
+  const rim = clamp(1 - inside / 0.03, 0, 1) * 0.45;
+  dr = mix(dr, 236, rim);
+  dg = mix(dg, 255, rim);
+  db = mix(db, 252, rim);
+
+  // play cutout, filled with the deep background and a light rim
+  const tri = sdTriangle(u, v, ...TRI[0], ...TRI[1], ...TRI[2]) - 0.006;
+  if (tri < 0.012) {
+    const cut = clamp(-tri / 0.004, 0, 1);
+    const [br, bg, bb] = background(u, v);
+    let cr = br * 0.42;
+    let cg = bg * 0.42 + 4;
+    let cb = bb * 0.42 + 10;
+    // faint cyan bounce just outside the cutout edge
+    const glow = clamp(1 - Math.abs(tri) / 0.022, 0, 1) * 0.5;
+    dr = mix(dr, 190, glow);
+    dg = mix(dg, 255, glow);
+    db = mix(db, 250, glow);
+    dr = mix(dr, cr, cut);
+    dg = mix(dg, cg, cut);
+    db = mix(db, cb, cut);
+  }
+
+  return [
+    mix(r, dr, edge),
+    mix(g, dg, edge),
+    mix(b, db, edge),
+  ];
+}
+
+function render(size, ss = SS) {
+  const hi = size * ss;
   const buf = new Float32Array(hi * hi * 4);
   const half = 0.5 / hi;
   for (let y = 0; y < hi; y++) {
@@ -178,7 +291,6 @@ function render(size) {
       const u = (x + 0.5) / hi;
       const v = (y + 0.5) / hi;
       const sd = squircle(u, v);
-      // sub-pixel coverage at the tile edge
       const cov = clamp(0.5 - sd / (2 * half), 0, 1);
       if (cov <= 0) continue;
       const [r, g, b] = sample(u, v);
@@ -191,16 +303,16 @@ function render(size) {
   }
 
   const rgba = Buffer.alloc(size * size * 4);
-  const n = SS * SS;
+  const n = ss * ss;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       let r = 0;
       let g = 0;
       let b = 0;
       let a = 0;
-      for (let sy = 0; sy < SS; sy++) {
-        for (let sx = 0; sx < SS; sx++) {
-          const i = ((y * SS + sy) * hi + (x * SS + sx)) * 4;
+      for (let sy = 0; sy < ss; sy++) {
+        for (let sx = 0; sx < ss; sx++) {
+          const i = ((y * ss + sy) * hi + (x * ss + sx)) * 4;
           r += buf[i];
           g += buf[i + 1];
           b += buf[i + 2];
@@ -236,33 +348,65 @@ function icoEntry(png, size, offset) {
   return header;
 }
 
+function icns(entries) {
+  const body = Buffer.concat(
+    entries.map(([type, png]) => {
+      const head = Buffer.alloc(8);
+      head.write(type, 0, 4, 'ascii');
+      head.writeUInt32BE(png.length + 8, 4);
+      return Buffer.concat([head, png]);
+    }),
+  );
+  const head = Buffer.alloc(8);
+  head.write('icns', 0, 4, 'ascii');
+  head.writeUInt32BE(body.length + 8, 4);
+  return Buffer.concat([head, body]);
+}
+
 mkdirSync(OUT, { recursive: true });
+mkdirSync(UI, { recursive: true });
 
 const sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256];
-const images = sizes.map((size) => ({ size, png: render(size) }));
+const images = new Map(sizes.map((size) => [size, render(size)]));
 
 const icoSizes = [16, 20, 24, 32, 40, 48, 64, 128, 256];
-const icoImages = images.filter((i) => icoSizes.includes(i.size));
 const head = Buffer.alloc(6);
 head.writeUInt16LE(0, 0);
 head.writeUInt16LE(1, 2);
-head.writeUInt16LE(icoImages.length, 4);
+head.writeUInt16LE(icoSizes.length, 4);
 
-let offset = 6 + icoImages.length * 16;
+let offset = 6 + icoSizes.length * 16;
 const entries = [];
-for (const image of icoImages) {
-  entries.push(icoEntry(image.png, image.size, offset));
-  offset += image.png.length;
+for (const size of icoSizes) {
+  const png = images.get(size);
+  entries.push(icoEntry(png, size, offset));
+  offset += png.length;
 }
-writeFileSync(join(OUT, 'icon.ico'), Buffer.concat([head, ...entries, ...icoImages.map((i) => i.png)]));
+writeFileSync(
+  join(OUT, 'icon.ico'),
+  Buffer.concat([head, ...entries, ...icoSizes.map((s) => images.get(s))]),
+);
 
-const at = (size) => images.find((i) => i.size === size).png;
+const at = (size) => images.get(size);
 writeFileSync(join(OUT, '32x32.png'), at(32));
 writeFileSync(join(OUT, '128x128.png'), at(128));
 writeFileSync(join(OUT, '128x128@2x.png'), at(256));
 writeFileSync(join(OUT, 'icon.png'), at(256));
 writeFileSync(join(OUT, 'icon-256.png'), at(256));
-mkdirSync(join(OUT, '..', '..', 'ui', 'assets'), { recursive: true });
-writeFileSync(join(OUT, '..', '..', 'ui', 'assets', 'logo.png'), at(256));
-writeFileSync(join(OUT, '..', '..', 'ui', 'assets', 'logo-64.png'), at(64));
-console.log('icons written:', sizes.join(', '));
+writeFileSync(join(OUT, 'icon-512.png'), render(512, 3));
+
+const icnsEntries = [
+  ['ic11', at(32)],
+  ['ic12', at(64)],
+  ['ic07', at(128)],
+  ['ic13', at(256)],
+  ['ic08', at(256)],
+  ['ic14', render(512, 3)],
+  ['ic09', render(512, 3)],
+  ['ic10', render(1024, 2)],
+];
+writeFileSync(join(OUT, 'icon.icns'), icns(icnsEntries));
+
+writeFileSync(join(UI, 'logo.png'), at(256));
+writeFileSync(join(UI, 'logo-64.png'), at(64));
+console.log('icons written:', sizes.join(', '), '+ icns');

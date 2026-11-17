@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::path::Path;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -52,6 +53,113 @@ impl VersionMeta {
                 o.get("id").and_then(|v| v.as_str()).map(|s| s.to_string())
             }
             _ => None,
+        }
+    }
+}
+
+/// Читает манифест установленной версии.
+pub fn load(root: &Path, id: &str) -> Option<VersionMeta> {
+    let raw = std::fs::read_to_string(
+        root.join("versions").join(id).join(format!("{id}.json")),
+    )
+    .ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+/// Склеивает версию с её родителем (`inheritsFrom`) — так устроены Fabric, Quilt и
+/// профили загрузчиков: собственный манифест плюс ванильный клиент.
+/// Возвращает готовый манифест и идентификатор версии, у которой лежит client.jar.
+pub fn resolve(root: &Path, id: &str) -> anyhow::Result<(VersionMeta, String)> {
+    resolve_at(root, id, 0)
+}
+
+fn resolve_at(root: &Path, id: &str, depth: u32) -> anyhow::Result<(VersionMeta, String)> {
+    if depth > 4 {
+        return Err(anyhow::anyhow!("Слишком длинная цепочка inheritsFrom у {id}"));
+    }
+    let mut meta = load(root, id)
+        .ok_or_else(|| anyhow::anyhow!("Версия {id} не установлена"))?;
+    let mut jar = if meta
+        .downloads
+        .as_ref()
+        .and_then(|d| d.client.as_ref())
+        .is_some()
+    {
+        meta.id.clone()
+    } else {
+        String::new()
+    };
+    if let Some(parent_id) = meta.inherits_from.clone() {
+        let (parent, parent_jar) = resolve_at(root, &parent_id, depth + 1)?;
+        if !parent_jar.is_empty() {
+            jar = parent_jar;
+        }
+        meta = merge(meta, parent);
+    }
+    if jar.is_empty() {
+        jar = id.to_string();
+    }
+    Ok((meta, jar))
+}
+
+fn merge(mut child: VersionMeta, parent: VersionMeta) -> VersionMeta {
+    let mut libraries = parent.libraries;
+    for lib in child.libraries.drain(..) {
+        match libraries.iter_mut().find(|l| l.name == lib.name) {
+            Some(slot) => *slot = lib,
+            None => libraries.push(lib),
+        }
+    }
+    child.libraries = libraries;
+
+    if child.main_class.is_none() {
+        child.main_class = parent.main_class;
+    }
+    child.arguments = merge_arguments(child.arguments, parent.arguments);
+    if child.minecraft_arguments.is_none() {
+        child.minecraft_arguments = parent.minecraft_arguments;
+    }
+    if child.asset_index.is_none() {
+        child.asset_index = parent.asset_index;
+    }
+    if child.assets.is_none() {
+        child.assets = parent.assets;
+    }
+    if child.downloads.is_none() {
+        child.downloads = parent.downloads;
+    }
+    if child.java_version.is_none() {
+        child.java_version = parent.java_version;
+    }
+    if child.logging.is_none() {
+        child.logging = parent.logging;
+    }
+    if child.kind.is_none() {
+        child.kind = parent.kind;
+    }
+    if child.release_time.is_none() {
+        child.release_time = parent.release_time;
+    }
+    if child.compliance_level.is_none() {
+        child.compliance_level = parent.compliance_level;
+    }
+    child.inherits_from = None;
+    child
+}
+
+fn merge_arguments(own: Option<Arguments>, parent: Option<Arguments>) -> Option<Arguments> {
+    match (own, parent) {
+        (None, None) => None,
+        (Some(own), None) => Some(own),
+        (None, Some(parent)) => Some(parent),
+        (Some(mut own), Some(parent)) => {
+            let mut jvm = parent.jvm;
+            jvm.append(&mut own.jvm);
+            let mut game = parent.game;
+            game.append(&mut own.game);
+            own.jvm = jvm;
+            own.game = game;
+            Some(own)
         }
     }
 }

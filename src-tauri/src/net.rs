@@ -4,7 +4,6 @@ use sha1::{Digest, Sha1};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-
 #[derive(Clone, Debug)]
 pub struct Job {
     pub url: String,
@@ -106,16 +105,42 @@ async fn fetch(client: &reqwest::Client, job: &Job) -> Result<u64> {
 }
 
 async fn fetch_once(client: &reqwest::Client, job: &Job) -> Result<u64> {
+    use std::io::Write;
     let response = client.get(&job.url).send().await?.error_for_status()?;
-    let data = response.bytes().await?;
+    if let Some(parent) = job.dest.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let tmp = job.dest.with_extension("part");
+    let mut file = std::fs::File::create(&tmp)?;
+    let mut hasher = Sha1::new();
+    let mut written = 0u64;
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        hasher.update(&chunk);
+        file.write_all(&chunk)?;
+        written += chunk.len() as u64;
+    }
+    file.flush()?;
+    drop(file);
     if let Some(want) = &job.sha1 {
-        let got = hex(&Sha1::digest(&data));
+        let got = hex(&hasher.finalize());
         if !got.eq_ignore_ascii_case(want) {
+            let _ = std::fs::remove_file(&tmp);
             return Err(anyhow!("SHA-1 не совпал"));
         }
     }
-    let tmp = job.dest.with_extension("part");
-    std::fs::write(&tmp, &data)?;
     std::fs::rename(&tmp, &job.dest)?;
-    Ok(data.len() as u64)
+    Ok(written)
+}
+
+/// Скачивает один файл потоком (без загрузки в память) с проверкой SHA-1.
+pub async fn download_to(
+    client: &reqwest::Client,
+    url: &str,
+    dest: PathBuf,
+    sha1: Option<String>,
+) -> Result<u64> {
+    let job = Job::new(url, dest).sha1(sha1);
+    fetch(client, &job).await
 }

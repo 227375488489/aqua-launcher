@@ -1,590 +1,563 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="dark" data-accent="aqua" data-radius="soft" data-density="normal" data-font="manrope" data-side="left" data-rail="full" data-motion="on" data-bg="ocean">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Aqua Launcher</title>
-<link rel="stylesheet" href="assets/fonts.css" />
-<link rel="stylesheet" href="styles.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Aqua Launcher</title>
+  <link rel="stylesheet" href="assets/fonts.css">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="ocean" aria-hidden="true">
-  <div class="caustic caustic-a"></div>
-  <div class="caustic caustic-b"></div>
-  <div class="caustic caustic-c"></div>
-  <div class="grain"></div>
-</div>
-<canvas id="bubbles" aria-hidden="true"></canvas>
+  <svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1Z"/></symbol>
+    <symbol id="i-library" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"/></symbol>
+    <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m15.2 8.8-1.9 4.5-4.5 1.9 1.9-4.5Z"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 8.5 4.6L12 12.2 3.5 7.6Z"/><path d="m4 12 8 4.3 8-4.3"/><path d="m4 16.4 8 4.3 8-4.3"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c.7-3.6 3.6-5.6 7.2-5.6s6.5 2 7.2 5.6"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5Z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.6" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v10m0 0 3.5-3.5M12 14 8.5 10.5"/><path d="M4.5 16.5v2A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5v-2"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 6.5h15M9 6.5V4.8A.8.8 0 0 1 9.8 4h4.4a.8.8 0 0 1 .8.8v1.7M6.5 6.5l.8 12a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4l.8-12"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 6.1"/><path d="M20 5v6h-6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m7 9.5 5 5 5-5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m0 0-5.5-5.5M19 12l-5.5 5.5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 3.5 19h17Z"/><path d="M12 9.5v4.2M12 16.7v.1"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-square" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1.5"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 13v5.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H11"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.2A1.7 1.7 0 0 1 5.2 5.5h4l2 2.2h7.6a1.7 1.7 0 0 1 1.7 1.7v9.4a1.7 1.7 0 0 1-1.7 1.7H5.2a1.7 1.7 0 0 1-1.7-1.7Z"/></symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.6"/><path d="M10.5 3.5v3M13.5 3.5v3M10.5 17.5v3M13.5 17.5v3M3.5 10.5h3M3.5 13.5h3M17.5 10.5h3M17.5 13.5h3"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="m7.5 9 3 3-3 3M13 15h3.5"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="1.8"/><path d="M15.5 8.5v-2a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="11.5" rx="1.8"/><path d="M9 20h6M12 16v4"/></symbol>
+    <symbol id="i-gamepad" viewBox="0 0 24 24"><path d="M7.2 7h9.6a4.7 4.7 0 0 1 4.6 5.6l-.8 3.8a2.5 2.5 0 0 1-4.3 1.2L14.8 16H9.2l-1.5 1.6a2.5 2.5 0 0 1-4.3-1.2l-.8-3.8A4.7 4.7 0 0 1 7.2 7Z"/><path d="M8.5 10.5v3M7 12h3M15.5 11h.1M17.5 13h.1"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.6 5.3 3.6 8.5S14.4 18.1 12 20.5c-2.4-2.4-3.6-5.3-3.6-8.5S9.6 5.9 12 3.5Z"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 0 0 0 17c1.6 0 2.2-1 2.2-2 0-1.3-1.3-1.8-1.3-3 0-1 .8-1.8 1.9-1.8h1.6a3.6 3.6 0 0 0 3.6-3.6c0-3.7-3.6-6.6-8-6.6Z"/><path d="M7.5 10h.1M10 6.8h.1M14.5 7h.1M16.8 10.2h.1"/></symbol>
+    <symbol id="i-layout" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M3.5 9.5h17M9.5 9.5V20"/></symbol>
+    <symbol id="i-drive" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 13h17M7 16.2h.1M10 16.2h.1"/></symbol>
+    <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="m12 3 1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8Z"/><path d="M18.5 15.5 19.4 18l2.1.9-2.1.9-.9 2.2-.9-2.2-2.1-.9 2.1-.9Z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 3 5 13.5h6L11 21l8-10.5h-6Z"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 4 2.4 5 5.6.8-4 3.9 1 5.5-5-2.7-5 2.7 1-5.5-4-3.9 5.6-.8Z"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5 19 6v6c0 4-2.9 6.9-7 8.5-4.1-1.6-7-4.5-7-8.5V6Z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4.5 17a8.5 8.5 0 1 1 15 0"/><path d="M12 12.5 15.5 9"/><circle cx="12" cy="13" r="1.6"/></symbol>
+  </svg>
 
-<svg class="sprite" aria-hidden="true" focusable="false">
-  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 10.6 12 4l8 6.6V19a1.6 1.6 0 0 1-1.6 1.6h-4.2V14.9H9.8v5.7H5.6A1.6 1.6 0 0 1 4 19z"/></symbol>
-  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6.6" height="6.6" rx="1.8"/><rect x="13.4" y="4" width="6.6" height="6.6" rx="1.8"/><rect x="4" y="13.4" width="6.6" height="6.6" rx="1.8"/><rect x="13.4" y="13.4" width="6.6" height="6.6" rx="1.8"/></symbol>
-  <symbol id="i-box" viewBox="0 0 24 24"><path d="M12 3.4 20 8v8l-8 4.6L4 16V8z"/><path d="M4 8l8 4.6L20 8"/><path d="M12 12.6v8"/></symbol>
-  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.4" r="3.6"/><path d="M4.8 20.2c.7-3.5 3.7-5.6 7.2-5.6s6.5 2.1 7.2 5.6"/></symbol>
-  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h6M14 7h6M4 17h10M18 17h2"/><circle cx="12" cy="7" r="2.1"/><circle cx="16" cy="17" r="2.1"/></symbol>
-  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8.4 5.6c0-.9 1-1.4 1.7-.9l8 5.9c.6.4.6 1.4 0 1.8l-8 5.9c-.7.5-1.7 0-1.7-.9z"/></symbol>
-  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2.2"/></symbol>
-  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></symbol>
-  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.2"/><path d="m16 16 4 4"/></symbol>
-  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M19.4 12a7.4 7.4 0 1 1-2.2-5.2"/><path d="M19.6 4v4.4h-4.4"/></symbol>
-  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
-  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 7V5.5c0-.6.4-1 1-1h2c.6 0 1 .4 1 1V7M7 7l.8 12.1c0 .5.5.9 1 .9h6.4c.5 0 1-.4 1-.9L17 7"/></symbol>
-  <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 5h5v5M19 5l-7.5 7.5"/><path d="M18 14v4.4c0 .9-.7 1.6-1.6 1.6H6.6c-.9 0-1.6-.7-1.6-1.6V8.6C5 7.7 5.7 7 6.6 7H11"/></symbol>
-  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.8 4.6 4.4L19 7.4"/></symbol>
-  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4.8 20.2 19H3.8z"/><path d="M12 10v4M12 16.6v.2"/></symbol>
-  <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
-  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
-  <symbol id="i-square" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.6"/></symbol>
-  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v10M8 10.6l4 3.6 4-3.6"/><path d="M5 17.6v1.2c0 .7.5 1.2 1.2 1.2h11.6c.7 0 1.2-.5 1.2-1.2v-1.2"/></symbol>
-  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 6.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h.5"/></symbol>
-  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M4 8.4c0-1 .8-1.8 1.8-1.8h3.3l1.8 2.2h7.3c1 0 1.8.8 1.8 1.8v6.6c0 1-.8 1.8-1.8 1.8H5.8c-1 0-1.8-.8-1.8-1.8z"/></symbol>
-  <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 4v3M14 4v3M10 17v3M14 17v3M4 10h3M4 14h3M17 10h3M17 14h3"/></symbol>
-  <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3.6" y="5" width="16.8" height="14" rx="2.4"/><path d="m7.4 10 2.6 2.4-2.6 2.4M12.6 15h4"/></symbol>
-</svg>
-
-<div class="app">
-  <header class="titlebar" data-tauri-drag-region>
-    <div class="brand" data-tauri-drag-region>
-      <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true">
-        <defs>
-          <linearGradient id="logoBg" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#0e4d61" />
-            <stop offset="1" stop-color="#04141d" />
-          </linearGradient>
-          <linearGradient id="logoDrop" x1="0.2" y1="0" x2="0.75" y2="1">
-            <stop offset="0" stop-color="var(--aqua-soft)" />
-            <stop offset="1" stop-color="var(--aqua-2)" />
-          </linearGradient>
-          <clipPath id="logoClip">
-            <path d="M24 8c0 0 11 13.4 11 20a11 11 0 1 1-22 0c0-6.6 11-20 11-20z" />
-          </clipPath>
-        </defs>
-        <rect width="48" height="48" rx="11" fill="url(#logoBg)" />
-        <path d="M24 8c0 0 11 13.4 11 20a11 11 0 1 1-22 0c0-6.6 11-20 11-20z" fill="url(#logoDrop)" />
-        <g clip-path="url(#logoClip)" fill="none" stroke="#04202c" stroke-opacity="0.5" stroke-width="1.5" stroke-linecap="round">
-          <path d="M11 31c4.3-3.1 8.6-3.1 13 0s8.7 3.1 13 0" />
-          <path d="M11 37c4.3-3.1 8.6-3.1 13 0s8.7 3.1 13 0" />
-        </g>
-        <ellipse cx="19.4" cy="20.2" rx="2.3" ry="4.4" fill="#ffffff" opacity="0.45" transform="rotate(18 19.4 20.2)" />
-      </svg>
-      <span class="brand-name">aqua</span>
-      <span class="brand-divider"></span>
-      <span class="brand-sub">launcher</span>
-    </div>
-    <div class="titlebar-center" data-tauri-drag-region>
-      <div class="status-chip" id="status-chip" hidden>
-        <span class="status-dot"></span>
-        <span id="status-text">Готово</span>
-      </div>
-    </div>
-    <div class="window-controls">
-      <button class="win-btn" id="win-min" title="Свернуть" aria-label="Свернуть"><svg class="icon"><use href="#i-minus"/></svg></button>
-      <button class="win-btn" id="win-max" title="Развернуть" aria-label="Развернуть"><svg class="icon"><use href="#i-square"/></svg></button>
-      <button class="win-btn win-close" id="win-close" title="Закрыть" aria-label="Закрыть"><svg class="icon"><use href="#i-close"/></svg></button>
-    </div>
-  </header>
-
-  <div class="shell">
-    <nav class="rail" aria-label="Основная навигация">
-      <div class="rail-actions">
-        <button class="nav-item is-active" data-nav="home"><svg class="icon"><use href="#i-home"/></svg><span>Главная</span></button>
-        <button class="nav-item" data-nav="library"><svg class="icon"><use href="#i-grid"/></svg><span>Версии</span></button>
-        <button class="nav-item" data-nav="mods"><svg class="icon"><use href="#i-box"/></svg><span>Моды</span></button>
-        <button class="nav-item" data-nav="accounts"><svg class="icon"><use href="#i-user"/></svg><span>Аккаунты</span></button>
-        <button class="nav-item" data-nav="settings"><svg class="icon"><use href="#i-sliders"/></svg><span>Настройки</span></button>
-      </div>
-      <div class="rail-bottom">
-        <button class="account-chip" id="account-chip" data-nav="accounts">
-          <span class="avatar" id="account-avatar">?</span>
-          <span class="account-text">
-            <span class="account-name" id="account-name">Нет аккаунта</span>
-            <span class="account-kind" id="account-kind">добавьте аккаунт</span>
-          </span>
-        </button>
-        <div class="rail-note">Aqua Launcher <span id="app-version">1.0.0</span></div>
-      </div>
-    </nav>
-
-    <main class="view" id="view">
-      <!-- HOME -->
-      <section class="page is-active" id="page-home">
-        <div class="home-grid">
-          <div class="home-main">
-            <div class="hero reveal">
-              <p class="eyebrow">Minecraft Java Edition</p>
-              <h1>Ваш мир.<br />Без лишних шагов.</h1>
-              <p class="lede">Версии, Java и аккаунты уже внутри. Выберите версию — остальное лаунчер сделает сам.</p>
-            </div>
-
-            <div class="deck reveal" id="deck">
-              <div class="deck-thumb" id="deck-thumb" aria-hidden="true" hidden></div>              <div class="deck-info">
-                <span class="deck-label">Версия для запуска</span>
-                <div class="version-picker">
-                  <button class="version-trigger" id="version-trigger" aria-haspopup="listbox" aria-expanded="false">
-                    <span id="version-current">—</span>
-                    <svg class="icon"><use href="#i-chevron"/></svg>
-                  </button>
-                  <div class="version-menu" id="version-menu" role="listbox" hidden></div>
-                </div>
-                <span class="deck-meta" id="deck-meta">Версия не выбрана</span>
-              </div>
-              <button class="play-btn" id="play-btn">
-                <svg class="icon" id="play-icon"><use href="#i-play"/></svg>
-                <span id="play-label">Играть</span>
-              </button>
-            </div>
-
-            <div class="console-panel" id="console-panel" hidden>
-              <div class="console-head">
-                <span><svg class="icon"><use href="#i-terminal"/></svg> Журнал игры</span>
-                <button class="btn btn-small" id="console-close">Скрыть</button>
-              </div>
-              <pre class="console-body" id="console-body"></pre>
-            </div>
-          </div>
-
-          <aside class="home-side">
-            <div class="panel side-panel reveal">
-              <div class="panel-head">
-                <h2>Свежие версии</h2>
-                <button class="icon-btn" id="latest-refresh" title="Обновить список"><svg class="icon"><use href="#i-refresh"/></svg></button>
-              </div>
-              <div class="latest-list" id="latest-list">
-                <div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div>
-              </div>
-              <button class="btn btn-quiet btn-block" data-nav="library">Весь каталог</button>
-            </div>
-
-            <div class="panel side-panel reveal" id="pc-panel">
-              <div class="panel-head">
-                <h2>Ваш компьютер</h2>
-                <button class="icon-btn" id="pc-refresh" title="Проверить снова"><svg class="icon"><use href="#i-refresh"/></svg></button>
-              </div>
-              <div class="spec-list" id="pc-specs">
-                <div class="spec-row"><span>Процессор</span><b>—</b></div>
-                <div class="spec-row"><span>Видеокарта</span><b>—</b></div>
-                <div class="spec-row"><span>Память</span><b>—</b></div>
-              </div>
-              <button class="btn btn-quiet btn-block" id="pc-tune" data-nav="settings">Подобрать настройки</button>
-            </div>
-          </aside>
-        </div>
-      </section>
-
-      <!-- LIBRARY -->
-      <section class="page" id="page-library" hidden>
-        <div class="page-head">
-          <div>
-            <h1>Каталог версий</h1>
-            <p class="page-sub" id="library-sub">Загрузка списка Mojang…</p>
-          </div>
-          <button class="btn" id="library-refresh"><svg class="icon"><use href="#i-refresh"/></svg> Обновить</button>
-        </div>
-
-        <div class="toolbar">
-          <label class="search">
-            <svg class="icon"><use href="#i-search"/></svg>
-            <input type="search" id="library-search" placeholder="Поиск по версии, например 1.20" autocomplete="off" />
-          </label>
-          <div class="segmented" id="library-filter" role="tablist">
-            <button class="is-active" data-filter="release" role="tab">Релизы</button>
-            <button data-filter="snapshot" role="tab">Снапшоты</button>
-            <button data-filter="old" role="tab">Старые</button>
-            <button data-filter="all" role="tab">Все</button>
-          </div>
-        </div>
-
-        <div class="version-grid" id="version-grid"></div>
-        <div class="grid-footer">
-          <button class="btn btn-quiet" id="library-more" hidden>Показать ещё</button>
-        </div>
-      </section>
-
-      <!-- MODS -->
-      <section class="page" id="page-mods" hidden>
-        <div class="page-head">
-          <div>
-            <h1>Моды и дополнения</h1>
-            <p class="page-sub" id="mods-sub">Загрузка с Modrinth: моды, ресурспаки и шейдеры</p>
-          </div>
-          <button class="btn" id="mods-repair"><svg class="icon"><use href="#i-refresh"/></svg> Починить сборку</button>
-        </div>
-
-        <div class="toolbar">
-          <label class="search">
-            <svg class="icon"><use href="#i-search"/></svg>
-            <input type="search" id="mods-search" placeholder="Например: sodium, iris, lithium" autocomplete="off" />
-          </label>
-          <div class="segmented" id="mods-kind" role="tablist">
-            <button class="is-active" data-kind="mod" role="tab">Моды</button>
-            <button data-kind="resourcepack" role="tab">Ресурспаки</button>
-            <button data-kind="shader" role="tab">Шейдеры</button>
-          </div>
-        </div>
-
-        <div class="mods-grid">
-          <div class="panel mods-find">
-            <div class="panel-head">
-              <h2>Modrinth</h2>
-              <span class="panel-note" id="mods-note"></span>
-            </div>
-            <div class="mod-list" id="mods-results"></div>
-          </div>
-          <div class="panel mods-installed">
-            <div class="panel-head">
-              <h2>Установлено</h2>
-              <span class="panel-note" id="mods-count">—</span>
-            </div>
-            <div class="mod-health" id="mods-health" hidden></div>
-            <div class="mod-list" id="mods-list"></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ACCOUNTS -->
-      <section class="page" id="page-accounts" hidden>
-        <div class="page-head">
-          <div>
-            <h1>Аккаунты</h1>
-            <p class="page-sub">Offline для локальной игры, Microsoft для официальных серверов.</p>
-          </div>
-        </div>
-
-        <div class="account-grid" id="account-list"></div>
-
-        <div class="add-grid">
-          <form class="panel add-card" id="offline-form">
-            <div class="add-icon"><svg class="icon"><use href="#i-user"/></svg></div>
-            <h3>Offline-аккаунт</h3>
-            <p>Ник без пароля. Подходит для одиночной игры и серверов без лицензии.</p>
-            <div class="field">
-              <input id="offline-name" placeholder="Ник (3–16 символов)" maxlength="16" autocomplete="off" />
-            </div>
-            <button class="btn btn-primary" type="submit">Добавить</button>
-          </form>
-
-          <div class="panel add-card">
-            <div class="add-icon ms"><svg class="icon"><use href="#i-grid"/></svg></div>
-            <h3>Microsoft</h3>
-            <p>Вход по коду: без пароля внутри лаунчера, токен обновляется автоматически.</p>
-            <button class="btn btn-primary" id="ms-login">Войти через Microsoft</button>
-            <span class="fineprint">Нужна лицензия Minecraft: Java Edition.</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- SETTINGS -->
-      <section class="page" id="page-settings" hidden>
-        <div class="page-head">
-          <div>
-            <h1>Настройки</h1>
-            <p class="page-sub">Всё, что влияет на запуск, — в одном месте.</p>
-          </div>
-          <div class="settings-actions">
-            <span class="save-state" id="save-state"></span>
-            <button class="btn btn-primary" id="settings-save">Сохранить</button>
-          </div>
-        </div>
-
-        <div class="settings-grid">
-          <div class="panel setting-card is-wide">
-            <h3><svg class="icon"><use href="#i-grid"/></svg> Внешний вид</h3>
-            <div class="appearance-grid">
-              <div class="setting-row">
-                <div>
-                  <label>Тема</label>
-                  <p class="hint">Глубина океана или светлая лагуна.</p>
-                </div>
-                <div class="segmented" id="theme-choice">
-                  <button data-theme-choice="dark" class="is-active">Тёмная</button>
-                  <button data-theme-choice="light">Светлая</button>
-                  <button data-theme-choice="system">Системная</button>
-                </div>
-              </div>
-              <div class="setting-row">
-                <div>
-                  <label>Акцент</label>
-                  <p class="hint">Кнопки, подсветка и графики.</p>
-                </div>
-                <div class="swatches" id="accent-choice">
-                  <button class="swatch is-active" data-accent="aqua" title="Аква" style="background:linear-gradient(140deg,#5be9dc,#2ec9ff)"></button>
-                  <button class="swatch" data-accent="mint" title="Мята" style="background:linear-gradient(140deg,#5ff0bd,#21cfa2)"></button>
-                  <button class="swatch" data-accent="azure" title="Лазурь" style="background:linear-gradient(140deg,#63b8ff,#3f86ff)"></button>
-                  <button class="swatch" data-accent="gold" title="Янтарь" style="background:linear-gradient(140deg,#ffd479,#f0a63c)"></button>
-                  <button class="swatch" data-accent="rose" title="Коралл" style="background:linear-gradient(140deg,#ffa3b3,#ff7089)"></button>
-                </div>
-              </div>
-              <div class="setting-row">
-                <div>
-                  <label>Форма</label>
-                  <p class="hint">Закругления карточек и полей.</p>
-                </div>
-                <div class="segmented" id="radius-choice">
-                  <button data-radius="sharp">Строгая</button>
-                  <button data-radius="soft" class="is-active">Мягкая</button>
-                  <button data-radius="round">Круглая</button>
-                </div>
-              </div>
-              <div class="setting-row">
-                <div>
-                  <label>Плотность</label>
-                  <p class="hint">Сколько информации на экране.</p>
-                </div>
-                <div class="segmented" id="density-choice">
-                  <button data-density="compact">Компактно</button>
-                  <button data-density="normal" class="is-active">Обычно</button>
-                  <button data-density="wide">Просторно</button>
-                </div>
-              </div>
-              <div class="setting-row">
-                <div>
-                  <label for="scale-range">Масштаб</label>
-                  <p class="hint">Размер интерфейса целиком.</p>
-                </div>
-                <div class="memory-control">
-                  <input type="range" id="scale-range" min="85" max="115" step="5" />
-                  <output id="scale-value">100%</output>
-                </div>
-              </div>
-              <div class="setting-row">
-                <div>
-                  <label>Шрифт</label>
-                  <p class="hint">Фирменный Manrope или системный.</p>
-                </div>
-                <div class="segmented" id="font-choice">
-                  <button data-font="manrope" class="is-active">Manrope</button>
-                  <button data-font="system">Системный</button>
-                </div>
-              </div>
-              <div class="setting-row">
-                <div>
-                  <label>Сайдбар</label>
-                  <p class="hint">Сторона и подробность навигации.</p>
-                </div>
-                <div class="inline-buttons">
-                  <div class="segmented" id="side-choice">
-                    <button data-side="left" class="is-active">Слева</button>
-                    <button data-side="right">Справа</button>
-                  </div>
-                  <div class="segmented" id="rail-choice">
-                    <button data-rail="full" class="is-active">Полный</button>
-                    <button data-rail="icons">Иконки</button>
-                  </div>
-                </div>
-              </div>
-              <div class="setting-row">
-                <div>
-                  <label>Анимации</label>
-                  <p class="hint">Переходы страниц и подсветка.</p>
-                </div>
-                <button class="switch" id="motion-switch" role="switch" aria-checked="true"><span></span></button>
-              </div>
-              <div class="setting-row column">
-                <label>Обои</label>
-                <div class="wall-tiles" id="wall-choice">
-                  <button class="wall-tile is-active" data-wall="deep" title="Глубина"></button>
-                  <button class="wall-tile" data-wall="reef" title="Риф"></button>
-                  <button class="wall-tile" data-wall="dawn" title="Рассвет"></button>
-                  <button class="wall-tile" data-wall="mist" title="Туман"></button>
-                </div>
-                <div class="inline-field">
-                  <input id="wall-path" placeholder="Своя картинка: полный путь к файлу" autocomplete="off" />
-                  <button class="btn" id="wall-pick">Применить</button>
-                </div>
-              </div>
-              <div class="setting-row">
-                <div>
-                  <label for="wall-blur">Размытие обоев</label>
-                  <p class="hint">Мягче — спокойнее читается текст.</p>
-                </div>
-                <div class="memory-control">
-                  <input type="range" id="wall-blur" min="0" max="40" step="2" />
-                  <output id="wall-blur-value">18 px</output>
-                </div>
-              </div>
-              <div class="setting-row">
-                <div>
-                  <label for="wall-dim">Затемнение обоев</label>
-                  <p class="hint">Контраст между фоном и панелями.</p>
-                </div>
-                <div class="memory-control">
-                  <input type="range" id="wall-dim" min="0" max="80" step="5" />
-                  <output id="wall-dim-value">45%</output>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="panel setting-card is-wide">
-            <h3><svg class="icon"><use href="#i-alert"/></svg> Безопасность</h3>
-            <div class="setting-row">
-              <div>
-                <label for="strict-switch">Строгий режим модов</label>
-                <p class="hint">
-                  Лаунчер откажется устанавливать мод, внутри которого есть исполняемые файлы или доступ к системе.
-                </p>
-              </div>
-              <button class="switch" id="strict-switch" role="switch" aria-checked="true">
-                <span></span>
-              </button>
-            </div>
-            <p class="fineprint">
-              Проверка смотрит содержимое jar: dll, exe и скрипты, а также вызовы ProcessBuilder, Runtime и Unsafe. Это
-              защита от явно лишнего, а не песочница — мод всё равно работает внутри Java.
-            </p>
-          </div>
-
-          <div class="panel setting-card is-wide">
-            <h3><svg class="icon"><use href="#i-cpu"/></svg> Компьютер и шейдеры</h3>
-            <div class="appearance-grid">
-              <div>
-                <div class="spec-list" id="system-specs">
-                  <div class="spec-row"><span>Процессор</span><b>—</b></div>
-                  <div class="spec-row"><span>Видеокарта</span><b>—</b></div>
-                  <div class="spec-row"><span>Память</span><b>—</b></div>
-                  <div class="spec-row"><span>Диск</span><b>—</b></div>
-                </div>
-              </div>
-              <div>
-                <div class="fps-list" id="shader-estimates"></div>
-                <p class="fineprint">Оценка FPS по классу железа при 1920×1080 и 16 чанках, без запуска игры. Точный результат зависит от версии, сборки и драйвера.</p>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div>
-                <label>Рекомендуемые настройки</label>
-                <p class="hint" id="system-reco">Проверяем железо…</p>
-              </div>
-              <button class="btn btn-primary" id="system-apply">Применить</button>
-            </div>
-          </div>
-
-          <div class="panel setting-card">
-            <h3><svg class="icon"><use href="#i-cpu"/></svg> Производительность</h3>
-            <div class="setting-row">
-              <div>
-                <label for="memory-range">Память</label>
-                <p class="hint">Для сборок с модами ставьте 6–8 ГБ.</p>
-              </div>
-              <div class="memory-control">
-                <input type="range" id="memory-range" min="1" max="16" step="1" />
-                <output id="memory-value">4 ГБ</output>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div>
-                <label for="workers-input">Потоков загрузки</label>
-                <p class="hint">Больше — быстрее качает, но нагружает сеть.</p>
-              </div>
-              <input class="num-input" id="workers-input" type="number" min="1" max="32" />
-            </div>
-            <div class="setting-row">
-              <div>
-                <label>Оптимизированные JVM-флаги</label>
-                <p class="hint">G1GC и прочие настройки от сообщества.</p>
-              </div>
-              <button class="switch" id="flags-switch" role="switch" aria-checked="true"><span></span></button>
-            </div>
-            <div class="setting-row column">
-              <label for="jvm-args">Дополнительные аргументы JVM</label>
-              <textarea id="jvm-args" rows="2" placeholder="-XX:+UseZGC -Dfoo=bar"></textarea>
-            </div>
-          </div>
-
-          <div class="panel setting-card">
-            <h3><svg class="icon"><use href="#i-terminal"/></svg> Java</h3>
-            <div class="setting-row">
-              <div>
-                <label>Автоматически скачивать Java</label>
-                <p class="hint">Temurin (Adoptium) нужной версии, если её нет на компьютере.</p>
-              </div>
-              <button class="switch" id="auto-java-switch" role="switch" aria-checked="true"><span></span></button>
-            </div>
-            <div class="setting-row column">
-              <label for="java-path">Свой путь к java.exe</label>
-              <div class="inline-field">
-                <input id="java-path" placeholder="C:\Program Files\Java\jdk-21\bin\java.exe" />
-                <button class="btn" id="java-check">Проверить</button>
-              </div>
-              <span class="fineprint" id="java-result"></span>
-            </div>
-          </div>
-
-          <div class="panel setting-card">
-            <h3><svg class="icon"><use href="#i-folder"/></svg> Игра</h3>
-            <div class="setting-row column">
-              <label for="game-dir">Папка игры</label>
-              <div class="inline-field">
-                <input id="game-dir" placeholder="По умолчанию: AppData\Roaming\AquaLauncher\minecraft" />
-                <button class="btn" id="open-game-dir">Открыть</button>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div>
-                <label>Разрешение окна</label>
-                <p class="hint">Применяется при запуске.</p>
-              </div>
-              <div class="res-control">
-                <input class="num-input" id="res-width" type="number" min="640" max="7680" />
-                <span class="times">×</span>
-                <input class="num-input" id="res-height" type="number" min="480" max="4320" />
-              </div>
-            </div>
-            <div class="setting-row">
-              <div>
-                <label>Полный экран</label>
-                <p class="hint">Запускать игру в fullscreen.</p>
-              </div>
-              <button class="switch" id="fullscreen-switch" role="switch" aria-checked="false"><span></span></button>
-            </div>
-            <div class="setting-row">
-              <div>
-                <label>Закрывать лаунчер при запуске игры</label>
-                <p class="hint">Освобождает память, но журнал игры пропадёт.</p>
-              </div>
-              <button class="switch" id="close-switch" role="switch" aria-checked="false"><span></span></button>
-            </div>
-          </div>
-
-          <div class="panel setting-card">
-            <h3><svg class="icon"><use href="#i-download"/></svg> Обслуживание</h3>
-            <div class="setting-row">
-              <div>
-                <label>Папки лаунчера</label>
-                <p class="hint">Конфиг, кеш версий, логи и загруженные Java.</p>
-              </div>
-              <div class="inline-buttons">
-                <button class="btn" data-open="versions">Версии</button>
-                <button class="btn" data-open="logs">Логи</button>
-                <button class="btn" data-open="data">Данные</button>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div>
-                <label>Подключение</label>
-                <p class="hint" id="connection-state">Проверка связи с Mojang…</p>
-              </div>
-              <button class="btn" id="connection-check">Проверить</button>
-            </div>
-          </div>
-        </div>
-      </section>
-    </main>
+  <div class="backdrop" aria-hidden="true">
+    <div class="aurora aurora-1"></div>
+    <div class="aurora aurora-2"></div>
+    <div class="aurora aurora-3"></div>
+    <div class="grain"></div>
   </div>
 
-  <footer class="download-bar" id="download-bar" hidden>
-    <div class="download-info">
-      <span class="download-stage" id="download-stage">Загрузка</span>
-      <span class="download-detail" id="download-detail"></span>
+  <div class="app" id="app">
+    <header class="titlebar" data-tauri-drag-region>
+      <div class="brand" data-tauri-drag-region>
+        <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true">
+          <defs>
+            <linearGradient id="brand-grad" x1="6" y1="2" x2="42" y2="46" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#8ff7ee"/><stop offset=".55" stop-color="#4fdfd1"/><stop offset="1" stop-color="#2b9fd8"/>
+            </linearGradient>
+          </defs>
+          <rect width="48" height="48" rx="12" fill="url(#brand-grad)"/>
+          <path d="M24 8.5c5.4 6.9 9.2 11.9 9.2 16.6a9.2 9.2 0 1 1-18.4 0c0-4.7 3.8-9.7 9.2-16.6Z" fill="#03151d" opacity=".9"/>
+          <path d="M21.4 19.6v9.6L30 24.4Z" fill="#9df8ef"/>
+        </svg>
+        <span class="brand-word">aqua</span>
+        <span class="brand-tag" data-i18n="brand.tag">launcher</span>
+        <span class="chip chip-soft chip-mono" id="version-chip">v3.0.0</span>
+      </div>
+      <div class="titlebar-status">
+        <span class="status" id="status" data-mode="ready"><i></i><span id="status-text" data-i18n="status.ready">Готов</span></span>
+      </div>
+      <div class="window-controls" id="window-controls">
+        <button class="win-btn" id="win-min" data-i18n-title="window.minimize" aria-label="Minimize"><svg class="ico"><use href="#i-minus"></use></svg></button>
+        <button class="win-btn" id="win-max" data-i18n-title="window.maximize" aria-label="Maximize"><svg class="ico"><use href="#i-square"></use></svg></button>
+        <button class="win-btn win-close" id="win-close" data-i18n-title="window.close" aria-label="Close"><svg class="ico"><use href="#i-close"></use></svg></button>
+      </div>
+    </header>
+
+    <div class="shell">
+      <aside class="rail" id="rail">
+        <nav class="rail-nav" id="rail-nav"></nav>
+        <div class="rail-foot">
+          <button class="account-card" id="account-card">
+            <img class="avatar" id="account-avatar" alt="" width="36" height="36">
+            <span class="account-meta">
+              <b id="account-name">—</b>
+              <small id="account-kind" data-i18n="accounts.offlineKind">Локальный</small>
+            </span>
+            <svg class="ico account-chevron"><use href="#i-chevron"></use></svg>
+          </button>
+          <button class="nav-item" data-nav="settings" id="nav-settings">
+            <svg class="ico"><use href="#i-settings"></use></svg>
+            <span data-i18n="nav.settings">Настройки</span>
+          </button>
+          <div class="rail-version">
+            <span id="rail-version">3.0.0</span><span class="dot"></span><span id="rail-platform">Windows</span>
+          </div>
+        </div>
+      </aside>
+
+      <main class="view" id="view">
+        <section class="page" id="page-home" data-page="home">
+          <div class="hero" id="hero">
+            <div class="hero-media"><img id="hero-img" alt=""></div>
+            <div class="hero-scrim"></div>
+            <div class="hero-content">
+              <span class="eyebrow"><svg class="ico"><use href="#i-sparkles"></use></svg><span data-i18n="home.eyebrow">Центр управления</span></span>
+              <h1 data-i18n="home.title">Мир ждёт тебя.</h1>
+              <p class="hero-sub" data-i18n="home.sub">Один клик отделяет тебя от нового приключения.</p>
+              <div class="hero-controls">
+                <div class="select-wrap">
+                  <button class="select" id="version-trigger" aria-haspopup="listbox">
+                    <span class="select-badge"><svg class="ico"><use href="#i-layers"></use></svg></span>
+                    <span class="select-text"><b id="version-current">1.21.8</b><small id="version-current-kind">Release</small></span>
+                    <svg class="ico select-chevron"><use href="#i-chevron"></use></svg>
+                  </button>
+                  <div class="menu" id="version-menu" hidden></div>
+                </div>
+                <button class="btn btn-primary btn-play" id="play-btn">
+                  <svg class="ico" id="play-icon"><use href="#i-play"></use></svg>
+                  <span id="play-label" data-i18n="common.play">Играть</span>
+                </button>
+                <button class="btn btn-soft" id="fabric-btn" data-i18n-title="home.fabric">
+                  <svg class="ico"><use href="#i-sparkles"></use></svg><span data-i18n="home.fabric">Fabric</span>
+                </button>
+              </div>
+              <div class="hero-meta" id="hero-meta"></div>
+            </div>
+            <div class="hero-stats" id="hero-stats"></div>
+          </div>
+
+          <div class="section-head">
+            <div><h2 data-i18n="widget.stats">Обзор</h2><p data-i18n="widget.statsSub">Твоя статистика и железо</p></div>
+            <button class="btn btn-quiet btn-sm" id="customize-btn"><svg class="ico"><use href="#i-layout"></use></svg><span data-i18n="widget.customize">Настроить</span></button>
+          </div>
+          <div class="widgets" id="widgets"></div>
+        </section>
+
+        <section class="page" id="page-library" data-page="library" hidden>
+          <header class="page-head">
+            <div>
+              <span class="eyebrow"><svg class="ico"><use href="#i-library"></use></svg><span data-i18n="nav.library">Библиотека</span></span>
+              <h1 data-i18n="library.title">Все версии Minecraft</h1>
+              <p data-i18n="library.sub">От первых альф до последних снапшотов — установка в один клик.</p>
+            </div>
+            <button class="btn btn-soft" id="library-refresh"><svg class="ico"><use href="#i-refresh"></use></svg><span data-i18n="common.refresh">Обновить</span></button>
+          </header>
+          <div class="toolbar">
+            <label class="input search">
+              <svg class="ico"><use href="#i-search"></use></svg>
+              <input id="library-search" type="search" data-i18n-ph="library.search" placeholder="Поиск версии…" autocomplete="off">
+            </label>
+            <div class="segmented" id="library-filter">
+              <button class="seg is-on" data-filter="release" data-i18n="library.release">Релизы</button>
+              <button class="seg" data-filter="snapshot" data-i18n="library.snapshot">Снапшоты</button>
+              <button class="seg" data-filter="old" data-i18n="library.old">Старые</button>
+              <button class="seg" data-filter="all" data-i18n="library.all">Все</button>
+            </div>
+            <div class="spacer"></div>
+            <label class="select-inline">
+              <span class="sr-only" data-i18n="library.sort.new">Сортировка</span>
+              <select id="library-sort">
+                <option value="new" data-i18n="library.sort.new">Сначала новые</option>
+                <option value="old" data-i18n="library.sort.old">Сначала старые</option>
+                <option value="name" data-i18n="library.sort.name">По названию</option>
+              </select>
+              <svg class="ico"><use href="#i-chevron"></use></svg>
+            </label>
+          </div>
+          <div class="grid version-grid" id="version-grid"></div>
+          <div class="empty" id="library-empty" hidden>
+            <svg class="ico"><use href="#i-search"></use></svg>
+            <h3 data-i18n="library.empty">Ничего не найдено</h3>
+            <p data-i18n="library.emptySub">Попробуй другой запрос или фильтр.</p>
+          </div>
+          <div class="center-row"><button class="btn btn-soft" id="library-more" data-i18n="library.more" hidden>Показать ещё</button></div>
+        </section>
+
+        <section class="page" id="page-discover" data-page="discover" hidden>
+          <header class="page-head">
+            <div>
+              <span class="eyebrow"><svg class="ico"><use href="#i-compass"></use></svg><span data-i18n="nav.discover">Каталог</span></span>
+              <h1 data-i18n="discover.title">Моды и сборки</h1>
+              <p data-i18n="discover.sub">Проверенные проекты с Modrinth — с зависимостями и проверкой безопасности.</p>
+            </div>
+            <button class="btn btn-soft" id="discover-refresh"><svg class="ico"><use href="#i-refresh"></use></svg><span data-i18n="common.refresh">Обновить</span></button>
+          </header>
+          <div class="tabs" id="discover-tabs">
+            <button class="tab is-on" data-kind="modpack" data-i18n="discover.modpacks">Сборки</button>
+            <button class="tab" data-kind="mod" data-i18n="discover.mods">Моды</button>
+            <button class="tab" data-kind="resourcepack" data-i18n="discover.resourcepacks">Ресурспаки</button>
+            <button class="tab" data-kind="shader" data-i18n="discover.shaders">Шейдеры</button>
+          </div>
+          <div class="toolbar">
+            <label class="input search">
+              <svg class="ico"><use href="#i-search"></use></svg>
+              <input id="discover-search" type="search" data-i18n-ph="discover.search" placeholder="Найти проект…" autocomplete="off">
+            </label>
+            <label class="select-inline" id="discover-version-wrap">
+              <select id="discover-version"></select>
+              <svg class="ico"><use href="#i-chevron"></use></svg>
+            </label>
+            <label class="select-inline" id="discover-loader-wrap">
+              <select id="discover-loader">
+                <option value="fabric">Fabric</option>
+              </select>
+              <svg class="ico"><use href="#i-chevron"></use></svg>
+            </label>
+          </div>
+          <div class="notice" id="fabric-notice" hidden>
+            <svg class="ico"><use href="#i-alert"></use></svg>
+            <div>
+              <b data-i18n="discover.needsFabric">Для модов нужен Fabric</b>
+              <p data-i18n="discover.needsFabricSub">Создадим отдельный профиль и установим загрузчик автоматически.</p>
+            </div>
+            <button class="btn btn-primary btn-sm" id="fabric-create" data-i18n="discover.createFabric">Создать профиль</button>
+          </div>
+          <div class="grid project-grid" id="discover-results"></div>
+          <div class="empty" id="discover-empty" hidden>
+            <svg class="ico"><use href="#i-compass"></use></svg>
+            <h3 data-i18n="discover.noResults">Пока ничего нет</h3>
+            <p data-i18n="discover.noResultsSub">Измени запрос или версию игры.</p>
+          </div>
+          <div class="section-head"><div><h2 data-i18n="discover.installed">Установлено</h2><p id="discover-installed-sub">—</p></div>
+            <button class="btn btn-quiet btn-sm" id="mods-repair"><svg class="ico"><use href="#i-shield"></use></svg><span data-i18n="discover.repair">Починить</span></button>
+          </div>
+          <div class="mod-list" id="mods-list"></div>
+        </section>
+
+        <section class="page" id="page-instances" data-page="instances" hidden>
+          <header class="page-head">
+            <div>
+              <span class="eyebrow"><svg class="ico"><use href="#i-layers"></use></svg><span data-i18n="nav.instances">Сборки</span></span>
+              <h1 data-i18n="instances.title">Мои сборки</h1>
+              <p data-i18n="instances.sub">Изолированные миры, моды и настройки для каждого приключения.</p>
+            </div>
+            <button class="btn btn-primary" id="instance-create"><svg class="ico"><use href="#i-plus"></use></svg><span data-i18n="instances.create">Создать сборку</span></button>
+          </header>
+          <div class="grid instance-grid" id="instance-grid"></div>
+          <div class="empty" id="instances-empty" hidden>
+            <svg class="ico"><use href="#i-layers"></use></svg>
+            <h3 data-i18n="instances.empty">Пока нет сборок</h3>
+            <p data-i18n="instances.emptySub">Создай сборку или установи модпак из каталога.</p>
+            <button class="btn btn-primary" id="instances-empty-create" data-i18n="instances.create">Создать сборку</button>
+          </div>
+        </section>
+
+        <section class="page" id="page-accounts" data-page="accounts" hidden>
+          <header class="page-head">
+            <div>
+              <span class="eyebrow"><svg class="ico"><use href="#i-user"></use></svg><span data-i18n="nav.accounts">Аккаунты</span></span>
+              <h1 data-i18n="accounts.title">Аккаунты</h1>
+              <p data-i18n="accounts.sub">Microsoft для онлайна, локальный — для одиночной игры и тестов.</p>
+            </div>
+          </header>
+          <div class="account-layout">
+            <div class="account-list" id="account-list"></div>
+            <div class="panel account-side">
+              <h3 data-i18n="accounts.addOffline">Локальный аккаунт</h3>
+              <p class="hint" data-i18n="accounts.nameHint">3–16 символов: буквы, цифры и «_».</p>
+              <form id="offline-form" class="stack">
+                <label class="input"><input id="offline-name" maxlength="16" placeholder="Steve" autocomplete="off"></label>
+                <button class="btn btn-soft" type="submit"><svg class="ico"><use href="#i-plus"></use></svg><span data-i18n="accounts.add">Добавить</span></button>
+              </form>
+              <div class="hr"></div>
+              <h3 data-i18n="accounts.microsoft">Microsoft</h3>
+              <p class="hint" data-i18n="accounts.msHint">Вход по коду устройства — пароль вводится только на сайте Microsoft.</p>
+              <button class="btn btn-primary" id="ms-login"><svg class="ico"><use href="#i-user"></use></svg><span data-i18n="accounts.signIn">Войти через Microsoft</span></button>
+            </div>
+          </div>
+        </section>
+
+        <section class="page page-settings" id="page-settings" data-page="settings" hidden>
+          <header class="page-head settings-head">
+            <div>
+              <span class="eyebrow"><svg class="ico"><use href="#i-settings"></use></svg><span data-i18n="nav.settings">Настройки</span></span>
+              <h1 data-i18n="settings.title">Настройки</h1>
+              <p data-i18n="settings.sub">Всё меняется сразу — и сохраняется, когда готов.</p>
+            </div>
+            <div class="settings-actions">
+              <span class="dirty" id="save-state" data-i18n="settings.savedState">Сохранено</span>
+              <button class="btn btn-primary" id="settings-save"><svg class="ico"><use href="#i-check"></use></svg><span data-i18n="common.save">Сохранить</span></button>
+            </div>
+          </header>
+          <div class="settings-shell">
+            <nav class="settings-tabs" id="settings-tabs">
+              <button class="settings-tab is-on" data-tab="appearance"><svg class="ico"><use href="#i-palette"></use></svg><span data-i18n="set.appearance">Внешний вид</span></button>
+              <button class="settings-tab" data-tab="layout"><svg class="ico"><use href="#i-layout"></use></svg><span data-i18n="set.layout">Раскладка</span></button>
+              <button class="settings-tab" data-tab="game"><svg class="ico"><use href="#i-gamepad"></use></svg><span data-i18n="set.game">Игра</span></button>
+              <button class="settings-tab" data-tab="performance"><svg class="ico"><use href="#i-gauge"></use></svg><span data-i18n="set.performance">Производительность</span></button>
+              <button class="settings-tab" data-tab="java"><svg class="ico"><use href="#i-cpu"></use></svg><span data-i18n="set.java">Java</span></button>
+              <button class="settings-tab" data-tab="mods"><svg class="ico"><use href="#i-shield"></use></svg><span data-i18n="set.mods">Моды</span></button>
+              <button class="settings-tab" data-tab="advanced"><svg class="ico"><use href="#i-terminal"></use></svg><span data-i18n="set.advanced">Дополнительно</span></button>
+            </nav>
+
+            <div class="settings-body">
+              <div class="settings-panel is-on" data-panel="appearance">
+                <div class="panel">
+                  <h2 data-i18n="set.appearance">Внешний вид</h2>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.language">Язык</b><span class="hint" data-i18n="set.languageSub">Интерфейс и форматы дат</span></div>
+                    <div class="field-control"><label class="select-inline wide"><select id="language-select"></select><svg class="ico"><use href="#i-chevron"></use></svg></label></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.theme">Тема</b><span class="hint" data-i18n="set.themeSub">Тёмная или светлая основа</span></div>
+                    <div class="field-control"><div class="segmented" id="theme-choice">
+                      <button class="seg is-on" data-theme-choice="dark" data-i18n="set.theme.dark">Тёмная</button>
+                      <button class="seg" data-theme-choice="light" data-i18n="set.theme.light">Светлая</button>
+                      <button class="seg" data-theme-choice="system" data-i18n="set.theme.system">Система</button>
+                    </div></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.accent">Акцент</b><span class="hint" data-i18n="set.accentSub">Цвет кнопок и подсветки</span></div>
+                    <div class="field-control"><div class="swatches" id="accent-choice">
+                      <button class="swatch is-on" data-accent="aqua" style="--sw:#5ce8dc;--sw2:#3bc6ff" title="Aqua"></button>
+                      <button class="swatch" data-accent="mint" style="--sw:#79f2b6;--sw2:#2fd6a2" title="Mint"></button>
+                      <button class="swatch" data-accent="azure" style="--sw:#71b7ff;--sw2:#4d7dff" title="Azure"></button>
+                      <button class="swatch" data-accent="violet" style="--sw:#b79bff;--sw2:#7d6bff" title="Violet"></button>
+                      <button class="swatch" data-accent="rose" style="--sw:#ff9db5;--sw2:#ff6f91" title="Rose"></button>
+                      <button class="swatch" data-accent="amber" style="--sw:#ffd27a;--sw2:#ffab4d" title="Amber"></button>
+                      <button class="swatch" data-accent="lime" style="--sw:#c8f57b;--sw2:#8ee15b" title="Lime"></button>
+                      <button class="swatch" data-accent="ice" style="--sw:#bfe9ff;--sw2:#7cc9f0" title="Ice"></button>
+                    </div></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.radius">Скругления</b></div>
+                    <div class="field-control"><div class="segmented" id="radius-choice">
+                      <button class="seg" data-radius-choice="sharp" data-i18n="set.radius.sharp">Острые</button>
+                      <button class="seg is-on" data-radius-choice="soft" data-i18n="set.radius.soft">Мягкие</button>
+                      <button class="seg" data-radius-choice="round" data-i18n="set.radius.round">Круглые</button>
+                    </div></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.density">Плотность</b></div>
+                    <div class="field-control"><div class="segmented" id="density-choice">
+                      <button class="seg" data-density-choice="compact" data-i18n="set.density.compact">Компактно</button>
+                      <button class="seg is-on" data-density-choice="normal" data-i18n="set.density.normal">Обычно</button>
+                      <button class="seg" data-density-choice="wide" data-i18n="set.density.wide">Просторно</button>
+                    </div></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.scale">Масштаб</b><span class="hint" id="scale-value">100%</span></div>
+                    <div class="field-control"><input class="range" id="scale-range" type="range" min="85" max="115" step="5" value="100"></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.background">Фон</b><span class="hint" data-i18n="set.backgroundSub">Атмосфера лаунчера</span></div>
+                    <div class="field-control"><div class="segmented" id="bg-choice">
+                      <button class="seg is-on" data-bg-choice="ocean" data-i18n="set.bg.ocean">Океан</button>
+                      <button class="seg" data-bg-choice="aurora" data-i18n="set.bg.aurora">Аврора</button>
+                      <button class="seg" data-bg-choice="nebula" data-i18n="set.bg.nebula">Небула</button>
+                      <button class="seg" data-bg-choice="plain" data-i18n="set.bg.plain">Минимал</button>
+                    </div></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.wallpaper">Обои</b><span class="hint" data-i18n="set.wallpaperSub">Своё изображение или готовый стиль</span></div>
+                    <div class="field-control"><div class="segmented" id="wall-choice">
+                      <button class="seg is-on" data-wall="deep" data-i18n="set.wall.deep">Глубина</button>
+                      <button class="seg" data-wall="reef" data-i18n="set.wall.reef">Риф</button>
+                      <button class="seg" data-wall="dawn" data-i18n="set.wall.dawn">Рассвет</button>
+                      <button class="seg" data-wall="mist" data-i18n="set.wall.mist">Туман</button>
+                    </div></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.customImage">Свои обои</b><span class="hint" id="wall-path">—</span></div>
+                    <div class="field-control"><button class="btn btn-soft btn-sm" id="wall-pick"><svg class="ico"><use href="#i-folder"></use></svg><span data-i18n="set.wall.pick">Выбрать файл</span></button></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.blur">Размытие обоев</b><span class="hint" id="wall-blur-value">18</span></div>
+                    <div class="field-control"><input class="range" id="wall-blur" type="range" min="0" max="40" step="2" value="18"></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.dim">Затемнение</b><span class="hint" id="wall-dim-value">45%</span></div>
+                    <div class="field-control"><input class="range" id="wall-dim" type="range" min="0" max="90" step="5" value="45"></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.glass">Стекло</b><span class="hint" id="glass-value">62%</span></div>
+                    <div class="field-control"><input class="range" id="glass-range" type="range" min="0" max="100" step="2" value="62"></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.motion">Анимации</b><span class="hint" data-i18n="set.motionSub">Плавные переходы интерфейса</span></div>
+                    <div class="field-control"><button class="switch is-on" id="motion-switch" role="switch"><i></i></button></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-panel" data-panel="layout">
+                <div class="panel">
+                  <h2 data-i18n="set.layout">Раскладка</h2>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.side">Боковая панель</b></div>
+                    <div class="field-control"><div class="segmented" id="side-choice">
+                      <button class="seg is-on" data-side-choice="left" data-i18n="set.side.left">Слева</button>
+                      <button class="seg" data-side-choice="right" data-i18n="set.side.right">Справа</button>
+                    </div></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.rail">Режим панели</b></div>
+                    <div class="field-control"><div class="segmented" id="rail-choice">
+                      <button class="seg is-on" data-rail-choice="full" data-i18n="set.rail.full">С подписями</button>
+                      <button class="seg" data-rail-choice="icons" data-i18n="set.rail.icons">Только иконки</button>
+                    </div></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.playPos">Кнопка «Играть»</b></div>
+                    <div class="field-control"><div class="segmented" id="play-pos-choice">
+                      <button class="seg is-on" data-play-pos="left" data-i18n="set.pos.left">Слева</button>
+                      <button class="seg" data-play-pos="center" data-i18n="set.pos.center">По центру</button>
+                      <button class="seg" data-play-pos="right" data-i18n="set.pos.right">Справа</button>
+                    </div></div>
+                  </div>
+                  <div class="hr"></div>
+                  <div class="field-stack">
+                    <div class="field-label"><b data-i18n="set.navOrder">Пункты меню</b><span class="hint" data-i18n="set.navOrderSub">Стрелками меняй порядок, глазом — видимость</span></div>
+                    <div class="order-list" id="nav-order"></div>
+                  </div>
+                  <div class="field-stack">
+                    <div class="field-label"><b data-i18n="set.widgetOrder">Виджеты главной</b><span class="hint" data-i18n="set.widgetOrderSub">Собери дашборд под себя</span></div>
+                    <div class="order-list" id="widget-order"></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.layoutReset">Сброс раскладки</b><span class="hint" data-i18n="set.layoutHint">Вернуть стандартный вид</span></div>
+                    <div class="field-control"><button class="btn btn-quiet btn-sm" id="layout-reset"><svg class="ico"><use href="#i-refresh"></use></svg><span data-i18n="common.reset">Сбросить</span></button></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-panel" data-panel="game">
+                <div class="panel">
+                  <h2 data-i18n="set.game">Игра</h2>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.gameDir">Папка игры</b><span class="hint" id="game-dir">—</span></div>
+                    <div class="field-control"><button class="btn btn-soft btn-sm" id="open-game-dir"><svg class="ico"><use href="#i-folder"></use></svg><span data-i18n="common.open">Открыть</span></button></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.resolution">Разрешение</b><span class="hint" data-i18n="set.resolutionSub">Окно игры</span></div>
+                    <div class="field-control"><div class="res-inputs"><input class="input sm" id="res-width" type="number" min="640" max="7680" value="925"><span>×</span><input class="input sm" id="res-height" type="number" min="480" max="4320" value="530"></div></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.fullscreen">Полный экран</b></div>
+                    <div class="field-control"><button class="switch" id="fullscreen-switch" role="switch"><i></i></button></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.closeOnLaunch">Скрывать лаунчер</b><span class="hint" data-i18n="set.closeOnLaunchSub">После запуска игры</span></div>
+                    <div class="field-control"><button class="switch" id="close-switch" role="switch"><i></i></button></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-panel" data-panel="performance">
+                <div class="panel">
+                  <h2 data-i18n="set.performance">Производительность</h2>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.memory">Память</b><span class="hint" id="memory-value">4 ГБ</span></div>
+                    <div class="field-control"><input class="range" id="memory-range" type="range" min="1024" max="16384" step="512" value="4096"></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.workers">Потоки загрузки</b><span class="hint" id="workers-value">16</span></div>
+                    <div class="field-control"><input class="range" id="workers-range" type="range" min="1" max="32" step="1" value="16"></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.flags">Оптимизированные флаги JVM</b><span class="hint" data-i18n="set.flagsSub">G1, Aikar-подобные настройки</span></div>
+                    <div class="field-control"><button class="switch is-on" id="flags-switch" role="switch"><i></i></button></div>
+                  </div>
+                  <div class="field-stack">
+                    <div class="field-label"><b data-i18n="set.jvm">Дополнительные аргументы JVM</b><span class="hint" data-i18n="set.jvmSub">Через пробел, применяются после стандартных</span></div>
+                    <input class="input mono" id="jvm-args" placeholder="-XX:+UseZGC …" autocomplete="off">
+                  </div>
+                  <div class="hr"></div>
+                  <div class="reco" id="system-reco"></div>
+                  <div class="spec-grid" id="system-specs"></div>
+                  <div class="shader-grid" id="shader-estimates"></div>
+                  <button class="btn btn-soft" id="system-apply"><svg class="ico"><use href="#i-zap"></use></svg><span data-i18n="set.recoApply">Применить рекомендации</span></button>
+                </div>
+              </div>
+
+              <div class="settings-panel" data-panel="java">
+                <div class="panel">
+                  <h2 data-i18n="set.java">Java</h2>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.autoJava">Автоматически</b><span class="hint" data-i18n="set.autoJavaSub">Скачивать Temurin при необходимости</span></div>
+                    <div class="field-control"><button class="switch is-on" id="auto-java-switch" role="switch"><i></i></button></div>
+                  </div>
+                  <div class="field-stack">
+                    <div class="field-label"><b data-i18n="set.javaPath">Путь к Java</b><span class="hint" data-i18n="set.javaPathSub">Оставь пустым для автопоиска</span></div>
+                    <div class="inline-row">
+                      <input class="input mono" id="java-path" placeholder="C:\Program Files\Eclipse Adoptium\…" autocomplete="off">
+                      <button class="btn btn-soft btn-sm" id="java-check" data-i18n="set.javaCheck">Проверить</button>
+                    </div>
+                    <span class="hint" id="java-result">—</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-panel" data-panel="mods">
+                <div class="panel">
+                  <h2 data-i18n="set.mods">Моды и безопасность</h2>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.strict">Строгий режим</b><span class="hint" data-i18n="set.strictSub">Блокировать моды с доступом к системе</span></div>
+                    <div class="field-control"><button class="switch is-on" id="strict-switch" role="switch"><i></i></button></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.modsHealth">Здоровье сборки</b><span class="hint" id="mods-health">—</span></div>
+                    <div class="field-control"><button class="btn btn-soft btn-sm" id="settings-mods-repair"><svg class="ico"><use href="#i-shield"></use></svg><span data-i18n="discover.repair">Починить</span></button></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.connection">Соединение</b><span class="hint" id="connection-state">—</span></div>
+                    <div class="field-control"><button class="btn btn-quiet btn-sm" id="connection-check" data-i18n="set.check">Проверить</button></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-panel" data-panel="advanced">
+                <div class="panel">
+                  <h2 data-i18n="set.advanced">Дополнительно</h2>
+                  <div class="folder-grid">
+                    <button class="folder-btn" data-open="game"><svg class="ico"><use href="#i-gamepad"></use></svg><span data-i18n="set.folder.game">Папка игры</span></button>
+                    <button class="folder-btn" data-open="mods"><svg class="ico"><use href="#i-shield"></use></svg><span data-i18n="set.folder.mods">Моды</span></button>
+                    <button class="folder-btn" data-open="versions"><svg class="ico"><use href="#i-layers"></use></svg><span data-i18n="set.folder.versions">Версии</span></button>
+                    <button class="folder-btn" data-open="profiles"><svg class="ico"><use href="#i-library"></use></svg><span data-i18n="set.folder.profiles">Сборки</span></button>
+                    <button class="folder-btn" data-open="logs"><svg class="ico"><use href="#i-terminal"></use></svg><span data-i18n="set.folder.logs">Логи</span></button>
+                    <button class="folder-btn" data-open="default"><svg class="ico"><use href="#i-drive"></use></svg><span data-i18n="set.folder.data">Данные</span></button>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.statsReset">Сбросить статистику</b><span class="hint" data-i18n="set.statsResetSub">Время в игре и запуски</span></div>
+                    <div class="field-control"><button class="btn btn-quiet btn-sm" id="stats-reset"><svg class="ico"><use href="#i-trash"></use></svg><span data-i18n="common.reset">Сбросить</span></button></div>
+                  </div>
+                  <div class="hr"></div>
+                  <div class="about-row">
+                    <img class="brand-mark" src="assets/logo-64.png" alt="" />
+                    <div><b>Aqua Launcher <span id="about-version">3.0.0</span></b><p data-i18n="set.aboutText">Открытый лаунчер на Rust + Tauri. Без рекламы и слежки.</p></div>
+                    <button class="btn btn-soft btn-sm" id="about-github"><svg class="ico"><use href="#i-external"></use></svg><span>GitHub</span></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
-    <div class="download-track"><div class="download-fill" id="download-fill"></div></div>
-    <span class="download-percent" id="download-percent">0%</span>
-  </footer>
-</div>
 
-<div class="toasts" id="toasts"></div>
-<div class="modal-root" id="modal-root" hidden></div>
+    <div class="download-bar" id="download-bar" hidden>
+      <div class="download-icon"><svg class="ico"><use href="#i-download"></use></svg></div>
+      <div class="download-body">
+        <div class="download-line"><b id="download-stage">Загрузка</b><span id="download-detail">—</span><span id="download-percent">0%</span></div>
+        <div class="progress"><i id="download-fill"></i></div>
+      </div>
+      <button class="win-btn" id="download-hide" aria-label="Hide"><svg class="ico"><use href="#i-close"></use></svg></button>
+    </div>
 
-<script type="module" src="app.js"></script>
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+    <div class="modal-root" id="modal-root" hidden></div>
+  </div>
+
+  <script type="module" src="app.js"></script>
 </body>
 </html>

@@ -92,18 +92,20 @@ $disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$env:SystemDrive'"
 } | ConvertTo-Json -Compress
 "#;
 
-fn win_hide(cmd: &mut std::process::Command) {
+fn hidden(cmd: &mut std::process::Command) {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000);
     }
+    let _ = &cmd;
 }
 
-fn probe() -> Specs {
+#[cfg(windows)]
+fn probe_windows() -> Specs {
     let mut cmd = std::process::Command::new("powershell");
     cmd.args(["-NoProfile", "-NonInteractive", "-Command", QUERY]);
-    win_hide(&mut cmd);
+    hidden(&mut cmd);
     let raw = match cmd.output() {
         Ok(out) => String::from_utf8_lossy(&out.stdout).to_string(),
         Err(_) => return Specs::default(),
@@ -120,6 +122,147 @@ fn probe() -> Specs {
         disk_total_gb: parsed.total,
         os: format!("Windows {}", std::env::consts::ARCH),
     }
+}
+
+fn capture(program: &str, args: &[&str]) -> String {
+    let mut cmd = std::process::Command::new(program);
+    cmd.args(args);
+    hidden(&mut cmd);
+    match cmd.output() {
+        Ok(out) => String::from_utf8_lossy(&out.stdout).to_string(),
+        Err(_) => String::new(),
+    }
+}
+
+fn df_root() -> (u32, u32) {
+    let raw = capture("df", &["-k", "/"]);
+    let line = raw.lines().nth(1).unwrap_or("");
+    let fields: Vec<&str> = line.split_whitespace().collect();
+    let total = fields.get(1).and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
+    let free = fields.get(3).and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
+    ((total / 1_048_576) as u32, (free / 1_048_576) as u32)
+}
+
+#[cfg(target_os = "macos")]
+fn probe_macos() -> Specs {
+    let mut cpu = capture("sysctl", &["-n", "machdep.cpu.brand_string"]).trim().to_string();
+    if cpu.is_empty() {
+        cpu = capture("sysctl", &["-n", "hw.model"]).trim().to_string();
+    }
+    let cores = capture("sysctl", &["-n", "hw.physicalcpu"]).trim().parse().unwrap_or(1);
+    let threads = capture("sysctl", &["-n", "hw.logicalcpu"]).trim().parse().unwrap_or(cores);
+    let ram_gb = (capture("sysctl", &["-n", "hw.memsize"]).trim().parse::<u64>().unwrap_or(0)
+        / 1_073_741_824) as u32;
+
+    let displays = capture("system_profiler", &["SPDisplaysDataType"]);
+    let mut gpu = String::new();
+    let mut vram_gb = 0u32;
+    for line in displays.lines() {
+        let line = line.trim();
+        if let Some(value) = line.strip_prefix("Chipset Model:") {
+            gpu = value.trim().to_string();
+        } else if line.starts_with("VRAM") {
+            if let Some(value) = line.split(':').nth(1) {
+                let parts: Vec<&str> = value.split_whitespace().collect();
+                if let (Some(size), Some(unit)) = (parts.first(), parts.get(1)) {
+                    if let Ok(size) = size.parse::<u32>() {
+                        vram_gb = match unit.to_lowercase().as_str() {
+                            "gb" => size,
+                            "mb" => size / 1024,
+                            _ => 0,
+                        };
+                    }
+                }
+            }
+        }
+    }
+    if gpu.is_empty() {
+        gpu = "Apple GPU".into();
+    }
+    if vram_gb == 0 && (gpu.starts_with("Apple") || cpu.contains("Apple")) {
+        vram_gb = ram_gb;
+    }
+    let version = capture("sw_vers", &["-productVersion"]).trim().to_string();
+    let (total, free) = df_root();
+    Specs {
+        cpu,
+        cores: cores.max(1),
+        threads: threads.max(1),
+        ram_gb: ram_gb.max(1),
+        gpu,
+        vram_gb,
+        disk_free_gb: free,
+        disk_total_gb: total,
+        os: format!("macOS {} {}", version, std::env::consts::ARCH),
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn probe_linux() -> Specs {
+    let cpuinfo = std::fs::read_to_string("/proc/cpuinfo").unwrap_or_default();
+    let cpu = cpuinfo
+        .lines()
+        .find_map(|l| l.strip_prefix("model name").map(|v| v.trim_start_matches([':', '\t', ' ']).to_string()))
+        .or_else(|| cpuinfo.lines().find_map(|l| l.strip_prefix("Processor").map(|v| v.trim_start_matches([':', '\t', ' ']).to_string())))
+        .unwrap_or_else(|| "CPU".into());
+    let cores = cpuinfo
+        .lines()
+        .find_map(|l| l.strip_prefix("cpu cores").and_then(|v| v.split(':').nth(1)))
+        .and_then(|v| v.trim().parse::<u32>().ok())
+        .unwrap_or(1);
+    let threads = capture("nproc", &[]).trim().parse().unwrap_or(cores);
+    let mem_kb: u64 = std::fs::read_to_string("/proc/meminfo")
+        .ok()
+        .and_then(|raw| {
+            raw.lines()
+                .find(|l| l.starts_with("MemTotal:"))
+                .and_then(|l| l.split_whitespace().nth(1).and_then(|v| v.parse().ok()))
+        })
+        .unwrap_or(0);
+    let ram_gb = (mem_kb / 1_048_576) as u32;
+
+    let lspci = capture("lspci", &[]);
+    let gpu = lspci
+        .lines()
+        .find(|l| l.to_lowercase().contains("vga") || l.contains("3D controller") || l.contains("Display controller"))
+        .and_then(|l| l.split_once(": ").map(|(_, v)| v.trim().to_string()))
+        .unwrap_or_else(|| "GPU".into());
+
+    let mut os = capture("uname", &["-sr"]).trim().to_string();
+    if let Ok(release) = std::fs::read_to_string("/etc/os-release") {
+        if let Some(pretty) = release.lines().find_map(|l| l.strip_prefix("PRETTY_NAME=")) {
+            os = pretty.trim_matches('"').to_string();
+        }
+    }
+    let (total, free) = df_root();
+    Specs {
+        cpu,
+        cores: cores.max(1),
+        threads: threads.max(1),
+        ram_gb: ram_gb.max(1),
+        gpu,
+        vram_gb: 0,
+        disk_free_gb: free,
+        disk_total_gb: total,
+        os: format!("{} {}", os, std::env::consts::ARCH).trim().to_string(),
+    }
+}
+
+fn probe() -> Specs {
+    #[cfg(windows)]
+    {
+        return probe_windows();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return probe_macos();
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        return probe_linux();
+    }
+    #[allow(unreachable_code)]
+    Specs::default()
 }
 
 pub fn specs(refresh: bool) -> Specs {

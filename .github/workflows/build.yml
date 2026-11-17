@@ -7,24 +7,70 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  windows:
-    runs-on: windows-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            args: ""
+          - platform: ubuntu-22.04
+            args: ""
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+
+    runs-on: ${{ matrix.platform }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - uses: Swatinem/rust-cache@v2
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          key: ${{ matrix.platform }}
+
+      - name: Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Build
-        working-directory: src-tauri
-        run: cargo build --release --locked
-
-      - uses: actions/upload-artifact@v4
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: aqua-launcher-windows
-          path: src-tauri/target/release/aqua-launcher.exe
-          if-no-files-found: error
+          tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('Aqua Launcher {0}', github.ref_name) || '' }}
+          releaseBody: |
+            Aqua Launcher is a fast, open Minecraft launcher built with Rust and Tauri.
+
+            - Every Minecraft version, from the earliest alpha to the newest snapshot
+            - Mods, modpacks, resource packs and shaders from Modrinth, installed into isolated instances
+            - Fabric installer built in, with automatic Java downloads
+            - 12 languages: English, Russian, Ukrainian, Kazakh, Polish, Czech, Slovak, French, German, Italian, Spanish, Portuguese
+            - Fully customizable interface: themes, accents, layouts, wallpapers, movable widgets
+            - Windows, macOS (universal) and Linux builds
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      - name: Upload bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: aqua-launcher-${{ matrix.platform }}
+          path: |
+            src-tauri/target/release/bundle/**
+            src-tauri/target/universal-apple-darwin/release/bundle/**
+          if-no-files-found: ignore

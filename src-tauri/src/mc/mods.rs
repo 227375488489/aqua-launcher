@@ -10,7 +10,7 @@ use std::sync::Arc;
 use crate::net::{self, Job};
 
 const API: &str = "https://api.modrinth.com/v2";
-const UA: &str = "AquaLauncher/1.0.0 (github.com/227375488489/aqua-launcher)";
+const UA: &str = "AquaLauncher/3.0.0 (github.com/227375488489/aqua-launcher)";
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase")]
@@ -158,9 +158,10 @@ pub async fn install(
     game_version: &str,
     loader: &str,
     workers: usize,
+    folder: &str,
     progress: Arc<dyn Fn(usize, u64) + Send + Sync>,
 ) -> Result<InstallOutcome> {
-    let dir = root.join("mods");
+    let dir = root.join(folder);
     std::fs::create_dir_all(&dir).with_context(|| format!("Не удалось создать {}", dir.display()))?;
 
     let mut queue = VecDeque::from([(project.to_string(), true)]);
@@ -446,7 +447,7 @@ pub async fn repair(
             outcome.notes.push(format!("{} — нет в Modrinth, поставьте вручную", need));
             continue;
         }
-        match install(client, root, &need, game_version, loader, workers, progress.clone()).await {
+        match install(client, root, &need, game_version, loader, workers, "mods", progress.clone()).await {
             Ok(done) => {
                 outcome.installed.extend(done.installed);
                 outcome.notes.extend(done.notes);

@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use crate::paths;
 
@@ -37,6 +39,18 @@ pub struct Settings {
     pub ui_sidebar_mode: String,
     pub ui_motion: bool,
     pub language: String,
+    // --- раскладка и фон ---
+    /// JSON: порядок и видимость навигации.
+    pub ui_nav: String,
+    /// JSON: порядок и видимость виджетов главного экрана.
+    pub ui_layout: String,
+    /// ocean | aurora | nebula | plain
+    pub ui_background: String,
+    pub ui_grain: bool,
+    /// 0..100, непрозрачность стеклянных панелей.
+    pub ui_glass: u32,
+    /// left | center | right
+    pub ui_play_position: String,
     // --- безопасность ---
     pub strict_mods: bool,
 }
@@ -71,8 +85,54 @@ impl Default for Settings {
             ui_sidebar_mode: "full".into(),
             ui_motion: true,
             language: "auto".into(),
+            ui_nav: String::new(),
+            ui_layout: String::new(),
+            ui_background: "ocean".into(),
+            ui_grain: true,
+            ui_glass: 62,
+            ui_play_position: "left".into(),
             strict_mods: true,
         }
+    }
+}
+
+/// Изолированная сборка: своя папка игры, свои моды и миры.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Profile {
+    pub id: String,
+    pub name: String,
+    /// Идентификатор установленной версии (включая fabric-loader-…).
+    pub version_id: String,
+    /// vanilla | fabric | quilt | forge | neoforge | modpack
+    pub loader: String,
+    /// Путь относительно корня игры, например `profiles/my-pack`.
+    pub dir: String,
+    #[serde(default)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub created_at: i64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Stats {
+    /// Секунды игры по идентификатору версии.
+    pub playtime_secs: HashMap<String, u64>,
+    pub launches: u32,
+    pub sessions: u32,
+    pub last_played: i64,
+}
+
+impl Stats {
+    pub fn add_session(&mut self, version: &str, secs: u64) {
+        *self.playtime_secs.entry(version.to_string()).or_default() += secs;
+        self.sessions += 1;
+        self.last_played = now_secs();
+    }
+
+    pub fn total_secs(&self) -> u64 {
+        self.playtime_secs.values().sum()
     }
 }
 
@@ -111,6 +171,9 @@ pub struct Config {
     pub accounts: Vec<Account>,
     pub active: Option<String>,
     pub last_version: Option<String>,
+    pub profiles: Vec<Profile>,
+    pub active_profile: Option<String>,
+    pub stats: Stats,
 }
 
 impl Config {
@@ -145,6 +208,32 @@ impl Config {
         let id = self.active.as_ref()?;
         self.accounts.iter().find(|a| &a.id == id)
     }
+
+    pub fn profile(&self, id: &str) -> Option<&Profile> {
+        self.profiles.iter().find(|p| p.id == id)
+    }
+
+    pub fn active_profile(&self) -> Option<&Profile> {
+        let id = self.active_profile.as_ref()?;
+        self.profiles.iter().find(|p| &p.id == id)
+    }
+
+    pub fn profile_root(&self, profile: &Profile) -> PathBuf {
+        let dir = Path::new(&profile.dir);
+        if dir.is_absolute() {
+            dir.to_path_buf()
+        } else {
+            self.game_root().join(dir)
+        }
+    }
+
+    /// Папка активной сборки — сюда ставятся моды и отсюда запускается игра.
+    pub fn active_root(&self) -> PathBuf {
+        match self.active_profile() {
+            Some(profile) => self.profile_root(profile),
+            None => self.game_root(),
+        }
+    }
 }
 
 pub struct GameHandle {
@@ -157,6 +246,8 @@ pub struct AppState {
     pub http: reqwest::Client,
     pub game: Mutex<Option<GameHandle>>,
     pub ms_cancel: Arc<AtomicBool>,
+    /// Старт текущей игровой сессии для подсчёта статистики.
+    pub play_started: Mutex<Option<(String, Instant)>>,
 }
 
 impl AppState {
@@ -172,6 +263,7 @@ impl AppState {
             http,
             game: Mutex::new(None),
             ms_cancel: Arc::new(AtomicBool::new(false)),
+            play_started: Mutex::new(None),
         }
     }
 

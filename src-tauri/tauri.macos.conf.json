@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Aqua Launcher",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 960,
+        "minHeight": 640,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "transparent": false,
+        "center": true,
+        "theme": "Dark",
+        "dragDropEnabled": false,
+        "backgroundColor": "#04121b"
+      }
+    ]
+  }
+}

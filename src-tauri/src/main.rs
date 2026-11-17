@@ -13,6 +13,7 @@ use state::AppState;
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
@@ -25,6 +26,14 @@ fn main() {
             commands::mods_health,
             commands::mods_list,
             commands::mods_remove,
+            commands::fabric_install,
+            commands::modpack_search,
+            commands::modpack_install,
+            commands::profiles_list,
+            commands::profile_activate,
+            commands::profile_create,
+            commands::profile_remove,
+            commands::stats_reset,
             commands::install_version,
             commands::launch,
             commands::stop_game,
@@ -36,6 +45,8 @@ fn main() {
             commands::ms_cancel,
             commands::delete_version,
             commands::open_dir,
+            commands::open_profile,
+            commands::pick_wallpaper,
             commands::check_java,
             commands::win_minimize,
             commands::win_toggle_maximize,

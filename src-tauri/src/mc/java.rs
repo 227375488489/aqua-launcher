@@ -45,12 +45,33 @@ pub fn probe(java: &Path) -> Option<u32> {
     parse_major(&text)
 }
 
+fn home_bin(path: &Path) -> Option<PathBuf> {
+    let direct = java_bin(path);
+    if direct.exists() {
+        return Some(direct);
+    }
+    // macOS: JDK лежит внутри <bundle>/Contents/Home.
+    let nested = java_bin(&path.join("Contents").join("Home"));
+    nested.exists().then_some(nested)
+}
+
+fn scan_jvm_dir(out: &mut Vec<PathBuf>, root: &Path) {
+    let Ok(entries) = std::fs::read_dir(root) else { return };
+    for entry in entries.flatten() {
+        if let Some(bin) = home_bin(&entry.path()) {
+            out.push(bin);
+        }
+    }
+}
+
 fn global_candidates() -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = Vec::new();
     out.push(PathBuf::from(if cfg!(windows) { "java.exe" } else { "java" }));
 
     if let Some(home) = std::env::var_os("JAVA_HOME") {
-        out.push(java_bin(Path::new(&home)));
+        if let Some(bin) = home_bin(Path::new(&home)) {
+            out.push(bin);
+        }
     }
 
     #[cfg(windows)]
@@ -66,13 +87,45 @@ fn global_candidates() -> Vec<PathBuf> {
             r"C:\Program Files (x86)\Java",
         ];
         for root in roots {
-            let Ok(entries) = std::fs::read_dir(root) else { continue };
-            for entry in entries.flatten() {
-                let bin = java_bin(&entry.path());
-                if bin.exists() {
-                    out.push(bin);
+            scan_jvm_dir(&mut out, Path::new(root));
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        for root in [
+            "/Library/Java/JavaVirtualMachines",
+            "/System/Library/Java/JavaVirtualMachines",
+        ] {
+            scan_jvm_dir(&mut out, Path::new(root));
+        }
+        if let Some(home) = dirs::home_dir() {
+            scan_jvm_dir(&mut out, &home.join("Library/Java/JavaVirtualMachines"));
+            for prefix in ["/opt/homebrew/opt", "/usr/local/opt"] {
+                let Ok(entries) = std::fs::read_dir(prefix) else { continue };
+                for entry in entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().to_lowercase();
+                    if name.starts_with("openjdk") {
+                        let home = entry.path().join("libexec/openjdk.jdk/Contents/Home");
+                        if let Some(bin) = home_bin(&home) {
+                            out.push(bin);
+                        }
+                    }
                 }
             }
+            let _ = home;
+        }
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        for root in ["/usr/lib/jvm", "/usr/lib64/jvm", "/usr/java", "/opt/java", "/opt/jdk"] {
+            scan_jvm_dir(&mut out, Path::new(root));
+        }
+        if let Some(home) = dirs::home_dir() {
+            scan_jvm_dir(&mut out, &home.join(".sdkman/candidates/java"));
+            scan_jvm_dir(&mut out, &home.join(".jdks"));
+            scan_jvm_dir(&mut out, &home.join(".gradle/jdks"));
         }
     }
 
@@ -103,22 +156,9 @@ fn bundled(root: &Path) -> Vec<(PathBuf, u32)> {
     let java_root = root.join("java");
     let Ok(entries) = std::fs::read_dir(&java_root) else { return found };
     for entry in entries.flatten() {
-        let path = entry.path();
-        let direct = java_bin(&path);
-        if direct.exists() {
-            if let Some(major) = probe(&direct) {
-                found.push((direct, major));
-            }
-            continue;
-        }
-        if let Ok(children) = std::fs::read_dir(&path) {
-            for child in children.flatten() {
-                let bin = java_bin(&child.path());
-                if bin.exists() {
-                    if let Some(major) = probe(&bin) {
-                        found.push((bin, major));
-                    }
-                }
+        if let Some(bin) = walk_for_java(&entry.path(), 5) {
+            if let Some(major) = probe(&bin) {
+                found.push((bin, major));
             }
         }
     }
@@ -155,7 +195,7 @@ pub async fn ensure(
     }
     if !settings.auto_java {
         return Err(anyhow!(
-            "Нужна Java {major}, но она не найдена. Включите авто-загрузку или укажите путь к java.exe."
+            "java_missing:{major}"
         ));
     }
     download_runtime(app, client, root, major).await
@@ -191,7 +231,7 @@ async fn download_runtime(
     );
     let java_root = root.join("java");
     std::fs::create_dir_all(&java_root)?;
-    let archive = java_root.join(format!("jre-{major}.zip"));
+    let archive = java_root.join(format!("jre-{major}.{}", if cfg!(windows) { "zip" } else { "tar.gz" }));
 
     let emit = |current: usize, total: usize, bytes: u64, total_bytes: u64| {
         let _ = app.emit(
@@ -230,13 +270,39 @@ async fn download_runtime(
 
     let target = java_root.join(format!("temurin-{major}"));
     std::fs::create_dir_all(&target)?;
-    extract_zip(&archive, &target)?;
+    if cfg!(windows) {
+        extract_zip(&archive, &target)?;
+    } else {
+        extract_tar_gz(&archive, &target)?;
+    }
     let _ = std::fs::remove_file(&archive);
 
     let bin = find_java_in(&target)
-        .ok_or_else(|| anyhow!("В скачанном архиве Java {major} нет java.exe"))?;
+        .ok_or_else(|| anyhow!("В скачанном архиве Java {major} нет java"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Some(dir) = bin.parent() {
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_file() {
+                        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755));
+                    }
+                }
+            }
+        }
+    }
     emit(1, 1, written, total_bytes);
     Ok(bin)
+}
+
+fn extract_tar_gz(archive: &Path, target: &Path) -> Result<()> {
+    let file = std::fs::File::open(archive)?;
+    let decoder = flate2::read::GzDecoder::new(file);
+    let mut tar = tar::Archive::new(decoder);
+    tar.unpack(target)?;
+    Ok(())
 }
 
 fn extract_zip(archive: &Path, target: &Path) -> Result<()> {
@@ -260,12 +326,7 @@ fn extract_zip(archive: &Path, target: &Path) -> Result<()> {
 }
 
 fn find_java_in(dir: &Path) -> Option<PathBuf> {
-    for depth in 0..3 {
-        if let Some(found) = walk_for_java(dir, depth) {
-            return Some(found);
-        }
-    }
-    None
+    walk_for_java(dir, 6)
 }
 
 fn walk_for_java(dir: &Path, depth: u32) -> Option<PathBuf> {

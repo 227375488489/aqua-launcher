@@ -22,8 +22,10 @@ pub struct LaunchPlan {
 
 pub fn build(
     root: &Path,
+    game_dir: &Path,
     meta: &VersionMeta,
     version_id: &str,
+    jar_version: &str,
     account: &Account,
     settings: &Settings,
     java: &Path,
@@ -61,8 +63,8 @@ pub fn build(
     }
     classpath.push(
         root.join("versions")
-            .join(version_id)
-            .join(format!("{version_id}.jar"))
+            .join(jar_version)
+            .join(format!("{jar_version}.jar"))
             .display()
             .to_string(),
     );
@@ -74,7 +76,7 @@ pub fn build(
     let mut vars: HashMap<&str, String> = HashMap::new();
     vars.insert("auth_player_name", account.name.clone());
     vars.insert("version_name", version_id.to_string());
-    vars.insert("game_directory", root.display().to_string());
+    vars.insert("game_directory", game_dir.display().to_string());
     vars.insert("assets_root", assets.display().to_string());
     vars.insert("game_assets", assets.join("virtual").join(&index_id).display().to_string());
     vars.insert("assets_index_name", index_id.clone());
@@ -188,7 +190,7 @@ pub fn build(
     Ok(LaunchPlan {
         java: java.to_path_buf(),
         args,
-        cwd: root.to_path_buf(),
+        cwd: game_dir.to_path_buf(),
     })
 }
 

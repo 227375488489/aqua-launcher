@@ -114,48 +114,9 @@ impl Installer {
         Ok(())
     }
 
-    pub async fn run(&self) -> Result<VersionMeta> {
-        let entries = manifest::get(&self.client, false).await?;
-        let entry = entries
-            .iter()
-            .find(|e| e.id == self.version)
-            .ok_or_else(|| anyhow!("Версия {} не найдена в списке Mojang", self.version))?
-            .clone();
-
-        self.emit("version", 0, 1, 0, 0);
-        let raw = self
-            .client
-            .get(&entry.url)
-            .send()
-            .await?
-            .error_for_status()?
-            .bytes()
-            .await?;
-        if let Some(want) = &entry.sha1 {
-            let got = net::hex(&Sha1::digest(&raw));
-            if !got.eq_ignore_ascii_case(want) {
-                return Err(anyhow!("Манифест версии повреждён (SHA-1 не совпал)"));
-            }
-        }
-        let meta: VersionMeta = serde_json::from_slice(&raw).context("Не удалось разобрать манифест версии")?;
-
-        let version_dir = self.root.join("versions").join(&self.version);
-        std::fs::create_dir_all(&version_dir)?;
-        std::fs::write(version_dir.join(format!("{}.json", self.version)), &raw)?;
-        self.emit("version", 1, 1, 0, 0);
-
-        // Client jar
-        if let Some(artifact) = meta.downloads.as_ref().and_then(|d| d.client.as_ref()) {
-            let job = Job::new(
-                artifact.url.clone(),
-                version_dir.join(format!("{}.jar", self.version)),
-            )
-            .sha1(artifact.sha1.clone())
-            .size(artifact.size);
-            self.download(vec![job], "client", artifact.size.unwrap_or(0)).await?;
-        }
-
-        // Libraries + natives
+    /// Скачивает библиотеки и распаковывает нативы из готового манифеста.
+    /// Используется и для ванильных версий, и для профилей загрузчиков.
+    pub async fn install_libraries(&self, meta: &VersionMeta) -> Result<()> {
         let features = Features { custom_resolution: true, ..Default::default() };
         let library_dir = self.root.join("libraries");
         let mut jobs: Vec<Job> = Vec::new();
@@ -233,6 +194,52 @@ impl Installer {
                 extract_natives(&jar, &natives_dir, &exclude)?;
             }
         }
+        Ok(())
+    }
+
+    pub async fn run(&self) -> Result<VersionMeta> {
+        let entries = manifest::get(&self.client, false).await?;
+        let entry = entries
+            .iter()
+            .find(|e| e.id == self.version)
+            .ok_or_else(|| anyhow!("Версия {} не найдена в списке Mojang", self.version))?
+            .clone();
+
+        self.emit("version", 0, 1, 0, 0);
+        let raw = self
+            .client
+            .get(&entry.url)
+            .send()
+            .await?
+            .error_for_status()?
+            .bytes()
+            .await?;
+        if let Some(want) = &entry.sha1 {
+            let got = net::hex(&Sha1::digest(&raw));
+            if !got.eq_ignore_ascii_case(want) {
+                return Err(anyhow!("Манифест версии повреждён (SHA-1 не совпал)"));
+            }
+        }
+        let meta: VersionMeta = serde_json::from_slice(&raw).context("Не удалось разобрать манифест версии")?;
+
+        let version_dir = self.root.join("versions").join(&self.version);
+        std::fs::create_dir_all(&version_dir)?;
+        std::fs::write(version_dir.join(format!("{}.json", self.version)), &raw)?;
+        self.emit("version", 1, 1, 0, 0);
+
+        // Client jar
+        if let Some(artifact) = meta.downloads.as_ref().and_then(|d| d.client.as_ref()) {
+            let job = Job::new(
+                artifact.url.clone(),
+                version_dir.join(format!("{}.jar", self.version)),
+            )
+            .sha1(artifact.sha1.clone())
+            .size(artifact.size);
+            self.download(vec![job], "client", artifact.size.unwrap_or(0)).await?;
+        }
+
+        // Libraries + natives
+        self.install_libraries(&meta).await?;
 
         // Assets
         if let Some(index) = &meta.asset_index {
@@ -326,8 +333,23 @@ fn extract_natives(jar: &Path, dir: &Path, exclude: &[String]) -> Result<()> {
 }
 
 pub fn is_installed(root: &Path, id: &str) -> bool {
-    let dir = root.join("versions").join(id);
-    dir.join(format!("{id}.json")).exists() && dir.join(format!("{id}.jar")).exists()
+    fn check(root: &Path, id: &str, depth: u32) -> bool {
+        let dir = root.join("versions").join(id);
+        if !dir.join(format!("{id}.json")).exists() {
+            return false;
+        }
+        if dir.join(format!("{id}.jar")).exists() {
+            return true;
+        }
+        if depth > 3 {
+            return false;
+        }
+        match super::version::load(root, id).and_then(|m| m.inherits_from) {
+            Some(parent) => check(root, &parent, depth + 1),
+            None => false,
+        }
+    }
+    check(root, id, 0)
 }
 
 pub fn installed_size(root: &Path, id: &str) -> u64 {

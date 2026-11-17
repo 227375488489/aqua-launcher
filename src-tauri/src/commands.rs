@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::auth;
@@ -10,10 +11,12 @@ use crate::mc::install::{self, Installer};
 use crate::mc::launch;
 use crate::mc::manifest;
 use crate::mc::content;
+use crate::mc::fabric;
+use crate::mc::modpack;
 use crate::mc::mods;
-use crate::mc::version::VersionMeta;
+use crate::mc::version::{self, VersionMeta};
 use crate::mc::java;
-use crate::state::{Account, AppState, Config, GameHandle, Settings};
+use crate::state::{Account, AppState, Config, GameHandle, Profile, Settings, Stats};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,6 +25,8 @@ pub struct LocalVersion {
     pub kind: String,
     pub java: u32,
     pub size: u64,
+    /// vanilla | fabric | …
+    pub loader: String,
 }
 
 #[derive(Serialize)]
@@ -32,10 +37,15 @@ pub struct Bootstrap {
     pub active: Option<String>,
     pub local: Vec<LocalVersion>,
     pub game_dir: String,
+    pub active_dir: String,
     pub data_dir: String,
     pub app_version: String,
     pub running: Option<String>,
     pub last_version: Option<String>,
+    pub profiles: Vec<Profile>,
+    pub active_profile: Option<String>,
+    pub stats: Stats,
+    pub platform: String,
 }
 
 #[derive(Serialize)]
@@ -59,10 +69,28 @@ fn scan_local(root: &std::path::Path) -> Vec<LocalVersion> {
             kind: meta.kind().to_string(),
             java: meta.java_major(),
             size: install::installed_size(root, &meta.id),
+            loader: loader_of(&meta.id, &meta),
         });
     }
     out.sort_by(|a, b| a.id.cmp(&b.id));
     out
+}
+
+fn loader_of(id: &str, meta: &VersionMeta) -> String {
+    let lower = id.to_ascii_lowercase();
+    if lower.contains("fabric") {
+        "fabric".into()
+    } else if lower.contains("quilt") {
+        "quilt".into()
+    } else if lower.contains("neoforge") {
+        "neoforge".into()
+    } else if lower.contains("forge") {
+        "forge".into()
+    } else if meta.inherits_from.is_some() {
+        "loader".into()
+    } else {
+        "vanilla".into()
+    }
 }
 
 #[tauri::command]
@@ -76,10 +104,15 @@ pub fn bootstrap(state: State<'_, AppState>) -> Result<Bootstrap, String> {
         active: cfg.active.clone(),
         local: scan_local(&root),
         game_dir: root.display().to_string(),
+        active_dir: cfg.active_root().display().to_string(),
         data_dir: crate::paths::data_dir().display().to_string(),
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         running,
         last_version: cfg.last_version.clone(),
+        profiles: cfg.profiles.clone(),
+        active_profile: cfg.active_profile.clone(),
+        stats: cfg.stats.clone(),
+        platform: std::env::consts::OS.to_string(),
     })
 }
 
@@ -139,10 +172,16 @@ pub async fn mods_install(
     project: String,
     version: String,
     loader: String,
+    kind: Option<String>,
 ) -> Result<mods::InstallOutcome, String> {
     let cfg = state.snapshot();
-    let root = cfg.game_root();
+    let root = cfg.active_root();
     let workers = cfg.settings.download_workers as usize;
+    let folder = match kind.as_deref() {
+        Some("resourcepack") => "resourcepacks",
+        Some("shader") => "shaderpacks",
+        _ => "mods",
+    };
     let handle = app.clone();
     let progress = std::sync::Arc::new(move |done: usize, bytes: u64| {
         let _ = handle.emit(
@@ -150,9 +189,11 @@ pub async fn mods_install(
             serde_json::json!({ "done": done, "bytes": bytes }),
         );
     });
-    let outcome = mods::install(&state.http, &root, &project, &version, &loader, workers, progress)
-        .await
-        .map_err(|e| e.to_string())?;
+    let outcome = mods::install(
+        &state.http, &root, &project, &version, &loader, workers, folder, progress,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
 
     if cfg.settings.strict_mods {
         let blocked: Vec<mods::InstalledMod> = mods::list(&root)
@@ -182,7 +223,7 @@ pub async fn mods_repair(
     loader: String,
 ) -> Result<mods::InstallOutcome, String> {
     let cfg = state.snapshot();
-    let root = cfg.game_root();
+    let root = cfg.active_root();
     let workers = cfg.settings.download_workers as usize;
     let progress = std::sync::Arc::new(|_: usize, _: u64| {});
     mods::repair(&state.http, &root, &version, &loader, workers, progress)
@@ -192,17 +233,17 @@ pub async fn mods_repair(
 
 #[tauri::command]
 pub fn mods_health(state: State<'_, AppState>) -> mods::Health {
-    mods::health(&state.snapshot().game_root())
+    mods::health(&state.snapshot().active_root())
 }
 
 #[tauri::command]
 pub fn mods_list(state: State<'_, AppState>) -> Vec<mods::InstalledMod> {
-    mods::list(&state.snapshot().game_root())
+    mods::list(&state.snapshot().active_root())
 }
 
 #[tauri::command]
 pub fn mods_remove(state: State<'_, AppState>, file: String) -> Result<(), String> {
-    mods::remove(&state.snapshot().game_root(), &file).map_err(|e| e.to_string())
+    mods::remove(&state.snapshot().active_root(), &file).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -218,13 +259,6 @@ pub async fn install_version(
     }
     let installer = Installer::new(app, &state.http, root, cfg.settings.clone(), id);
     installer.run().await.map(|_| ()).map_err(|e| e.to_string())
-}
-
-fn read_meta(root: &std::path::Path, id: &str) -> Result<VersionMeta, String> {
-    let path = root.join("versions").join(id).join(format!("{id}.json"));
-    let raw = std::fs::read_to_string(&path)
-        .map_err(|_| format!("Версия {id} не установлена"))?;
-    serde_json::from_str(&raw).map_err(|e| format!("Повреждён манифест версии: {e}"))
 }
 
 fn reader<R: std::io::Read + Send + 'static>(app: AppHandle, stream: R) -> std::thread::JoinHandle<()> {
@@ -276,13 +310,29 @@ pub async fn launch(app: AppHandle, state: State<'_, AppState>, id: String) -> R
         account = refreshed;
     }
 
-    let meta = read_meta(&root, &id)?;
+    let (meta, jar_version) = version::resolve(&root, &id).map_err(|e| e.to_string())?;
+    let game_dir = cfg
+        .active_profile()
+        .filter(|p| p.version_id == id)
+        .map(|p| cfg.profile_root(p))
+        .unwrap_or_else(|| root.clone());
+    let _ = crate::paths::ensure_dir(&game_dir);
+
     let java_path = java::ensure(&app, &state.http, &root, &cfg.settings, meta.java_major())
         .await
         .map_err(|e| e.to_string())?;
 
-    let plan = launch::build(&root, &meta, &id, &account, &cfg.settings, &java_path)
-        .map_err(|e| e.to_string())?;
+    let plan = launch::build(
+        &root,
+        &game_dir,
+        &meta,
+        &id,
+        &jar_version,
+        &account,
+        &cfg.settings,
+        &java_path,
+    )
+    .map_err(|e| e.to_string())?;
 
     let mut command = std::process::Command::new(&plan.java);
     command
@@ -306,7 +356,11 @@ pub async fn launch(app: AppHandle, state: State<'_, AppState>, id: String) -> R
     let err = child.stderr.take().map(|s| reader(app.clone(), s));
 
     *state.game.lock().unwrap() = Some(GameHandle { version: id.clone(), pid });
-    let _ = state.update(|c| c.last_version = Some(id.clone()));
+    *state.play_started.lock().unwrap() = Some((id.clone(), std::time::Instant::now()));
+    let _ = state.update(|c| {
+        c.last_version = Some(id.clone());
+        c.stats.launches += 1;
+    });
 
     let _ = app.emit("game://started", id.clone());
 
@@ -327,6 +381,15 @@ pub async fn launch(app: AppHandle, state: State<'_, AppState>, id: String) -> R
             *guard = None;
         }
         drop(guard);
+        let secs = state
+            .play_started
+            .lock()
+            .unwrap()
+            .take()
+            .filter(|(v, _)| v == &version)
+            .map(|(_, at)| at.elapsed().as_secs())
+            .unwrap_or(0);
+        let _ = state.update(|c| c.stats.add_session(&version, secs.max(1)));
         let _ = app_exit.emit("game://exit", serde_json::json!({ "code": code, "version": version }));
     });
 
@@ -403,6 +466,10 @@ pub fn save_settings(state: State<'_, AppState>, mut settings: Settings) -> Resu
     settings.width = settings.width.clamp(640, 7680);
     settings.height = settings.height.clamp(480, 4320);
     settings.download_workers = settings.download_workers.clamp(1, 32);
+    settings.ui_scale = settings.ui_scale.clamp(80, 140);
+    settings.ui_glass = settings.ui_glass.min(100);
+    settings.ui_wallpaper_blur = settings.ui_wallpaper_blur.min(40);
+    settings.ui_wallpaper_dim = settings.ui_wallpaper_dim.min(90);
     state
         .update(|cfg| cfg.settings = settings)
         .map_err(|e| e.to_string())
@@ -464,6 +531,15 @@ pub fn delete_version(state: State<'_, AppState>, id: String) -> Result<(), Stri
         if cfg.last_version.as_deref() == Some(id.as_str()) {
             cfg.last_version = None;
         }
+        cfg.profiles.retain(|p| p.version_id != id);
+        if cfg
+            .active_profile
+            .as_ref()
+            .map(|active| cfg.profiles.iter().all(|p| &p.id != active))
+            .unwrap_or(false)
+        {
+            cfg.active_profile = None;
+        }
     });
     Ok(())
 }
@@ -473,9 +549,19 @@ pub fn open_dir(app: AppHandle, state: State<'_, AppState>, kind: String) -> Res
     let cfg = state.snapshot();
     let root = cfg.game_root();
     let path: PathBuf = match kind.as_str() {
-        "game" => root.clone(),
+        "game" => cfg.active_root(),
+        "mods" => {
+            let dir = cfg.active_root().join("mods");
+            let _ = crate::paths::ensure_dir(&dir);
+            dir
+        }
+        "profiles" => {
+            let dir = root.join("profiles");
+            let _ = crate::paths::ensure_dir(&dir);
+            dir
+        }
         "logs" => {
-            let dir = root.join("logs");
+            let dir = cfg.active_root().join("logs");
             let _ = crate::paths::ensure_dir(&dir);
             dir
         }
@@ -496,12 +582,179 @@ pub fn open_dir(app: AppHandle, state: State<'_, AppState>, kind: String) -> Res
 }
 
 #[tauri::command]
+pub fn open_profile(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let cfg = state.snapshot();
+    let profile = cfg.profile(&id).ok_or("profile_not_found")?;
+    let dir = cfg.profile_root(profile);
+    let _ = crate::paths::ensure_dir(&dir);
+    app.opener()
+        .open_path(dir.display().to_string(), None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn pick_wallpaper(app: AppHandle) -> Option<String> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
+        .pick_file(move |path| {
+            let _ = tx.send(path);
+        });
+    rx.await
+        .ok()
+        .flatten()
+        .and_then(|p| p.into_path().ok())
+        .map(|p| p.display().to_string())
+}
+
+#[tauri::command]
 pub fn check_java(path: String) -> Option<u32> {
     let path = PathBuf::from(path);
     if !path.exists() {
         return None;
     }
     java::probe(&path)
+}
+
+#[tauri::command]
+pub async fn fabric_install(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    loader: Option<String>,
+) -> Result<String, String> {
+    let cfg = state.snapshot();
+    let root = cfg.game_root();
+    crate::paths::ensure_dir(&root).map_err(|e| e.to_string())?;
+    fabric::install(&app, &state.http, &root, &id, loader.as_deref(), &cfg.settings)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn modpack_search(
+    state: State<'_, AppState>,
+    query: String,
+) -> Result<Vec<mods::Hit>, String> {
+    modpack::search(&state.http, &query)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn modpack_install(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    project: String,
+    version: Option<String>,
+) -> Result<Config, String> {
+    let cfg = state.snapshot();
+    let root = cfg.game_root();
+    crate::paths::ensure_dir(&root).map_err(|e| e.to_string())?;
+    let profile = modpack::install(
+        &app,
+        &state.http,
+        &root,
+        &project,
+        version.as_deref(),
+        &cfg.settings,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    state
+        .update(|c| {
+            c.profiles.retain(|p| p.id != profile.id);
+            c.active_profile = Some(profile.id.clone());
+            c.profiles.push(profile);
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn profiles_list(state: State<'_, AppState>) -> Vec<Profile> {
+    state.snapshot().profiles
+}
+
+#[tauri::command]
+pub fn profile_activate(state: State<'_, AppState>, id: String) -> Result<Config, String> {
+    let next = if id.trim().is_empty() { None } else { Some(id) };
+    state
+        .update(|c| c.active_profile = next)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn profile_create(
+    state: State<'_, AppState>,
+    name: String,
+    version_id: String,
+) -> Result<Config, String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("profile_name_empty".into());
+    }
+    let cfg = state.snapshot();
+    if !install::is_installed(&cfg.game_root(), &version_id) {
+        return Err("version_not_installed".into());
+    }
+    let stamp = crate::state::now_secs();
+    let id = format!("instance-{stamp}");
+    let dir = format!("profiles/{id}");
+    crate::paths::ensure_dir(&cfg.game_root().join(&dir)).map_err(|e| e.to_string())?;
+    let loader = if version_id.to_ascii_lowercase().contains("fabric") {
+        "fabric"
+    } else {
+        "vanilla"
+    };
+    state
+        .update(|c| {
+            c.active_profile = Some(id.clone());
+            c.profiles.push(Profile {
+                id,
+                name,
+                version_id,
+                loader: loader.into(),
+                dir,
+                icon: None,
+                created_at: stamp,
+            });
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn profile_remove(
+    state: State<'_, AppState>,
+    id: String,
+    delete_files: bool,
+) -> Result<Config, String> {
+    let cfg = state.snapshot();
+    if delete_files {
+        if let Some(profile) = cfg.profile(&id) {
+            let dir = cfg.profile_root(profile);
+            // Удаляем только внутри папки профилей, чтобы не задеть пользовательские данные.
+            if dir.starts_with(cfg.game_root().join("profiles")) {
+                let _ = std::fs::remove_dir_all(&dir);
+            }
+        }
+    }
+    state
+        .update(|c| {
+            c.profiles.retain(|p| p.id != id);
+            if c.active_profile.as_deref() == Some(id.as_str()) {
+                c.active_profile = None;
+            }
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn stats_reset(state: State<'_, AppState>) -> Result<Config, String> {
+    state
+        .update(|c| c.stats = Stats::default())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
