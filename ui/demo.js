@@ -398,12 +398,12 @@ const handlers = {
 
   check_update() {
     return {
-      current: "3.0.2",
+      current: "3.1.0",
       latest: "3.1.0",
       url: "https://github.com/227375488489/aqua-launcher/releases/latest",
       notes: "",
       published: date(Date.now() - 3 * day),
-      available: true,
+      available: false,
     };
   },
 
