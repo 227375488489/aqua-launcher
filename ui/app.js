@@ -667,7 +667,7 @@ function widgetPc() {
     "pc",
     `<div class="spec-list">${rows.map(([k, v]) => `<div class="row"><span>${esc(k)}</span><b title="${esc(v)}">${esc(v)}</b></div>`).join("")}</div>
      ${S.system.recommendation ? `<div class="tier"><svg class="ico" style="width:15px;height:15px"><use href="#i-zap"></use></svg><span>${esc(t(`tier.${S.system.recommendation.tier}`))}</span></div>` : ""}`,
-    `<button class="btn btn-quiet btn-sm" data-goto="settings" data-tab-target="performance">${esc(t("pc.tune"))}</button>`,
+    `<button class="btn btn-quiet icon-only" data-goto="settings" data-tab-target="performance" title="${esc(t("pc.tune"))}" aria-label="${esc(t("pc.tune"))}"><svg class="ico"><use href="#i-settings"></use></svg></button>`,
   );
 }
 
@@ -1042,8 +1042,9 @@ function renderDiscoverResults() {
 
 async function installProject(hit) {
   if (!hit?.id) return;
-  if (S.discoverKind === "modpack") return installModpack(hit);
-  if (S.discoverKind === "mod" && !hasLoaderProfile()) {
+  const kind = hit.kind || S.discoverKind;
+  if (kind === "modpack") return installModpack(hit);
+  if (kind === "mod" && !hasLoaderProfile()) {
     planDiscoverVisibility();
     toast(t("errors.needFabric"), "err");
     return;
@@ -1055,7 +1056,7 @@ async function installProject(hit) {
       project: hit.id,
       version,
       loader: S.discoverLoader,
-      kind: S.discoverKind,
+      kind,
     });
     toast(t("toast.modInstalled", { count: (outcome?.installed || []).length }));
     loadMods();
@@ -1809,6 +1810,7 @@ function bindSettings() {
     S.settings.uiAccent = "custom";
     S.settings.uiAccentCustom = e.target.value;
     setSegmented("#accent-choice", "data-accent", "custom");
+    $$("#theme-presets .theme-card").forEach((card) => card.classList.remove("is-on"));
     applyAppearance(S.settings);
     markDirty();
   });
