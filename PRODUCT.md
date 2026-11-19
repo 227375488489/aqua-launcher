@@ -1,4 +1,4 @@
-# PRODUCT.md — Aqua Launcher 0.0.1 Beta
+# PRODUCT.md — Aqua Launcher 0.0.2 Beta
 
 **Ваш мир. Без лишних шагов.** Aqua Launcher — десктопный лаунчер Minecraft: Java Edition для Windows, macOS и Linux на Rust.
 

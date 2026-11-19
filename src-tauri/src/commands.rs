@@ -260,6 +260,16 @@ pub async fn install_version(
     if let Err(e) = crate::paths::ensure_dir(&root) {
         return Err(format!("Не удалось создать папку игры: {e}"));
     }
+    if !cfg.settings.allow_experimental {
+        let versions = manifest::get(&state.http, false)
+            .await
+            .map_err(|e| e.to_string())?;
+        if let Some(entry) = versions.iter().find(|v| v.id == id) {
+            if entry.kind != "release" {
+                return Err("experimental_disabled".into());
+            }
+        }
+    }
     let installer = Installer::new(app, &state.http, root, cfg.settings.clone(), id);
     installer.run().await.map(|_| ()).map_err(|e| e.to_string())
 }

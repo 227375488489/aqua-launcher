@@ -11,8 +11,8 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const APP_VERSION = "0.0.1-beta";
-const APP_LABEL = "0.0.1 Beta";
+const APP_VERSION = "0.0.2-beta";
+const APP_LABEL = "0.0.2 Beta";
 const NAV_DEFAULT = ["home", "library", "instances", "discover", "accounts"];
 const WIDGET_DEFAULT = ["stats", "pc", "latest", "instances", "console"];
 const LINKS = {
@@ -541,6 +541,7 @@ function renderHero() {
 
 function visibleBySettings(v) {
   const kind = String(v.kind || "");
+  if (kind !== "release" && S.settings.allowExperimental !== true) return false;
   if (kind === "snapshot" && S.settings.showSnapshots === false) return false;
   if (kind.startsWith("old") && S.settings.showOld === false) return false;
   return true;
@@ -753,11 +754,11 @@ function filteredVersions() {
   const { all } = librarySource();
   const q = S.libQuery.trim().toLowerCase();
   let list = all.filter((v) => {
+    if (!visibleBySettings(v)) return false;
     if (S.libFilter === "installed") return isInstalled(v.id);
     if (S.libFilter === "release" && v.kind !== "release") return false;
     if (S.libFilter === "snapshot" && v.kind !== "snapshot") return false;
     if (S.libFilter === "old" && !String(v.kind || "").startsWith("old")) return false;
-    if (S.libFilter === "all" && !visibleBySettings(v)) return false;
     if (q && !String(v.id).toLowerCase().includes(q)) return false;
     return true;
   });
@@ -888,6 +889,11 @@ function updateDownload(payload) {
 
 async function installVersion(id, thenPlay = false) {
   if (!id || S.installing.has(id)) return;
+  const entry = S.remote.find((v) => v.id === id);
+  if (entry && entry.kind !== "release" && S.settings.allowExperimental !== true && !isInstalled(id)) {
+    toast(t("errors.experimentalOff"), "err");
+    return;
+  }
   S.installing.add(id);
   S.selected = id;
   renderHero();
@@ -1683,6 +1689,7 @@ function fillSettings() {
   setSwitch("#motion-switch", s.uiMotion !== false);
   setSwitch("#fullscreen-switch", Boolean(s.fullscreen));
   setSwitch("#close-switch", Boolean(s.closeOnLaunch));
+  setSwitch("#experimental-switch", s.allowExperimental === true);
   setSwitch("#snapshots-switch", s.showSnapshots !== false);
   setSwitch("#old-switch", s.showOld !== false);
   setSwitch("#auto-update-switch", s.autoUpdate !== false);
@@ -1955,6 +1962,7 @@ function bindSettings() {
   bindSwitch("#motion-switch", "uiMotion", () => applyAppearance(S.settings));
   bindSwitch("#fullscreen-switch", "fullscreen");
   bindSwitch("#close-switch", "closeOnLaunch");
+  bindSwitch("#experimental-switch", "allowExperimental", () => { renderAll(); });
   bindSwitch("#snapshots-switch", "showSnapshots", () => { renderAll(); });
   bindSwitch("#old-switch", "showOld", () => { renderAll(); });
   bindSwitch("#auto-update-switch", "autoUpdate");

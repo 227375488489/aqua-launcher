@@ -134,6 +134,9 @@ let settings = {
   uiPlayPosition: pick("playpos", "left"),
   strictMods: true,
   autoUpdate: true,
+  allowExperimental: false,
+  showSnapshots: true,
+  showOld: true,
   language: pick("lang", "ru"),
 };
 
@@ -241,7 +244,7 @@ const handlers = {
       gameDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher\\minecraft" : "/home/sviat/.local/share/AquaLauncher/minecraft",
       activeDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher\\minecraft\\profiles\\instance-vanilla" : "/home/sviat/.local/share/AquaLauncher/minecraft/profiles/instance-vanilla",
       dataDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher" : "/home/sviat/.local/share/AquaLauncher",
-      appVersion: "0.0.1-beta",
+      appVersion: "0.0.2-beta",
       running,
       lastVersion,
       profiles,
@@ -428,14 +431,14 @@ const handlers = {
   check_update() {
     const demo = new URLSearchParams(location.search).has("update");
     return {
-      current: "0.0.1-beta",
-      latest: demo ? "0.0.2-beta" : "0.0.1-beta",
+      current: "0.0.2-beta",
+      latest: demo ? "0.0.3-beta" : "0.0.2-beta",
       url: "https://github.com/227375488489/aqua-launcher/releases",
-      notes: demo ? "## Beta 0.0.2\n\n- Auto update test\n- Theme fixes" : "",
+      notes: demo ? "## Beta 0.0.3\n\n- Auto update test\n- Experimental versions toggle" : "",
       published: date(Date.now() - 3 * day),
       available: demo,
-      asset: demo ? "https://github.com/227375488489/aqua-launcher/releases/download/v0.0.2-beta/Aqua.Launcher_0.0.2-beta_x64-setup.exe" : "",
-      assetName: demo ? "Aqua.Launcher_0.0.2-beta_x64-setup.exe" : "",
+      asset: demo ? "https://github.com/227375488489/aqua-launcher/releases/download/v0.0.3-beta/Aqua.Launcher_0.0.3-beta_x64-setup.exe" : "",
+      assetName: demo ? "Aqua.Launcher_0.0.3-beta_x64-setup.exe" : "",
     };
   },
 

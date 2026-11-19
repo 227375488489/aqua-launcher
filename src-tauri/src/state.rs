@@ -57,6 +57,8 @@ pub struct Settings {
     pub show_snapshots: bool,
     /// Показывать alpha/beta и старые релизы.
     pub show_old: bool,
+    /// Разрешить экспериментальные версии (снапшоты, беты, альфы).
+    pub allow_experimental: bool,
     /// Скачивать обновления лаунчера автоматически.
     pub auto_update: bool,
     // --- безопасность ---
@@ -102,6 +104,7 @@ impl Default for Settings {
             ui_play_position: "left".into(),
             show_snapshots: true,
             show_old: true,
+            allow_experimental: false,
             auto_update: true,
             strict_mods: true,
         }
