@@ -1,6 +1,6 @@
 [package]
 name = "aqua-launcher"
-version = "0.0.2-beta"
+version = "0.0.3-beta"
 edition = "2021"
 rust-version = "1.82"
 description = "Aqua Launcher — a fast, beautiful Minecraft launcher written in Rust"
@@ -28,6 +28,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 dirs = "6"
 flate2 = "1"
 tar = "0.4"
+discord-rich-presence = "0.2"
 
 [profile.release]
 opt-level = 3

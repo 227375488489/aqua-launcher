@@ -1,4 +1,5 @@
 import { LOCALES, DEFAULT_LOCALE } from "./locales.js";
+import { EXTRA } from "./lang/extra.js";
 
 const flatCache = new Map();
 
@@ -14,7 +15,9 @@ function flatten(obj, prefix = "", out = {}) {
 function stringsFor(code) {
   if (!flatCache.has(code)) {
     const locale = LOCALES[code];
-    flatCache.set(code, locale ? flatten(locale.strings) : {});
+    const table = locale ? flatten(locale.strings) : {};
+    if (EXTRA[code]) Object.assign(table, flatten(EXTRA[code]));
+    flatCache.set(code, table);
   }
   return flatCache.get(code);
 }

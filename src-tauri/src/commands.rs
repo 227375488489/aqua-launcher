@@ -11,6 +11,7 @@ use crate::mc::install::{self, Installer};
 use crate::mc::launch;
 use crate::mc::manifest;
 use crate::mc::content;
+use crate::mc::curse;
 use crate::mc::fabric;
 use crate::mc::forge;
 use crate::mc::modpack;
@@ -176,9 +177,16 @@ pub async fn mods_install(
     version: String,
     loader: String,
     kind: Option<String>,
+    provider: Option<String>,
+    profile: Option<String>,
 ) -> Result<mods::InstallOutcome, String> {
     let cfg = state.snapshot();
-    let root = cfg.active_root();
+    let root = profile
+        .as_deref()
+        .filter(|id| !id.is_empty())
+        .and_then(|id| cfg.profile(id))
+        .map(|p| cfg.profile_root(&p))
+        .unwrap_or_else(|| cfg.active_root());
     let workers = cfg.settings.download_workers as usize;
     let folder = match kind.as_deref() {
         Some("resourcepack") => "resourcepacks",
@@ -192,10 +200,17 @@ pub async fn mods_install(
             serde_json::json!({ "done": done, "bytes": bytes }),
         );
     });
-    let outcome = mods::install(
-        &state.http, &root, &project, &version, &loader, workers, folder, progress,
-    )
-    .await
+    let outcome = if provider.as_deref() == Some("curseforge") || project.starts_with("cf:") {
+        curse::install(
+            &state.http, &root, &project, &version, &loader, workers, folder, progress,
+        )
+        .await
+    } else {
+        mods::install(
+            &state.http, &root, &project, &version, &loader, workers, folder, progress,
+        )
+        .await
+    }
     .map_err(|e| e.to_string())?;
 
     if cfg.settings.strict_mods {
@@ -224,9 +239,14 @@ pub async fn mods_repair(
     state: State<'_, AppState>,
     version: String,
     loader: String,
+    profile: Option<String>,
 ) -> Result<mods::InstallOutcome, String> {
     let cfg = state.snapshot();
-    let root = cfg.active_root();
+    let root = profile
+        .as_deref()
+        .and_then(|id| cfg.profile(id))
+        .map(|p| cfg.profile_root(p))
+        .unwrap_or_else(|| cfg.active_root());
     let workers = cfg.settings.download_workers as usize;
     let progress = std::sync::Arc::new(|_: usize, _: u64| {});
     mods::repair(&state.http, &root, &version, &loader, workers, progress)
@@ -330,7 +350,9 @@ pub async fn launch(app: AppHandle, state: State<'_, AppState>, id: String) -> R
         .unwrap_or_else(|| root.clone());
     let _ = crate::paths::ensure_dir(&game_dir);
 
-    let instance_options = profile.map(|p| p.options.clone()).unwrap_or_default();
+    let instance_options = profile
+        .map(|p| p.options.with_defaults(&cfg.settings.game_defaults))
+        .unwrap_or_else(|| cfg.settings.game_defaults.clone());
     let _ = options::apply(&game_dir, &instance_options);
 
     let java_path = java::ensure(&app, &state.http, &root, &cfg.settings, meta.java_major())
@@ -497,6 +519,13 @@ pub fn save_settings(state: State<'_, AppState>, mut settings: Settings) -> Resu
 }
 
 #[tauri::command]
+pub fn reset_settings(state: State<'_, AppState>) -> Result<Config, String> {
+    state
+        .update(|cfg| cfg.settings = Settings::default())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn ms_login(app: AppHandle, state: State<'_, AppState>) -> Result<auth::DeviceFlow, String> {
     let client_id = state.settings().ms_client_id;
     let (flow, device_code) = auth::start(&state.http, &client_id)
@@ -645,6 +674,183 @@ pub async fn pick_java(app: AppHandle) -> Option<String> {
 }
 
 #[tauri::command]
+pub async fn pick_folder(app: AppHandle) -> Option<String> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog().file().pick_folder(move |path| {
+        let _ = tx.send(path);
+    });
+    rx.await
+        .ok()
+        .flatten()
+        .and_then(|p| p.into_path().ok())
+        .map(|p| p.display().to_string())
+}
+
+fn copy_tree(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let src = entry.path();
+        let dst = to.join(entry.file_name());
+        if src.is_dir() {
+            copy_tree(&src, &dst)?;
+        } else if src.is_file() {
+            std::fs::copy(&src, &dst)?;
+        }
+    }
+    Ok(())
+}
+
+fn import_meta(root: &std::path::Path) -> Option<(String, String, Option<String>)> {
+    let file = |name: &str| std::fs::read_to_string(root.join(name)).ok();
+    if let Some(text) = file("mmc-pack.json") {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) {
+            let mut version = None;
+            let mut loader = "vanilla".to_string();
+            let mut loader_version = None;
+            for component in value.get("components").and_then(|c| c.as_array()).into_iter().flatten() {
+                let uid = component.get("uid").and_then(|u| u.as_str()).unwrap_or("");
+                let ver = component.get("version").and_then(|v| v.as_str()).map(str::to_string);
+                match uid {
+                    "net.minecraft" => version = ver,
+                    "net.fabricmc.fabric-loader" => { loader = "fabric".into(); loader_version = ver; }
+                    "net.minecraftforge" => { loader = "forge".into(); loader_version = ver; }
+                    "net.neoforged" => { loader = "neoforge".into(); loader_version = ver; }
+                    "org.quiltmc.quilt-loader" => { loader = "quilt".into(); loader_version = ver; }
+                    _ => {}
+                }
+            }
+            if let Some(version) = version {
+                return Some((version, loader, loader_version));
+            }
+        }
+    }
+    if let Some(text) = file("minecraftinstance.json") {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) {
+            let version = value.get("gameVersion").and_then(|v| v.as_str()).map(str::to_string);
+            let base = value.get("baseModLoader");
+            let name = base.and_then(|b| b.get("name")).and_then(|v| v.as_str()).unwrap_or("");
+            let loader = if name.contains("neoforge") { "neoforge" } else if name.contains("fabric") { "fabric" } else if name.contains("forge") { "forge" } else { "vanilla" };
+            let loader_version = base
+                .and_then(|b| b.get("forgeVersion").or_else(|| b.get("fabricVersion")))
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            if let Some(version) = version {
+                return Some((version, loader.to_string(), loader_version));
+            }
+        }
+    }
+    if let Some(text) = file("modrinth.index.json") {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) {
+            let deps = value.get("dependencies");
+            let get = |key: &str| deps.and_then(|d| d.get(key)).and_then(|v| v.as_str()).map(str::to_string);
+            if let Some(version) = get("minecraft") {
+                let loader = if get("neoforge").is_some() {
+                    ("neoforge", get("neoforge"))
+                } else if get("forge").is_some() {
+                    ("forge", get("forge"))
+                } else if get("fabric-loader").is_some() {
+                    ("fabric", get("fabric-loader"))
+                } else {
+                    ("vanilla", None)
+                };
+                return Some((version, loader.0.to_string(), loader.1));
+            }
+        }
+    }
+    if let Some(text) = file("manifest.json") {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) {
+            if let Some(mc) = value.get("minecraft") {
+                let version = mc.get("version").and_then(|v| v.as_str()).map(str::to_string);
+                let id = mc
+                    .get("modLoaders")
+                    .and_then(|m| m.as_array())
+                    .and_then(|list| list.first())
+                    .and_then(|m| m.get("id"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let loader = if id.contains("neoforge") { "neoforge" } else if id.contains("fabric") { "fabric" } else if id.contains("forge") { "forge" } else { "vanilla" };
+                let loader_version = id.split_once('-').map(|(_, v)| v.to_string());
+                if let Some(version) = version {
+                    return Some((version, loader.to_string(), loader_version));
+                }
+            }
+        }
+    }
+    None
+}
+
+fn import_one(cfg: &mut crate::state::Config, path: &std::path::Path, name: &str) -> anyhow::Result<String> {
+    let (version, loader, loader_version) = import_meta(path)
+        .ok_or_else(|| anyhow::anyhow!("import_unknown"))?;
+    let id = format!("import-{}", crate::state::now_secs());
+    let target = cfg.game_root().join("profiles").join(&id);
+    for candidate in [".minecraft", "minecraft"] {
+        let dir = path.join(candidate);
+        if dir.is_dir() {
+            copy_tree(&dir, &target)?;
+            break;
+        }
+    }
+    if !target.exists() {
+        copy_tree(path, &target)?;
+    }
+    cfg.profiles.push(crate::state::Profile {
+        id: id.clone(),
+        name: name.to_string(),
+        version_id: version,
+        loader,
+        loader_version,
+        dir: format!("profiles/{id}"),
+        icon: None,
+        created_at: crate::state::now_secs(),
+        options: cfg.settings.game_defaults.clone(),
+    });
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn profile_import(state: State<'_, AppState>, path: String) -> Result<Config, String> {
+    let root = PathBuf::from(&path);
+    if !root.is_dir() {
+        return Err("import_path_invalid".into());
+    }
+    let mut imported = 0;
+    let mut error: Option<String> = None;
+    let config = state
+        .update(|cfg| {
+            let name = |p: &std::path::Path| {
+                p.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "Imported".into())
+            };
+            if import_meta(&root).is_some() {
+                match import_one(cfg, &root, &name(&root)) {
+                    Ok(_) => imported += 1,
+                    Err(err) => error = Some(err.to_string()),
+                }
+            } else if let Ok(entries) = std::fs::read_dir(&root) {
+                for entry in entries.flatten() {
+                    let child = entry.path();
+                    if child.is_dir() && import_meta(&child).is_some() {
+                        if import_one(cfg, &child, &name(&child)).is_ok() {
+                            imported += 1;
+                        }
+                    }
+                }
+            }
+        })
+        .map_err(|e| e.to_string())?;
+    if let Some(err) = error {
+        return Err(err);
+    }
+    if imported == 0 {
+        return Err("import_unknown".into());
+    }
+    Ok(config)
+}
+
+#[tauri::command]
 pub fn check_java(path: String) -> Option<u32> {
     let path = PathBuf::from(path);
     if !path.exists() {
@@ -718,6 +924,102 @@ pub async fn modrinth_project(
 }
 
 #[tauri::command]
+pub async fn curse_search(
+    state: State<'_, AppState>,
+    query: String,
+    kind: String,
+    version: Option<String>,
+    loader: Option<String>,
+) -> Result<Vec<mods::Hit>, String> {
+    curse::search(
+        &state.http,
+        &query,
+        &kind,
+        version.as_deref(),
+        loader.as_deref(),
+        30,
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn catalog_search(
+    state: State<'_, AppState>,
+    query: String,
+    kind: String,
+    version: Option<String>,
+    loader: Option<String>,
+    provider: Option<String>,
+) -> Result<Vec<mods::Hit>, String> {
+    let provider = provider.unwrap_or_else(|| "modrinth".into());
+    let mut hits = Vec::new();
+    if provider != "curseforge" {
+        let found = mods::search(
+            &state.http,
+            &query,
+            &kind,
+            version.as_deref(),
+            loader.as_deref(),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+        hits.extend(found);
+    }
+    if provider != "modrinth" {
+        let found = curse::search(
+            &state.http,
+            &query,
+            &kind,
+            version.as_deref(),
+            loader.as_deref(),
+            30,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+        hits.extend(found);
+    }
+
+    if provider == "both" {
+        let mut merged: Vec<mods::Hit> = Vec::new();
+        for hit in hits {
+            let key = hit.title.trim().to_lowercase();
+            if let Some(existing) = merged
+                .iter_mut()
+                .find(|item| item.title.trim().to_lowercase() == key)
+            {
+                existing.downloads += hit.downloads;
+                for source in hit.sources {
+                    if !existing.sources.contains(&source) {
+                        existing.sources.push(source);
+                    }
+                }
+                if !existing.sources.contains(&hit.provider) {
+                    existing.sources.push(hit.provider);
+                }
+                existing.provider = "both".into();
+            } else {
+                merged.push(hit);
+            }
+        }
+        hits = merged;
+    }
+
+    hits.sort_by(|a, b| b.downloads.cmp(&a.downloads));
+    Ok(hits)
+}
+
+#[tauri::command]
+pub async fn curse_project(
+    state: State<'_, AppState>,
+    project: String,
+) -> Result<project::ProjectDetail, String> {
+    curse::project(&state.http, &project)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn modpack_contents(
     state: State<'_, AppState>,
     project: String,
@@ -778,29 +1080,49 @@ pub fn profile_create(
     state: State<'_, AppState>,
     name: String,
     version_id: String,
+    loader: Option<String>,
+    loader_version: Option<String>,
+    icon: Option<String>,
 ) -> Result<Config, String> {
     let name = name.trim().to_string();
     if name.is_empty() {
         return Err("profile_name_empty".into());
     }
-    let cfg = state.snapshot();
-    if !install::is_installed(&cfg.game_root(), &version_id) {
-        return Err("version_not_installed".into());
+    let version_id = version_id.trim().to_string();
+    if version_id.is_empty() {
+        return Err("profile_version_empty".into());
     }
+    let cfg = state.snapshot();
     let stamp = crate::state::now_secs();
-    let id = format!("instance-{stamp}");
+    let mut id = format!("instance-{stamp}");
+    let mut suffix = 2;
+    while cfg.profiles.iter().any(|p| p.id == id) {
+        id = format!("instance-{stamp}-{suffix}");
+        suffix += 1;
+    }
     let dir = format!("profiles/{id}");
     crate::paths::ensure_dir(&cfg.game_root().join(&dir)).map_err(|e| e.to_string())?;
     let lower = version_id.to_ascii_lowercase();
-    let loader = if lower.contains("neoforge") {
-        "neoforge"
-    } else if lower.contains("forge") {
-        "forge"
-    } else if lower.contains("fabric") {
-        "fabric"
-    } else {
-        "vanilla"
-    };
+    let loader = loader
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| {
+            if lower.contains("neoforge") {
+                "neoforge".into()
+            } else if lower.contains("forge") {
+                "forge".into()
+            } else if lower.contains("fabric") {
+                "fabric".into()
+            } else if lower.contains("quilt") {
+                "quilt".into()
+            } else {
+                "vanilla".into()
+            }
+        });
+    let loader_version = loader_version
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let options = cfg.settings.game_defaults.clone();
     state
         .update(|c| {
             c.active_profile = Some(id.clone());
@@ -808,14 +1130,101 @@ pub fn profile_create(
                 id,
                 name,
                 version_id,
-                loader: loader.into(),
+                loader,
+                loader_version,
                 dir,
-                icon: None,
+                icon: icon.filter(|value| !value.trim().is_empty()),
                 created_at: stamp,
-                options: crate::state::InstanceOptions::default(),
+                options,
             });
         })
         .map_err(|e| e.to_string())
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileFile {
+    pub file: String,
+    pub name: String,
+    pub kind: String,
+    pub size: u64,
+}
+
+#[tauri::command]
+pub fn profile_contents(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<Vec<ProfileFile>, String> {
+    let cfg = state.snapshot();
+    let profile = cfg.profile(&id).ok_or_else(|| "profile_not_found".to_string())?;
+    let root = cfg.profile_root(profile);
+    let mut out: Vec<ProfileFile> = mods::list(&root)
+        .into_iter()
+        .map(|m| ProfileFile {
+            file: m.file,
+            name: m.name,
+            kind: "mod".into(),
+            size: m.size,
+        })
+        .collect();
+    for (folder, kind) in [
+        ("resourcepacks", "resourcepack"),
+        ("shaderpacks", "shader"),
+        ("datapacks", "datapack"),
+    ] {
+        let dir = root.join(folder);
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_file() {
+                    continue;
+                }
+                let file = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let name = path
+                    .file_stem()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| file.clone());
+                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                out.push(ProfileFile {
+                    file,
+                    name,
+                    kind: kind.into(),
+                    size,
+                });
+            }
+        }
+    }
+    out.sort_by(|a, b| a.kind.cmp(&b.kind).then(a.name.cmp(&b.name)));
+    Ok(out)
+}
+
+#[tauri::command]
+pub fn profile_file_remove(
+    state: State<'_, AppState>,
+    id: String,
+    file: String,
+    kind: String,
+) -> Result<(), String> {
+    if file.contains('/') || file.contains('\\') || file.contains("..") {
+        return Err("bad_file_name".into());
+    }
+    let cfg = state.snapshot();
+    let profile = cfg.profile(&id).ok_or_else(|| "profile_not_found".to_string())?;
+    let root = cfg.profile_root(profile);
+    let folder = match kind.as_str() {
+        "resourcepack" => "resourcepacks",
+        "shader" => "shaderpacks",
+        "datapack" => "datapacks",
+        _ => "mods",
+    };
+    let path = root.join(folder).join(&file);
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| format!("Не удалось удалить: {e}"))?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -845,6 +1254,21 @@ pub fn profile_set_options(
                 profile.options = options.clone();
             }
         })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn game_defaults(state: State<'_, AppState>) -> crate::state::InstanceOptions {
+    state.settings().game_defaults
+}
+
+#[tauri::command]
+pub fn set_game_defaults(
+    state: State<'_, AppState>,
+    defaults: crate::state::InstanceOptions,
+) -> Result<Config, String> {
+    state
+        .update(|cfg| cfg.settings.game_defaults = defaults.clone())
         .map_err(|e| e.to_string())
 }
 

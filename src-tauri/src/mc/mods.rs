@@ -33,6 +33,10 @@ pub struct Hit {
     pub categories: Vec<String>,
     #[serde(default, rename = "project_type")]
     pub kind: String,
+    #[serde(default)]
+    pub provider: String,
+    #[serde(default)]
+    pub sources: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -127,7 +131,13 @@ pub async fn search(
             .await;
         match response {
             Ok(res) if res.status().is_success() => match res.json::<SearchRes>().await {
-                Ok(body) => return Ok(body.hits),
+                Ok(mut body) => {
+                    for hit in &mut body.hits {
+                        hit.provider = "modrinth".into();
+                        hit.sources = vec!["modrinth".into()];
+                    }
+                    return Ok(body.hits);
+                }
                 Err(err) => last_error = Some(anyhow!("Не удалось прочитать ответ Modrinth: {err}")),
             },
             Ok(res) => last_error = Some(anyhow!("Modrinth вернул ошибку {}", res.status())),

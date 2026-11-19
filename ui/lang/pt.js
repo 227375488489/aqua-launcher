@@ -57,6 +57,7 @@ export default {
     emptySub: "Tenta outra pesquisa ou filtro.",
   },
   discover: {
+    addContent: "Adicionar conteúdo",
     title: "Mods e modpacks",
     sub: "Projetos Modrinth verificados, com dependências e análise de segurança.",
     mods: "Mods",
@@ -79,6 +80,7 @@ export default {
     risk: { high: "Risco alto", medium: "Rever", safe: "Limpo" },
   },
   instances: {
+    import: "Importar pacote",
     title: "Instâncias",
     sub: "Mundos isolados para cada pack — mods, configs e saves separados.",
     create: "Nova instância",
@@ -119,6 +121,15 @@ export default {
     unsaved: "Alterações por guardar",
   },
   set: {
+    "wall.clear": "Remover imagem",
+    factoryReset: "Restaurar",
+    factoryResetSub: "Restaura aparência, jogo, desempenho e Java.",
+    discord: "Discord Rich Presence",
+    discordSub: "Mostrar o launcher e a versão em execução no perfil do Discord.",
+    discordId: "ID do aplicativo Discord",
+    discordIdSub: "Crie um app em discord.com/developers e cole o Application ID.",
+    gameDefaults: "Configurações de jogo para todos os pacotes",
+    gameDefaultsSub: "Idioma, FPS e gráficos padrão — novos pacotes herdam.",
     appearance: "Aparência",
     layout: "Layout",
     game: "Jogo",
@@ -265,6 +276,8 @@ export default {
     files: "ficheiros",
   },
   errors: {
+    importUnknown: "Nenhum pacote MultiMC, CurseForge ou Modrinth encontrado nesta pasta",
+    importPath: "Escolha uma pasta de pacote",
     generic: "Algo correu mal",
     network: "Sem rede — verifica a ligação",
     notInstalled: "Esta versão ainda não está instalada",
@@ -278,6 +291,8 @@ export default {
     modrinth: "O Modrinth não responde",
   },
   toast: {
+    imported: "Pacote importado",
+    settingsReset: "Configurações restauradas",
     saved: "Definições guardadas",
     installed: "{version} instalada",
     installDone: "{version} pronta a jogar",
@@ -301,6 +316,8 @@ export default {
     langChanged: "Idioma atualizado",
   },
   confirm: {
+    resetSettings: "Restaurar as configurações?",
+    resetSettingsText: "Aparência, jogo, desempenho e Java voltarão ao padrão. Contas, pacotes e versões permanecem.",
     deleteVersion: "Eliminar versão?",
     deleteVersionText: "Os ficheiros de {id} serão removidos deste PC.",
     deleteProfile: "Eliminar instância?",

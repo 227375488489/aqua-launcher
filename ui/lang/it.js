@@ -57,6 +57,7 @@ export default {
     emptySub: "Prova un’altra ricerca o un altro filtro.",
   },
   discover: {
+    addContent: "Aggiungi contenuto",
     title: "Mod e modpack",
     sub: "Progetti Modrinth verificati, con dipendenze e analisi di sicurezza.",
     mods: "Mod",
@@ -79,6 +80,7 @@ export default {
     risk: { high: "Rischio alto", medium: "Da rivedere", safe: "Pulito" },
   },
   instances: {
+    import: "Importa pacchetto",
     title: "Istanze",
     sub: "Mondi isolati per ogni pack — mod, config e salvataggi separati.",
     create: "Nuova istanza",
@@ -119,6 +121,15 @@ export default {
     unsaved: "Modifiche non salvate",
   },
   set: {
+    "wall.clear": "Rimuovi immagine",
+    factoryReset: "Ripristina",
+    factoryResetSub: "Ripristina aspetto, gioco, prestazioni e Java.",
+    discord: "Discord Rich Presence",
+    discordSub: "Mostra il launcher e la versione avviata nel profilo Discord.",
+    discordId: "ID applicazione Discord",
+    discordIdSub: "Crea un’app su discord.com/developers e incolla il suo Application ID.",
+    gameDefaults: "Impostazioni di gioco per tutti i pacchetti",
+    gameDefaultsSub: "Lingua, FPS e grafica predefiniti — i nuovi pacchetti li ereditano.",
     appearance: "Aspetto",
     layout: "Layout",
     game: "Gioco",
@@ -265,6 +276,8 @@ export default {
     files: "file",
   },
   errors: {
+    importUnknown: "Nessun pacchetto MultiMC, CurseForge o Modrinth in questa cartella",
+    importPath: "Scegli una cartella del pacchetto",
     generic: "Qualcosa è andato storto",
     network: "Rete non disponibile — controlla la connessione",
     notInstalled: "Questa versione non è ancora installata",
@@ -278,6 +291,8 @@ export default {
     modrinth: "Modrinth non risponde",
   },
   toast: {
+    imported: "Pacchetto importato",
+    settingsReset: "Impostazioni ripristinate",
     saved: "Impostazioni salvate",
     installed: "{version} installata",
     installDone: "{version} è pronta",
@@ -301,6 +316,8 @@ export default {
     langChanged: "Lingua aggiornata",
   },
   confirm: {
+    resetSettings: "Ripristinare le impostazioni?",
+    resetSettingsText: "Aspetto, gioco, prestazioni e Java torneranno ai valori predefiniti. Account, pacchetti e versioni restano.",
     deleteVersion: "Eliminare la versione?",
     deleteVersionText: "I file di {id} verranno rimossi da questo PC.",
     deleteProfile: "Eliminare l’istanza?",

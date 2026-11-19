@@ -57,6 +57,7 @@ export default {
     emptySub: "Spróbuj innego zapytania lub filtra.",
   },
   discover: {
+    addContent: "Dodaj zawartość",
     title: "Mody i modpacki",
     sub: "Sprawdzone projekty z Modrinth — z zależnościami i skanem bezpieczeństwa.",
     mods: "Mody",
@@ -79,6 +80,7 @@ export default {
     risk: { high: "Wysokie ryzyko", medium: "Sprawdź", safe: "Czysto" },
   },
   instances: {
+    import: "Importuj paczkę",
     title: "Instancje",
     sub: "Osobne światy dla każdego packa — własne mody, konfigi i zapisy.",
     create: "Nowa instancja",
@@ -119,6 +121,15 @@ export default {
     unsaved: "Niezapisane zmiany",
   },
   set: {
+    "wall.clear": "Usuń obraz",
+    factoryReset: "Przywróć ustawienia",
+    factoryResetSub: "Przywraca domyślny wygląd, grę, wydajność i Java.",
+    discord: "Discord Rich Presence",
+    discordSub: "Pokazuj launcher i uruchomioną wersję w profilu Discord.",
+    discordId: "ID aplikacji Discord",
+    discordIdSub: "Utwórz aplikację na discord.com/developers i wklej jej Application ID.",
+    gameDefaults: "Ustawienia gry dla wszystkich paczek",
+    gameDefaultsSub: "Domyślny język, FPS i grafika — nowe paczki je odziedziczą.",
     appearance: "Wygląd",
     layout: "Układ",
     game: "Gra",
@@ -265,6 +276,8 @@ export default {
     files: "plików",
   },
   errors: {
+    importUnknown: "W tym folderze nie znaleziono paczki MultiMC, CurseForge ani Modrinth",
+    importPath: "Wybierz folder paczki",
     generic: "Coś poszło nie tak",
     network: "Brak sieci — sprawdź połączenie",
     notInstalled: "Ta wersja nie jest jeszcze zainstalowana",
@@ -278,6 +291,8 @@ export default {
     modrinth: "Modrinth nie odpowiada",
   },
   toast: {
+    imported: "Paczka zaimportowana",
+    settingsReset: "Przywrócono ustawienia domyślne",
     saved: "Ustawienia zapisane",
     installed: "Zainstalowano {version}",
     installDone: "{version} gotowa do gry",
@@ -301,6 +316,8 @@ export default {
     langChanged: "Język zaktualizowany",
   },
   confirm: {
+    resetSettings: "Przywrócić ustawienia domyślne?",
+    resetSettingsText: "Wygląd, gra, wydajność i Java wrócą do domyślnych. Konta, paczki i wersje zostaną.",
     deleteVersion: "Usunąć wersję?",
     deleteVersionText: "Pliki {id} zostaną usunięte z tego PC.",
     deleteProfile: "Usunąć instancję?",

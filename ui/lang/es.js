@@ -57,6 +57,7 @@ export default {
     emptySub: "Prueba otra búsqueda o filtro.",
   },
   discover: {
+    addContent: "Añadir contenido",
     title: "Mods y modpacks",
     sub: "Proyectos de Modrinth revisados, con dependencias y análisis de seguridad.",
     mods: "Mods",
@@ -79,6 +80,7 @@ export default {
     risk: { high: "Riesgo alto", medium: "Revisar", safe: "Limpio" },
   },
   instances: {
+    import: "Importar paquete",
     title: "Instancias",
     sub: "Mundos aislados para cada paquete — mods, configs y partidas separados.",
     create: "Nueva instancia",
@@ -119,6 +121,15 @@ export default {
     unsaved: "Cambios sin guardar",
   },
   set: {
+    "wall.clear": "Quitar imagen",
+    factoryReset: "Restablecer",
+    factoryResetSub: "Restaura la apariencia, el juego, el rendimiento y Java.",
+    discord: "Discord Rich Presence",
+    discordSub: "Mostrar el launcher y la versión iniciada en tu perfil de Discord.",
+    discordId: "ID de aplicación de Discord",
+    discordIdSub: "Crea una app en discord.com/developers y pega su Application ID.",
+    gameDefaults: "Ajustes de juego para todos los paquetes",
+    gameDefaultsSub: "Idioma, FPS y gráficos predeterminados: los nuevos paquetes los heredan.",
     appearance: "Apariencia",
     layout: "Diseño",
     game: "Juego",
@@ -265,6 +276,8 @@ export default {
     files: "archivos",
   },
   errors: {
+    importUnknown: "No se encontró ningún paquete de MultiMC, CurseForge o Modrinth en esta carpeta",
+    importPath: "Elige una carpeta de paquete",
     generic: "Algo salió mal",
     network: "Sin red — comprueba la conexión",
     notInstalled: "Esta versión aún no está instalada",
@@ -278,6 +291,8 @@ export default {
     modrinth: "Modrinth no responde",
   },
   toast: {
+    imported: "Paquete importado",
+    settingsReset: "Ajustes restablecidos",
     saved: "Ajustes guardados",
     installed: "{version} instalada",
     installDone: "{version} lista para jugar",
@@ -301,6 +316,8 @@ export default {
     langChanged: "Idioma actualizado",
   },
   confirm: {
+    resetSettings: "¿Restablecer los ajustes?",
+    resetSettingsText: "La apariencia, el juego, el rendimiento y Java volverán a los valores predeterminados. Las cuentas, los paquetes y las versiones se mantienen.",
     deleteVersion: "¿Eliminar versión?",
     deleteVersionText: "Los archivos de {id} se borrarán de este PC.",
     deleteProfile: "¿Eliminar instancia?",

@@ -57,6 +57,7 @@ export default {
     emptySub: "Спробуйте інший запит або фільтр.",
   },
   discover: {
+    addContent: "Додати контент",
     title: "Моди та збірки",
     sub: "Перевірені проєкти з Modrinth — із залежностями та перевіркою безпеки.",
     mods: "Моди",
@@ -79,6 +80,7 @@ export default {
     risk: { high: "Високий ризик", medium: "Перевірити", safe: "Чисто" },
   },
   instances: {
+    import: "Імпорт збірки",
     title: "Збірки",
     sub: "Окремі світи для кожної збірки — свої моди, конфіги та збереження.",
     create: "Нова збірка",
@@ -119,6 +121,15 @@ export default {
     unsaved: "Є зміни",
   },
   set: {
+    "wall.clear": "Прибрати зображення",
+    factoryReset: "Скинути налаштування",
+    factoryResetSub: "Повернути вигляд, гру, продуктивність і Java до стандартних.",
+    discord: "Discord Rich Presence",
+    discordSub: "Показувати лаунчер і запущену версію у профілі Discord.",
+    discordId: "ID застосунку Discord",
+    discordIdSub: "Створіть застосунок на discord.com/developers і вставте його Application ID.",
+    gameDefaults: "Налаштування гри для всіх збірок",
+    gameDefaultsSub: "Мова, FPS і графіка за замовчуванням — нові збірки успадкують їх.",
     appearance: "Вигляд",
     layout: "Розкладка",
     game: "Гра",
@@ -265,6 +276,8 @@ export default {
     files: "файлів",
   },
   errors: {
+    importUnknown: "У папці не знайдено збірку MultiMC, CurseForge або Modrinth",
+    importPath: "Виберіть папку збірки",
     generic: "Щось пішло не так",
     network: "Немає мережі — перевірте з’єднання",
     notInstalled: "Ця версія ще не встановлена",
@@ -278,6 +291,8 @@ export default {
     modrinth: "Modrinth не відповідає",
   },
   toast: {
+    imported: "Збірку імпортовано",
+    settingsReset: "Налаштування скинуто до стандартних",
     saved: "Налаштування збережено",
     installed: "{version} встановлена",
     installDone: "{version} готова до гри",
@@ -301,6 +316,8 @@ export default {
     langChanged: "Мову оновлено",
   },
   confirm: {
+    resetSettings: "Скинути налаштування?",
+    resetSettingsText: "Вигляд, гра, продуктивність і Java повернуться до стандартних. Акаунти, збірки та версії залишаться.",
     deleteVersion: "Видалити версію?",
     deleteVersionText: "Файли {id} буде видалено з цього комп’ютера.",
     deleteProfile: "Видалити збірку?",

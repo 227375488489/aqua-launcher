@@ -11,8 +11,8 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const APP_VERSION = "0.0.2-beta";
-const APP_LABEL = "0.0.2 Beta";
+const APP_VERSION = "0.0.3-beta";
+const APP_LABEL = "0.0.3 Beta";
 const NAV_DEFAULT = ["home", "library", "instances", "discover", "accounts"];
 const WIDGET_DEFAULT = ["stats", "pc", "latest", "instances", "console"];
 const LINKS = {
@@ -99,6 +99,7 @@ const S = {
   libShown: 36,
   discoverKind: "modpack",
   discoverQuery: "",
+  discoverProvider: "modrinth",
   discoverVersion: "",
   discoverLoader: "fabric",
   discoverResults: [],
@@ -295,6 +296,8 @@ function friendly(err) {
   if (raw === "version_not_installed") return t("errors.notInstalled");
   if (raw === "profile_not_found") return t("errors.profileMissing");
   if (raw === "profile_name_empty") return t("errors.badName");
+  if (raw === "import_unknown") return t("errors.importUnknown");
+  if (raw === "import_path_invalid") return t("errors.importPath");
   if (head === "modpack_loader_unsupported") return t("errors.packLoader", { loader: tail || "" });
   if (head === "fabric_no_loader") return t("errors.fabricMissing", { version: tail || "" });
   if (/Строгий режим/i.test(raw)) return t("errors.strict");
@@ -360,12 +363,14 @@ function applyAppearance(s) {
   root.dataset.rail = s.uiSidebarMode === "icons" ? "icons" : "full";
   root.dataset.motion = s.uiMotion === false ? "off" : "on";
   root.dataset.bg = s.uiBackground || "ocean";
+  root.style.setProperty("--bg-custom", s.uiBgCustom || "#071420");
   root.dataset.grain = s.uiGrain === false ? "off" : "on";
   root.dataset.playpos = s.uiPlayPosition || "left";
   root.dataset.platform = S.platform || "windows";
   root.style.setProperty("--zoom", String((Number(s.uiScale) || 100) / 100));
   root.style.setProperty("--glass", String((Number(s.uiGlass) || 62) / 100));
   const backdrop = $(".backdrop");
+  backdrop.dataset.wall = s.uiWallpaper || "deep";
   if (s.uiWallpaperPath) {
     backdrop.style.setProperty("--wall-image", `url("${fileUrl(s.uiWallpaperPath)}")`);
     backdrop.style.setProperty("--wall-blur", `${Number(s.uiWallpaperBlur) || 0}px`);
@@ -376,6 +381,12 @@ function applyAppearance(s) {
     backdrop.style.removeProperty("--wall-image");
   }
   $("#wall-path").textContent = s.uiWallpaperPath ? s.uiWallpaperPath.split(/[\\/]/).pop() : t("set.none");
+  const preview = $("#wall-preview");
+  if (preview) {
+    preview.hidden = !s.uiWallpaperPath;
+    $("#wall-clear").hidden = !s.uiWallpaperPath;
+    if (s.uiWallpaperPath) $("#wall-preview-img").src = fileUrl(s.uiWallpaperPath);
+  }
 }
 
 /* ------------------------------------------------------------------ boot / render */
@@ -548,18 +559,30 @@ function visibleBySettings(v) {
 }
 function renderVersionMenu() {
   const menu = $("#version-menu");
-  const installed = sortVersions([...S.local], "new");
-  const available = sortVersions(S.remote.filter((v) => !isInstalled(v.id) && visibleBySettings(v)), "new").slice(0, 18);
-  const item = (id, kind, sub, loader) => `<button class="menu-item ${S.selected === id ? "is-on" : ""}" data-pick="${esc(id)}">
-    <span class="mi-main"><b>${esc(id)}</b><small>${esc(sub)}</small></span>
+  const known = new Map();
+  [...S.remote, ...S.local].forEach((v) => {
+    if (visibleBySettings(v) || isInstalled(v.id)) known.set(v.id, v);
+  });
+  S.profiles.forEach((p) => {
+    if (!known.has(p.versionId)) known.set(p.versionId, { id: p.versionId, kind: "release", releaseTime: "" });
+  });
+  const versions = sortVersions([...known.values()], "new").slice(0, 40);
+  const item = (id, kind, sub, loader, profile) => `<button class="menu-item ${S.selected === id ? "is-on" : ""}" data-pick="${esc(id)}" ${profile ? `data-profile-pick="${esc(profile.id)}"` : ""}>
+    <span class="mi-main"><b>${esc(profile ? profile.name : id)}</b><small>${esc(profile ? `${id} · ${sub}` : sub)}</small></span>
     ${loader ? `<span class="chip">${esc(loader)}</span>` : ""}
     ${S.selected === id ? `<svg class="ico" style="width:14px;height:14px;color:var(--accent)"><use href="#i-check"></use></svg>` : ""}
   </button>`;
+  const parts = [];
+  for (const v of versions) {
+    const packs = S.profiles.filter((p) => p.versionId === v.id);
+    parts.push(item(v.id, v.kind, isInstalled(v.id) ? `${kindLabel(v.kind)} · ${t("common.installed")}` : kindLabel(v.kind), loaderLabel(v.id)));
+    for (const p of packs) {
+      parts.push(item(v.id, "release", p.loader || "vanilla", "", p));
+    }
+  }
   menu.innerHTML = `
-    <div class="menu-label">${esc(t("menu.installed"))}</div>
-    ${installed.length ? installed.map((v) => item(v.id, v.kind, `${kindLabel(v.kind)} · ${i18n.bytes(v.size || 0)}`, loaderLabel(v.id))).join("") : `<div class="menu-item"><span class="mi-main"><small>${esc(t("common.none"))}</small></span></div>`}
     <div class="menu-label">${esc(t("menu.available"))}</div>
-    ${available.map((v) => item(v.id, v.kind, i18n.date(v.releaseTime), "")).join("")}`;
+    ${parts.length ? parts.join("") : `<div class="menu-item"><span class="mi-main"><small>${esc(t("common.none"))}</small></span></div>`}`;
 }
 
 function toggleVersionMenu(force) {
@@ -1004,6 +1027,7 @@ function planDiscoverVisibility() {
   const kind = S.discoverKind;
   $("#discover-version-wrap").hidden = kind === "modpack" || kind === "shader";
   $("#discover-loader-wrap").hidden = kind !== "mod";
+  $("#discover-provider").hidden = kind === "modpack";
   $("#fabric-notice").hidden = !(kind === "mod" && !hasLoaderProfile());
 }
 
@@ -1021,11 +1045,12 @@ async function searchDiscover() {
     if (S.discoverKind === "modpack") {
       results = await invoke("modpack_search", { query: S.discoverQuery });
     } else {
-      results = await invoke("modrinth_search", {
+      results = await invoke("catalog_search", {
         query: S.discoverQuery,
         kind: S.discoverKind,
         version: S.discoverKind === "shader" ? null : S.discoverVersion || null,
         loader: S.discoverKind === "mod" ? S.discoverLoader : null,
+        provider: S.discoverProvider,
       });
     }
     if (token !== S.loadToken) return;
@@ -1052,7 +1077,7 @@ function renderDiscoverResults() {
       <div class="pcard-body">
         <h3 title="${esc(hit.title)}">${esc(hit.title)}</h3>
         <p>${esc(hit.description || "")}</p>
-        <div class="pcard-tags">${(hit.categories || []).slice(0, 3).map((c) => `<span class="tag">${esc(c)}</span>`).join("")}</div>
+        <div class="pcard-tags">${(hit.categories || []).slice(0, 3).map((c) => `<span class="tag">${esc(c)}</span>`).join("")}${(hit.sources || []).map((s) => `<span class="tag src">${s === "curseforge" ? "CurseForge" : "Modrinth"}</span>`).join("")}</div>
         <div class="pcard-foot">
           <span>${esc(hit.author || "")}</span>
           <span>·</span>
@@ -1085,6 +1110,7 @@ async function installProject(hit) {
       version,
       loader: S.discoverLoader,
       kind,
+      provider: String(hit.id).startsWith("cf:") ? "curseforge" : (hit.provider || S.discoverProvider),
     });
     toast(t("toast.modInstalled", { count: (outcome?.installed || []).length }));
     loadMods();
@@ -1141,11 +1167,12 @@ function mdToHtml(markdown) {
 async function openProject(id, kindHint) {
   const hit = S.discoverResults.find((r) => r.id === id || r.slug === id);
   const kind = kindHint || hit?.kind || S.discoverKind;
+  const isCurse = String(id).startsWith("cf:") || hit?.provider === "curseforge";
   openModal(`<div class="pd-loading"><span class="spinner"></span><span>${esc(t("common.loading"))}</span></div>`);
   try {
     const [detail, contents] = await Promise.all([
-      invoke("modrinth_project", { project: id }),
-      kind === "modpack" ? invoke("modpack_contents", { project: id }).catch(() => []) : Promise.resolve([]),
+      isCurse ? invoke("curse_project", { project: id }) : invoke("modrinth_project", { project: id }),
+      kind === "modpack" && !isCurse ? invoke("modpack_contents", { project: id }).catch(() => []) : Promise.resolve([]),
     ]);
     const gallery = detail.gallery || [];
     const cover = gallery[0]?.url || detail.icon || artFor(detail.title);
@@ -1388,6 +1415,17 @@ function renderInstances() {
 function bindInstances() {
   $("#instance-create").addEventListener("click", createInstance);
   $("#instances-empty-create").addEventListener("click", createInstance);
+  $("#instance-import")?.addEventListener("click", async () => {
+    try {
+      const path = await invoke("pick_folder");
+      if (!path) return;
+      await invoke("profile_import", { path });
+      await refreshBoot();
+      toast(t("toast.imported"));
+    } catch (err) {
+      toast(friendly(err), "err");
+    }
+  });
   $("#instance-grid").addEventListener("click", async (e) => {
     const activate = e.target.closest("[data-profile-activate]");
     if (activate) return activateProfile(activate.dataset.profileActivate);
@@ -1402,6 +1440,9 @@ function bindInstances() {
     }
     const del = e.target.closest("[data-profile-delete]");
     if (del) return askDeleteProfile(del.dataset.profileDelete);
+    if (e.target.closest("button")) return;
+    const card = e.target.closest("[data-profile]");
+    if (card) return openPack(card.dataset.profile);
   });
 }
 
@@ -1423,25 +1464,71 @@ async function activateProfile(id, thenPlay = false) {
 }
 
 function createInstance() {
-  const options = sortVersions([...S.local], "new");
-  if (!options.length) {
-    toast(t("errors.notInstalled"), "err");
-    go("library");
+  const installed = new Set(S.local.map((v) => v.id));
+  const seen = new Set();
+  const versions = [...S.local, ...S.remote]
+    .filter((v) => visibleBySettings(v) || installed.has(v.id))
+    .filter((v) => v.kind === "release" || installed.has(v.id))
+    .filter((v) => (seen.has(v.id) ? false : seen.add(v.id)))
+    .sort((a, b) => String(b.id).localeCompare(String(a.id), undefined, { numeric: true }))
+    .slice(0, 200);
+  if (!versions.length) {
+    toast(t("errors.generic"), "err");
     return;
   }
+  const first = S.selected || versions[0].id;
+  const loaders = [
+    ["vanilla", "Vanilla"],
+    ["fabric", "Fabric"],
+    ["forge", "Forge"],
+    ["neoforge", "NeoForge"],
+  ];
   openModal(`<h3>${esc(t("instances.createTitle"))}</h3><p>${esc(t("instances.createText"))}</p>
-    <div class="stack">
-      <label class="input"><input id="instance-name" maxlength="40" placeholder="${esc(t("instances.name"))}" autocomplete="off"></label>
-      <label class="select-inline wide"><select id="instance-version">${options.map((v) => `<option value="${esc(v.id)}">${esc(v.id)} · ${esc(loaderLabel(v.id))}</option>`).join("")}</select><svg class="ico"><use href="#i-chevron"></use></svg></label>
+    <div class="cp-layout">
+      <button class="cp-cover" id="instance-cover" type="button" title="${esc(t("set.wall.pick"))}">
+        <img src="${versionArt(first)}" alt="">
+        <span class="cp-pencil"><svg class="ico"><use href="#i-palette"></use></svg></span>
+      </button>
+      <div class="cp-fields">
+        <label class="input"><input id="instance-name" maxlength="40" placeholder="${esc(t("instances.name"))}" autocomplete="off"></label>
+        <label class="select-inline wide"><select id="instance-version">${versions.map((v) => `<option value="${esc(v.id)}" ${v.id === first ? "selected" : ""}>${esc(v.id)}${installed.has(v.id) ? " · ✓" : ""}</option>`).join("")}</select><svg class="ico"><use href="#i-chevron"></use></svg></label>
+        <div class="cp-loaders" id="instance-loaders">${loaders.map(([value, label], i) => `<button class="cp-loader ${i === 0 ? "is-on" : ""}" data-loader="${value}" type="button">${label}</button>`).join("")}</div>
+        <label class="input"><input id="instance-loader-version" placeholder="Loader version (auto)" autocomplete="off"></label>
+        <input id="instance-icon" type="hidden" value="">
+      </div>
     </div>
     <div class="modal-actions"><button class="btn btn-quiet" data-close>${esc(t("common.cancel"))}</button><button class="btn btn-primary" id="instance-create-ok">${esc(t("common.create"))}</button></div>`, () => {
     $("#instance-name").focus();
+    let loader = "vanilla";
+    $("#instance-cover").addEventListener("click", async () => {
+      try {
+        const path = await invoke("pick_wallpaper");
+        if (!path) return;
+        $("#instance-icon").value = path;
+        $("#instance-cover img").src = fileUrl(path);
+      } catch (err) {
+        toast(friendly(err), "err");
+      }
+    });
+    $("#instance-version").addEventListener("change", (e) => {
+      $("#instance-cover img").src = versionArt(e.target.value);
+    });
+    $$("#instance-loaders .cp-loader").forEach((btn) => btn.addEventListener("click", () => {
+      loader = btn.dataset.loader;
+      $$("#instance-loaders .cp-loader").forEach((b) => b.classList.toggle("is-on", b === btn));
+    }));
     $("#instance-create-ok").addEventListener("click", async () => {
       const name = $("#instance-name").value.trim();
       const versionId = $("#instance-version").value;
       if (!name) return toast(t("errors.badName"), "err");
       try {
-        await invoke("profile_create", { name, versionId });
+        await invoke("profile_create", {
+          name,
+          versionId,
+          loader,
+          loaderVersion: $("#instance-loader-version").value.trim() || null,
+          icon: $("#instance-icon").value || null,
+        });
         closeModal();
         await refreshBoot();
         renderAll();
@@ -1474,6 +1561,223 @@ function optionSelect(key, label, entries, value) {
 
 function optionNumber(key, label, value, min, max) {
   return optionField(key, label, `<input class="input" type="number" min="${min}" max="${max}" data-optnum="${key}" value="${value ?? ""}" placeholder="${esc(t("opt.default"))}">`);
+}
+
+function ico(name) {
+  return `<svg class="ico"><use href="#${name}"></use></svg>`;
+}
+
+async function openPack(id) {
+  const profile = profileById(id);
+  if (!profile) return;
+  let contents = [];
+  try {
+    contents = await invoke("profile_contents", { id });
+  } catch {}
+  let filter = "all";
+  let query = "";
+  const kinds = [
+    ["mod", t("project.mods")],
+    ["resourcepack", t("project.resourcepacks")],
+    ["shader", t("project.shaders")],
+    ["datapack", t("project.datapacks")],
+  ];
+  const kindOf = (item) => item.kind || "mod";
+  const rows = () => {
+    const list = contents.filter((item) => (filter === "all" || kindOf(item) === filter) && (!query || item.name.toLowerCase().includes(query)));
+    if (!list.length) return `<div class="empty"><p>${esc(t("instances.emptySub"))}</p></div>`;
+    return list.map((item) => `<div class="pd-row">
+      <div class="pd-row-icon">${ico(kindOf(item) === "shader" ? "i-sparkles" : kindOf(item) === "resourcepack" ? "i-palette" : "i-box")}</div>
+      <div class="pd-row-main"><b>${esc(item.name)}</b><span>${esc(item.file)}</span></div>
+      <span class="chip">${esc(i18n.bytes(item.size || 0))}</span>
+      <button class="btn btn-quiet icon-only" data-pack-remove="${esc(item.file)}" data-kind="${esc(kindOf(item))}" title="${esc(t("common.delete"))}">${ico("i-trash")}</button>
+    </div>`).join("");
+  };
+  const count = (kind) => contents.filter((item) => kindOf(item) === kind).length;
+  const html = `
+    <button class="modal-close" data-close aria-label="${esc(t("window.close"))}">${ico("i-close")}</button>
+    <div class="pack-head">
+      ${profile.icon ? `<img class="pack-cover" src="${esc(profile.icon)}" alt="">` : `<span class="pack-cover">${ico("i-layers")}</span>`}
+      <div class="pack-title">
+        <h2>${esc(profile.name)}</h2>
+        <p>${esc(profile.versionId)} · ${esc(profile.loader || "vanilla")}${profile.loaderVersion ? ` ${esc(profile.loaderVersion)}` : ""}</p>
+        <div class="pack-actions">
+          <button class="btn btn-primary" id="pack-play">${ico("i-play")}<span>${esc(t("common.play"))}</span></button>
+          <button class="btn btn-soft" id="pack-add">${ico("i-plus")}<span>${esc(t("discover.addContent"))}</span></button>
+          <button class="btn btn-quiet" id="pack-repair">${ico("i-shield")}<span>${esc(t("discover.repair"))}</span></button>
+        </div>
+      </div>
+    </div>
+    <div class="pd-subtabs" id="pack-kinds">
+      <button class="pd-subtab is-on" data-packkind="all">${esc(t("project.overview"))} ${contents.length}</button>
+      ${kinds.map(([k, label]) => `<button class="pd-subtab" data-packkind="${k}">${esc(label)} ${count(k)}</button>`).join("")}
+    </div>
+    <div class="pd-search"><input class="input" id="pack-search" placeholder="${esc(t("project.search"))}"></div>
+    <div class="pd-rows" id="pack-rows">${rows()}</div>
+    <div class="pack-add" id="pack-add-panel" hidden>
+      <div class="pd-subtabs" id="pack-add-kinds">
+        ${kinds.map(([k, label], i) => `<button class="pd-subtab ${i === 0 ? "is-on" : ""}" data-addkind="${k}">${esc(label)}</button>`).join("")}
+      </div>
+      <div class="pd-search"><input class="input" id="pack-add-search" placeholder="${esc(t("discover.search"))}"></div>
+      <div class="pack-results" id="pack-add-results"></div>
+    </div>`;
+  openModal(html, () => {
+    const host = $("#pack-rows");
+    const paint = () => {
+      host.innerHTML = rows();
+      applyImgFallback(host, "img", artFor);
+    };
+    $("#pack-kinds").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-packkind]");
+      if (!btn) return;
+      filter = btn.dataset.packkind;
+      $$("#pack-kinds .pd-subtab").forEach((el) => el.classList.toggle("is-on", el === btn));
+      paint();
+    });
+    $("#pack-search").addEventListener("input", (e) => {
+      query = e.target.value.trim().toLowerCase();
+      paint();
+    });
+    host.addEventListener("click", async (e) => {
+      const remove = e.target.closest("[data-pack-remove]");
+      if (!remove) return;
+      try {
+        await invoke("profile_file_remove", { id, file: remove.dataset.packRemove, kind: remove.dataset.kind });
+        contents = await invoke("profile_contents", { id });
+        paint();
+        toast(t("toast.removed"));
+      } catch (err) {
+        toast(friendly(err), "err");
+      }
+    });
+    $("#pack-play").addEventListener("click", () => {
+      closeModal();
+      activateProfile(id, true);
+    });
+    $("#pack-add").addEventListener("click", () => {
+      $("#pack-add-panel").hidden = !$("#pack-add-panel").hidden;
+    });
+    $("#pack-repair").addEventListener("click", async () => {
+      try {
+        await invoke("mods_repair", { version: profile.versionId, loader: profile.loader || "fabric", profile: id });
+        toast(t("toast.repaired"));
+      } catch (err) {
+        toast(friendly(err), "err");
+      }
+    });
+    let addKind = "mod";
+    const search = async () => {
+      const q = $("#pack-add-search").value.trim();
+      if (!q) return;
+      const box = $("#pack-add-results");
+      box.innerHTML = `<div class="empty"><p>${esc(t("common.loading"))}</p></div>`;
+      try {
+        const results = await invoke("catalog_search", {
+          query: q,
+          kind: addKind,
+          version: profile.versionId,
+          loader: addKind === "mod" ? profile.loader || "fabric" : null,
+          provider: "both",
+        });
+        box.innerHTML = results.length
+          ? results.slice(0, 12).map((hit) => `<div class="pd-row">
+              <div class="pd-row-icon">${hit.icon ? `<img src="${esc(hit.icon)}" alt="">` : icon("i-box")}</div>
+              <div class="pd-row-main"><b>${esc(hit.title)}</b><span>${esc(hit.author || "")} · ${esc(i18n.number(hit.downloads || 0))}</span></div>
+              <button class="btn btn-soft btn-sm" data-pack-install="${esc(hit.id)}" data-provider="${esc(hit.provider || "modrinth")}">${esc(t("common.install"))}</button>
+            </div>`).join("")
+          : `<div class="empty"><p>${esc(t("discover.noResults"))}</p></div>`;
+        applyImgFallback(box, "img", artFor);
+      } catch (err) {
+        box.innerHTML = `<div class="empty"><p>${esc(friendly(err))}</p></div>`;
+      }
+    };
+    $("#pack-add-kinds").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-addkind]");
+      if (!btn) return;
+      addKind = btn.dataset.addkind;
+      $$("#pack-add-kinds .pd-subtab").forEach((el) => el.classList.toggle("is-on", el === btn));
+      $("#pack-add-results").innerHTML = "";
+    });
+    let timer;
+    $("#pack-add-search").addEventListener("input", () => {
+      clearTimeout(timer);
+      timer = setTimeout(search, 380);
+    });
+    $("#pack-add-results").addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-pack-install]");
+      if (!btn) return;
+      btn.disabled = true;
+      try {
+        const outcome = await invoke("mods_install", {
+          project: btn.dataset.packInstall,
+          version: profile.versionId,
+          loader: profile.loader || "fabric",
+          kind: addKind,
+          provider: btn.dataset.provider,
+          profile: id,
+        });
+        contents = await invoke("profile_contents", { id });
+        paint();
+        toast(t("toast.modInstalled", { count: outcome?.installed?.length || 1 }));
+      } catch (err) {
+        toast(friendly(err), "err");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }, true);
+  applyImgFallback($("#modal-root"), "img", artFor);
+}
+
+async function openGameDefaults() {
+  let o = {};
+  try {
+    o = await invoke("game_defaults");
+  } catch {}
+  const bool = (value) => (value === true ? "true" : value === false ? "false" : "");
+  const html = `
+    <h3>${esc(t("set.gameDefaults"))}</h3>
+    <p>${esc(t("set.gameDefaultsSub"))}</p>
+    <div class="opt-grid">
+      ${optionSelect("language", t("opt.language"), MC_LANGUAGES, o.language)}
+      ${optionNumber("maxFps", t("opt.maxFps"), o.maxFps, 10, 1000)}
+      ${optionSelect("vsync", "VSync", [["true", t("opt.on")], ["false", t("opt.off")]], bool(o.vsync))}
+      ${optionNumber("guiScale", t("opt.guiScale"), o.guiScale, 1, 4)}
+      ${optionNumber("renderDistance", t("opt.renderDistance"), o.renderDistance, 2, 32)}
+      ${optionSelect("graphics", t("opt.graphics"), [["fast", t("opt.fast")], ["fancy", t("opt.fancy")], ["fabulous", t("opt.fabulous")]], o.graphics)}
+      ${optionSelect("particles", t("opt.particles"), [["all", t("opt.particlesAll")], ["decreased", t("opt.particlesDecreased")], ["minimal", t("opt.particlesMinimal")]], o.particles)}
+      ${optionSelect("music", t("opt.music"), [["true", t("opt.on")], ["false", t("opt.off")]], bool(o.music))}
+      ${optionSelect("sound", t("opt.sound"), [["true", t("opt.on")], ["false", t("opt.off")]], bool(o.sound))}
+      ${optionSelect("fullscreen", "Fullscreen", [["true", t("opt.on")], ["false", t("opt.off")]], bool(o.fullscreen))}
+      ${optionSelect("gpu", t("opt.gpu"), [["high", t("opt.gpuHigh")], ["default", t("opt.gpuDefault")]], o.gpu)}
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-soft" data-close>${esc(t("common.cancel"))}</button>
+      <button class="btn btn-primary" id="gd-save">${esc(t("common.save"))}</button>
+    </div>`;
+  openModal(html, () => {
+    $("#gd-save").addEventListener("click", async () => {
+      const result = {};
+      $$("[data-opt]").forEach((el) => {
+        const value = el.value;
+        if (!value) return;
+        result[el.dataset.opt] = value === "true" ? true : value === "false" ? false : value;
+      });
+      $$("[data-optnum]").forEach((el) => {
+        if (el.value === "") return;
+        const n = Number(el.value);
+        if (Number.isFinite(n)) result[el.dataset.optnum] = n;
+      });
+      try {
+        await invoke("set_game_defaults", { defaults: result });
+        await refreshBoot();
+        closeModal();
+        toast(t("toast.optionsSaved"));
+      } catch (err) {
+        toast(friendly(err), "err");
+      }
+    });
+  });
 }
 
 function openInstanceOptions(id) {
@@ -1667,6 +1971,7 @@ function fillSettings() {
   setSegmented("#radius-choice", "data-radius-choice", s.uiRadius || "soft");
   setSegmented("#density-choice", "data-density-choice", s.uiDensity || "normal");
   setSegmented("#bg-choice", "data-bg-choice", s.uiBackground || "ocean");
+  if ($("#bg-custom")) $("#bg-custom").value = s.uiBgCustom || "#071420";
   setSegmented("#wall-choice", "data-wall", s.uiWallpaper || "deep");
   setSegmented("#side-choice", "data-side-choice", s.uiSidebar || "left");
   setSegmented("#rail-choice", "data-rail-choice", s.uiSidebarMode || "full");
@@ -1693,6 +1998,8 @@ function fillSettings() {
   setSwitch("#snapshots-switch", s.showSnapshots !== false);
   setSwitch("#old-switch", s.showOld !== false);
   setSwitch("#auto-update-switch", s.autoUpdate !== false);
+  setSwitch("#discord-switch", s.discordRpc === true);
+  if ($("#discord-client")) $("#discord-client").value = s.discordClientId || "";
   setSwitch("#flags-switch", s.optimizedFlags !== false);
   setSwitch("#auto-java-switch", s.autoJava !== false);
   setSwitch("#strict-switch", s.strictMods !== false);
@@ -1910,10 +2217,14 @@ function bindSettings() {
   bindSegChoice("#radius-choice", "data-radius-choice", "uiRadius", () => applyAppearance(S.settings));
   bindSegChoice("#density-choice", "data-density-choice", "uiDensity", () => applyAppearance(S.settings));
   bindSegChoice("#bg-choice", "data-bg-choice", "uiBackground", () => applyAppearance(S.settings));
-  bindSegChoice("#wall-choice", "data-wall", "uiWallpaper", () => {
-    S.settings.uiWallpaperPath = null;
+  $("#bg-custom")?.addEventListener("input", (e) => {
+    S.settings.uiBackground = "custom";
+    S.settings.uiBgCustom = e.target.value;
+    setSegmented("#bg-choice", "data-bg-choice", "custom");
     applyAppearance(S.settings);
+    markDirty();
   });
+  bindSegChoice("#wall-choice", "data-wall", "uiWallpaper", () => applyAppearance(S.settings));
   bindSegChoice("#side-choice", "data-side-choice", "uiSidebar", () => applyAppearance(S.settings));
   bindSegChoice("#rail-choice", "data-rail-choice", "uiSidebarMode", () => applyAppearance(S.settings));
   bindSegChoice("#play-pos-choice", "data-play-pos", "uiPlayPosition", () => applyAppearance(S.settings));
@@ -1959,6 +2270,12 @@ function bindSettings() {
     }
   });
 
+  $("#wall-clear").addEventListener("click", () => {
+    S.settings.uiWallpaperPath = null;
+    applyAppearance(S.settings);
+    markDirty();
+  });
+
   bindSwitch("#motion-switch", "uiMotion", () => applyAppearance(S.settings));
   bindSwitch("#fullscreen-switch", "fullscreen");
   bindSwitch("#close-switch", "closeOnLaunch");
@@ -1966,6 +2283,11 @@ function bindSettings() {
   bindSwitch("#snapshots-switch", "showSnapshots", () => { renderAll(); });
   bindSwitch("#old-switch", "showOld", () => { renderAll(); });
   bindSwitch("#auto-update-switch", "autoUpdate");
+  bindSwitch("#discord-switch", "discordRpc");
+  $("#discord-client")?.addEventListener("input", (e) => {
+    S.settings.discordClientId = e.target.value.trim();
+    markDirty();
+  });
   bindSwitch("#flags-switch", "optimizedFlags");
   bindSwitch("#auto-java-switch", "autoJava");
   bindSwitch("#strict-switch", "strictMods");
@@ -2021,6 +2343,7 @@ function bindSettings() {
     }
   });
   $("#update-check").addEventListener("click", () => checkUpdate(true));
+  $("#game-defaults-edit").addEventListener("click", openGameDefaults);
   $("#update-open").addEventListener("click", () => {
     if (S.update?.path) installUpdate();
     else if (S.update?.available) downloadUpdate();
@@ -2051,6 +2374,19 @@ function bindSettings() {
       await refreshBoot();
       renderAll();
       toast(t("toast.statsReset"));
+    } catch (err) { toast(friendly(err), "err"); }
+  });
+  $("#factory-reset").addEventListener("click", async () => {
+    const ok = await confirmAction(t("confirm.resetSettings"), t("confirm.resetSettingsText"), t("common.reset"));
+    if (!ok) return;
+    try {
+      await invoke("reset_settings");
+      await refreshBoot();
+      applyAppearance(S.settings);
+      i18n.init(S.settings.language || "auto");
+      i18n.apply(document);
+      renderAll();
+      toast(t("toast.settingsReset"));
     } catch (err) { toast(friendly(err), "err"); }
   });
   $("#about-github").addEventListener("click", () => openUrl(LINKS.github));
@@ -2193,6 +2529,13 @@ function bindDiscover() {
   });
   $("#discover-loader").addEventListener("change", (e) => {
     S.discoverLoader = e.target.value;
+    searchDiscover();
+  });
+  $("#discover-provider").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-provider]");
+    if (!btn) return;
+    S.discoverProvider = btn.dataset.provider;
+    $$("#discover-provider [data-provider]").forEach((el) => el.classList.toggle("is-on", el === btn));
     searchDiscover();
   });
   $("#discover-refresh").addEventListener("click", () => searchDiscover());
@@ -2354,7 +2697,12 @@ function bindStatic() {
   });
   $("#version-menu").addEventListener("click", (e) => {
     const item = e.target.closest("[data-pick]");
-    if (item) setSelected(item.dataset.pick);
+    if (!item) return;
+    if (item.dataset.profilePick) {
+      closeVersionMenu();
+      return activateProfile(item.dataset.profilePick);
+    }
+    setSelected(item.dataset.pick);
   });
   document.addEventListener("click", (e) => {
     if (!e.target.closest(".select-wrap")) closeVersionMenu();

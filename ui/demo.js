@@ -56,6 +56,7 @@ let runTimer = null;
 
 const platform = /Mac/i.test(navigator.userAgent) ? "macos" : /Linux/i.test(navigator.userAgent) ? "linux" : "windows";
 
+const packExtras = new Map();
 let profiles = [
   {
     id: "instance-vanilla",
@@ -129,16 +130,20 @@ let settings = {
   uiNav: JSON.stringify(["home", "library", "instances", "discover", "accounts"]),
   uiLayout: JSON.stringify(["stats", "pc", "latest", "instances", "console"]),
   uiBackground: pick("bg", "ocean"),
+  uiBgCustom: "#071420",
   uiGrain: true,
   uiGlass: 62,
   uiPlayPosition: pick("playpos", "left"),
   strictMods: true,
   autoUpdate: true,
+  discordRpc: false,
+  discordClientId: "",
   allowExperimental: false,
   showSnapshots: true,
   showOld: true,
   language: pick("lang", "ru"),
 };
+const defaultSettings = structuredClone(settings);
 
 function config() {
   return { settings, accounts, active, lastVersion, profiles, activeProfile, stats };
@@ -163,8 +168,7 @@ const MODS = [
   { id: "bsl", slug: "bsl-shaders", title: "BSL Shaders", author: "capttatsu", description: "Cinematic lighting with a soft palette.", icon: null, downloads: 19_881_402, categories: ["shaders"], kind: "shader" },
 ];
 
-let installedMods = [
-  { file: "fabric-api-0.130.0+26.3.jar", name: "Fabric API", id: "fabric-api", version: "0.130.0", loader: "fabric", size: 1_930_482, depends: [], risk: "low", notes: [] },
+let installedMods = [  { file: "fabric-api-0.130.0+26.3.jar", name: "Fabric API", id: "fabric-api", version: "0.130.0", loader: "fabric", size: 1_930_482, depends: [], risk: "low", notes: [] },
   { file: "iris-fabric-1.11.7+mc26.3.jar", name: "Iris Shaders", id: "iris", version: "1.11.7", loader: "fabric", size: 2_741_882, depends: ["sodium"], risk: "low", notes: [] },
   { file: "lithium-fabric-0.18.4+mc26.3.jar", name: "Lithium", id: "lithium", version: "0.18.4", loader: "fabric", size: 641_220, depends: [], risk: "low", notes: [] },
   { file: "sodium-extra-0.6.3.jar", name: "Sodium Extra", id: "sodium-extra", version: "0.6.3", loader: "fabric", size: 318_442, depends: ["sodium", "fabric-api"], risk: "medium", notes: ["sodium_extra.class touches memory directly"] },
@@ -244,7 +248,7 @@ const handlers = {
       gameDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher\\minecraft" : "/home/sviat/.local/share/AquaLauncher/minecraft",
       activeDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher\\minecraft\\profiles\\instance-vanilla" : "/home/sviat/.local/share/AquaLauncher/minecraft/profiles/instance-vanilla",
       dataDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher" : "/home/sviat/.local/share/AquaLauncher",
-      appVersion: "0.0.2-beta",
+      appVersion: "0.0.3-beta",
       running,
       lastVersion,
       profiles,
@@ -331,6 +335,11 @@ const handlers = {
     return null;
   },
 
+  async reset_settings() {
+    settings = { ...structuredClone(defaultSettings), language: pick("lang", "ru") };
+    return config();
+  },
+
   async ms_login() {
     setTimeout(() => {
       const account = { id: `ms-${Date.now()}`, kind: "microsoft", name: "NewDiver", accessToken: "demo", refreshToken: "demo", expiresAt: now() + 86_400 };
@@ -364,6 +373,26 @@ const handlers = {
     await sleep(200);
     return UNSPLASH;
   },
+  async pick_folder() {
+    await sleep(200);
+    return "C:\\Users\\demo\\curseforge\\minecraft\\Instances";
+  },
+  profile_import({ path }) {
+    if (!path) throw new Error("import_path_invalid");
+    const id = `import-${Date.now()}`;
+    profiles.push({
+      id,
+      name: "Imported Adventure",
+      versionId: "1.21.1",
+      loader: "forge",
+      loaderVersion: "52.0.1",
+      dir: `profiles/${id}`,
+      icon: null,
+      createdAt: Math.floor(Date.now() / 1000),
+      options: {},
+    });
+    return config();
+  },
   async pick_java() {
     await sleep(120);
     return "C:\\Program Files\\GraalVM\\graalvm-jdk-21\\bin\\java.exe";
@@ -395,19 +424,48 @@ const handlers = {
     return config();
   },
 
-  profile_create({ name, versionId }) {
+  game_defaults() {
+    return settings.gameDefaults || {};
+  },
+
+  set_game_defaults({ defaults }) {
+    settings.gameDefaults = defaults || {};
+    return config();
+  },
+
+  profile_contents({ id }) {
+    const profile = profiles.find((p) => p.id === id);
+    if (!profile) throw new Error("profile_not_found");
+    return [
+      { file: "sodium-0.6.9.jar", name: "Sodium", kind: "mod", size: 1_240_000 },
+      { file: "iris-1.8.1.jar", name: "Iris Shaders", kind: "mod", size: 2_980_000 },
+      { file: "fabric-api-0.110.0.jar", name: "Fabric API", kind: "mod", size: 2_100_000 },
+      { file: "Faithful-32x.zip", name: "Faithful 32x", kind: "resourcepack", size: 14_800_000 },
+      { file: "Complementary.zip", name: "Complementary Reimagined", kind: "shader", size: 4_300_000 },
+      { file: "Terralith.zip", name: "Terralith", kind: "datapack", size: 9_200_000 },
+    ].concat(packExtras.get(id) || []);
+  },
+
+  profile_file_remove({ id, file }) {
+    const extra = packExtras.get(id);
+    if (extra) packExtras.set(id, extra.filter((m) => m.file !== file));
+    return null;
+  },
+
+  profile_create({ name, versionId, loader: wanted, loaderVersion, icon }) {
     if (!name || !name.trim()) throw new Error("profile_name_empty");
-    if (!local.some((v) => v.id === versionId)) throw new Error("version_not_installed");
+    if (!versionId || !versionId.trim()) throw new Error("profile_version_empty");
     const id = `instance-${Date.now()}`;
     const lower = versionId.toLowerCase();
-    const loader = lower.includes("neoforge") ? "neoforge" : lower.includes("forge") ? "forge" : lower.includes("fabric") ? "fabric" : "vanilla";
+    const loader = wanted || (lower.includes("neoforge") ? "neoforge" : lower.includes("forge") ? "forge" : lower.includes("fabric") ? "fabric" : "vanilla");
     const profile = {
       id,
       name: name.trim(),
       versionId,
       loader,
+      loaderVersion: loaderVersion || null,
       dir: `profiles/${id}`,
-      icon: null,
+      icon: icon || null,
       createdAt: now(),
       options: {},
     };
@@ -431,14 +489,14 @@ const handlers = {
   check_update() {
     const demo = new URLSearchParams(location.search).has("update");
     return {
-      current: "0.0.2-beta",
-      latest: demo ? "0.0.3-beta" : "0.0.2-beta",
+      current: "0.0.3-beta",
+      latest: demo ? "0.0.4-beta" : "0.0.3-beta",
       url: "https://github.com/227375488489/aqua-launcher/releases",
-      notes: demo ? "## Beta 0.0.3\n\n- Auto update test\n- Experimental versions toggle" : "",
+      notes: demo ? "## Beta 0.0.4\n\n- Catalog from Modrinth and CurseForge\n- Pack page with content and add-content\n- Pack import and global game defaults" : "",
       published: date(Date.now() - 3 * day),
       available: demo,
-      asset: demo ? "https://github.com/227375488489/aqua-launcher/releases/download/v0.0.3-beta/Aqua.Launcher_0.0.3-beta_x64-setup.exe" : "",
-      assetName: demo ? "Aqua.Launcher_0.0.3-beta_x64-setup.exe" : "",
+      asset: demo ? "https://github.com/227375488489/aqua-launcher/releases/download/v0.0.4-beta/Aqua.Launcher_0.0.4-beta_x64-setup.exe" : "",
+      assetName: demo ? "Aqua.Launcher_0.0.4-beta_x64-setup.exe" : "",
     };
   },
 
@@ -530,6 +588,49 @@ const handlers = {
     return MODS.filter((m) => m.kind === wanted && (!term || m.title.toLowerCase().includes(term) || m.description.toLowerCase().includes(term)));
   },
 
+  curse_search({ query, kind }) {
+    const term = (query ?? "").toLowerCase();
+    const wanted = kind || "mod";
+    return MODS.filter((m) => m.kind === wanted && (!term || m.title.toLowerCase().includes(term) || m.description.toLowerCase().includes(term)))
+      .slice(0, 6)
+      .map((m) => ({ ...m, id: `cf:${m.slug || m.id}`, provider: "curseforge", sources: ["curseforge"] }));
+  },
+
+  catalog_search({ query, kind, provider }) {
+    const source = provider || "modrinth";
+    const pick = (fn) => fn({ query, kind });
+    let hits = [];
+    if (source !== "curseforge") hits = hits.concat(pick((args) => handlers.modrinth_search(args)).map((m) => ({ ...m, provider: "modrinth", sources: ["modrinth"] })));
+    if (source !== "modrinth") hits = hits.concat(pick((args) => handlers.curse_search(args)));
+    if (source === "both") {
+      const merged = [];
+      for (const hit of hits) {
+        const found = merged.find((m) => m.title.toLowerCase() === hit.title.toLowerCase());
+        if (found) {
+          found.downloads += hit.downloads;
+          found.provider = "both";
+          found.sources = [...new Set([...(found.sources || []), ...(hit.sources || [])])];
+        } else merged.push({ ...hit });
+      }
+      hits = merged;
+    }
+    return hits.sort((a, b) => b.downloads - a.downloads);
+  },
+
+  async curse_project({ project }) {
+    const id = String(project).replace(/^cf:/, "");
+    const hit = MODS.find((m) => m.id === id || m.slug === id) || MODS[0];
+    const detail = await handlers.modrinth_project({ project: hit.id });
+    return {
+      ...detail,
+      id: `cf:${id}`,
+      title: hit.title,
+      sourceUrl: "https://www.curseforge.com/minecraft",
+      gallery: detail.gallery,
+      versions: (detail.versions || []).map((v, i) => ({ ...v, id: `cf:${id}-${i}` })),
+    };
+  },
+
   mods_list: () => installedMods,
 
   mods_health: () => ({
@@ -539,10 +640,19 @@ const handlers = {
       : [],
   }),
 
-  async mods_install({ project, kind }) {
+  async mods_install({ project, kind, profile }) {
     await sleep(700);
-    const found = MODS.find((m) => m.id === project || m.slug === project);
-    if (!found) throw new Error("modrinth");
+    const plain = String(project).replace(/^cf:/, "");
+    const found = MODS.find((m) => m.id === project || m.slug === project || m.id === plain || m.slug === plain);
+    if (!found) throw new Error("catalog");
+    const file = `${found.slug}-1.0.0.jar`;
+    if (profile) {
+      const extra = packExtras.get(profile) || [];
+      if (!extra.some((m) => m.file === file)) {
+        extra.push({ file, name: found.title, kind: kind || "mod", size: 480_000 });
+        packExtras.set(profile, extra);
+      }
+    }
     if (!installedMods.some((m) => m.id === found.slug || m.id === found.id)) {
       installedMods = [{
         file: `${found.slug}-1.0.0.jar`,

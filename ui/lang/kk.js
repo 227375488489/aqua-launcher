@@ -57,6 +57,7 @@ export default {
     emptySub: "Басқа сұраныс немесе сүзгі көріңіз.",
   },
   discover: {
+    addContent: "Мазмұн қосу",
     title: "Модтар мен жинақтар",
     sub: "Modrinth-тан тексерілген жобалар — тәуелділіктермен және қауіпсіздік тексеруімен.",
     mods: "Модтар",
@@ -79,6 +80,7 @@ export default {
     risk: { high: "Жоғары қауіп", medium: "Тексеру", safe: "Таза" },
   },
   instances: {
+    import: "Жинақты импорттау",
     title: "Жинақтар",
     sub: "Әр жинақ үшін бөлек әлемдер — өз модтары, конфигтері және сақтаулары.",
     create: "Жаңа жинақ",
@@ -119,6 +121,15 @@ export default {
     unsaved: "Сақталмаған өзгерістер",
   },
   set: {
+    "wall.clear": "Суретті жою",
+    factoryReset: "Әдепкіге қайтару",
+    factoryResetSub: "Көрініс, ойын, өнімділік және Java әдепкі мәндерге қайтарылады.",
+    discord: "Discord Rich Presence",
+    discordSub: "Лаунчер мен іске қосылған нұсқаны Discord профилінде көрсету.",
+    discordId: "Discord қолданбасының ID-і",
+    discordIdSub: "discord.com/developers сайтында қолданба жасап, оның Application ID-ін қойыңыз.",
+    gameDefaults: "Барлық жинақтар үшін ойын параметрлері",
+    gameDefaultsSub: "Әдепкі тіл, FPS және графика — жаңа жинақтар оларды қабылдайды.",
     appearance: "Көрініс",
     layout: "Орналасу",
     game: "Ойын",
@@ -265,6 +276,8 @@ export default {
     files: "файл",
   },
   errors: {
+    importUnknown: "Бұл қалтадан MultiMC, CurseForge немесе Modrinth жинағы табылмады",
+    importPath: "Жинақ қалтасын таңдаңыз",
     generic: "Бірдеңе дұрыс болмады",
     network: "Желі жоқ — байланысты тексеріңіз",
     notInstalled: "Бұл нұсқа әлі орнатылмаған",
@@ -278,6 +291,8 @@ export default {
     modrinth: "Modrinth жауап бермейді",
   },
   toast: {
+    imported: "Жинақ импортталды",
+    settingsReset: "Параметрлер әдепкіге қайтарылды",
     saved: "Параметрлер сақталды",
     installed: "{version} орнатылды",
     installDone: "{version} ойнауға дайын",
@@ -301,6 +316,8 @@ export default {
     langChanged: "Тіл жаңартылды",
   },
   confirm: {
+    resetSettings: "Параметрлерді әдепкіге қайтару керек пе?",
+    resetSettingsText: "Көрініс, ойын, өнімділік және Java әдепкіге қайтарылады. Аккаунттар, жинақтар мен нұсқалар сақталады.",
     deleteVersion: "Нұсқаны жою керек пе?",
     deleteVersionText: "{id} файлдары осы компьютерден жойылады.",
     deleteProfile: "Жинақты жою керек пе?",

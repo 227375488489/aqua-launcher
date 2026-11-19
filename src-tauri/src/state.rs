@@ -46,8 +46,10 @@ pub struct Settings {
     pub ui_nav: String,
     /// JSON: порядок и видимость виджетов главного экрана.
     pub ui_layout: String,
-    /// ocean | aurora | nebula | plain
+    /// ocean | aurora | nebula | plain | custom
     pub ui_background: String,
+    /// Свой цвет фона для ui_background == "custom".
+    pub ui_bg_custom: String,
     pub ui_grain: bool,
     /// 0..100, непрозрачность стеклянных панелей.
     pub ui_glass: u32,
@@ -61,8 +63,14 @@ pub struct Settings {
     pub allow_experimental: bool,
     /// Скачивать обновления лаунчера автоматически.
     pub auto_update: bool,
+    /// Показывать активность лаунчера в Discord.
+    pub discord_rpc: bool,
+    /// ID приложения Discord для Rich Presence.
+    pub discord_client_id: String,
     // --- безопасность ---
     pub strict_mods: bool,
+    /// Базовые игровые настройки, наследуемые новыми сборками.
+    pub game_defaults: InstanceOptions,
 }
 
 impl Default for Settings {
@@ -99,6 +107,7 @@ impl Default for Settings {
             ui_nav: String::new(),
             ui_layout: String::new(),
             ui_background: "ocean".into(),
+            ui_bg_custom: "#071420".into(),
             ui_grain: true,
             ui_glass: 62,
             ui_play_position: "left".into(),
@@ -106,7 +115,10 @@ impl Default for Settings {
             show_old: true,
             allow_experimental: false,
             auto_update: true,
+            discord_rpc: false,
+            discord_client_id: String::new(),
             strict_mods: true,
+            game_defaults: InstanceOptions::default(),
         }
     }
 }
@@ -131,6 +143,25 @@ pub struct InstanceOptions {
     pub gpu: Option<String>,
 }
 
+impl InstanceOptions {
+    /// Overlay this instance's explicit choices on top of the global defaults.
+    pub fn with_defaults(&self, base: &Self) -> Self {
+        Self {
+            language: self.language.clone().or_else(|| base.language.clone()),
+            max_fps: self.max_fps.or(base.max_fps),
+            vsync: self.vsync.or(base.vsync),
+            gui_scale: self.gui_scale.or(base.gui_scale),
+            render_distance: self.render_distance.or(base.render_distance),
+            graphics: self.graphics.clone().or_else(|| base.graphics.clone()),
+            particles: self.particles.clone().or_else(|| base.particles.clone()),
+            music: self.music.or(base.music),
+            sound: self.sound.or(base.sound),
+            fullscreen: self.fullscreen.or(base.fullscreen),
+            gpu: self.gpu.clone().or_else(|| base.gpu.clone()),
+        }
+    }
+}
+
 /// Изолированная сборка: своя папка игры, свои моды и миры.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -141,6 +172,9 @@ pub struct Profile {
     pub version_id: String,
     /// vanilla | fabric | quilt | forge | neoforge | modpack
     pub loader: String,
+    /// Выбранная версия загрузчика (может быть ещё не установлена).
+    #[serde(default)]
+    pub loader_version: Option<String>,
     /// Путь относительно корня игры, например `profiles/my-pack`.
     pub dir: String,
     #[serde(default)]

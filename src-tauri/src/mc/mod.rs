@@ -1,5 +1,6 @@
 pub mod assets;
 pub mod content;
+pub mod curse;
 pub mod fabric;
 pub mod forge;
 pub mod install;

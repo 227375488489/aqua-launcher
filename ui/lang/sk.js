@@ -57,6 +57,7 @@ export default {
     emptySub: "Skús iné hľadanie alebo filter.",
   },
   discover: {
+    addContent: "Pridať obsah",
     title: "Mody a modpacky",
     sub: "Overené projekty z Modrinthu — so závislosťami a bezpečnostnou kontrolou.",
     mods: "Mody",
@@ -79,6 +80,7 @@ export default {
     risk: { high: "Vysoké riziko", medium: "Skontrolovať", safe: "Čisté" },
   },
   instances: {
+    import: "Importovať balíček",
     title: "Inštancie",
     sub: "Oddelené svety pre každý pack — vlastné mody, konfigy a uložené hry.",
     create: "Nová inštancia",
@@ -119,6 +121,15 @@ export default {
     unsaved: "Neuložené zmeny",
   },
   set: {
+    "wall.clear": "Odstrániť obrázok",
+    factoryReset: "Obnoviť predvolené",
+    factoryResetSub: "Obnoví predvolený vzhľad, hru, výkon a Java.",
+    discord: "Discord Rich Presence",
+    discordSub: "Zobrazovať launcher a spustenú verziu v profile Discord.",
+    discordId: "ID aplikácie Discord",
+    discordIdSub: "Vytvorte aplikáciu na discord.com/developers a vložte jej Application ID.",
+    gameDefaults: "Nastavenia hry pre všetky balíčky",
+    gameDefaultsSub: "Predvolený jazyk, FPS a grafika — nové balíčky ich zdedia.",
     appearance: "Vzhľad",
     layout: "Rozloženie",
     game: "Hra",
@@ -265,6 +276,8 @@ export default {
     files: "súborov",
   },
   errors: {
+    importUnknown: "V tomto priečinku sa nenašiel balíček MultiMC, CurseForge ani Modrinth",
+    importPath: "Vyberte priečinok balíčka",
     generic: "Niečo sa pokazilo",
     network: "Bez siete — skontroluj pripojenie",
     notInstalled: "Táto verzia ešte nie je nainštalovaná",
@@ -278,6 +291,8 @@ export default {
     modrinth: "Modrinth neodpovedá",
   },
   toast: {
+    imported: "Balíček importovaný",
+    settingsReset: "Nastavenia obnovené na predvolené",
     saved: "Nastavenia uložené",
     installed: "{version} nainštalovaná",
     installDone: "{version} je pripravená",
@@ -301,6 +316,8 @@ export default {
     langChanged: "Jazyk aktualizovaný",
   },
   confirm: {
+    resetSettings: "Obnoviť predvolené nastavenia?",
+    resetSettingsText: "Vzhľad, hra, výkon a Java sa vrátia na predvolené. Účty, balíčky a verzie zostanú.",
     deleteVersion: "Odstrániť verziu?",
     deleteVersionText: "Súbory {id} budú z tohto PC odstránené.",
     deleteProfile: "Odstrániť inštanciu?",

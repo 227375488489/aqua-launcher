@@ -57,6 +57,7 @@ export default {
     emptySub: "Essayez une autre recherche ou un autre filtre.",
   },
   discover: {
+    addContent: "Ajouter du contenu",
     title: "Mods et modpacks",
     sub: "Projets Modrinth vérifiés, avec dépendances et analyse de sécurité.",
     mods: "Mods",
@@ -79,6 +80,7 @@ export default {
     risk: { high: "Risque élevé", medium: "À vérifier", safe: "Sain" },
   },
   instances: {
+    import: "Importer un pack",
     title: "Instances",
     sub: "Des mondes isolés pour chaque pack — mods, configs et sauvegardes séparés.",
     create: "Nouvelle instance",
@@ -119,6 +121,15 @@ export default {
     unsaved: "Modifications non enregistrées",
   },
   set: {
+    "wall.clear": "Retirer l’image",
+    factoryReset: "Réinitialiser",
+    factoryResetSub: "Restaure l’apparence, le jeu, les performances et Java.",
+    discord: "Discord Rich Presence",
+    discordSub: "Afficher le launcher et la version lancée dans votre profil Discord.",
+    discordId: "ID d’application Discord",
+    discordIdSub: "Créez une application sur discord.com/developers et collez son Application ID.",
+    gameDefaults: "Paramètres de jeu pour tous les packs",
+    gameDefaultsSub: "Langue, FPS et graphismes par défaut — les nouveaux packs en héritent.",
     appearance: "Apparence",
     layout: "Disposition",
     game: "Jeu",
@@ -265,6 +276,8 @@ export default {
     files: "fichiers",
   },
   errors: {
+    importUnknown: "Aucun pack MultiMC, CurseForge ou Modrinth dans ce dossier",
+    importPath: "Choisissez un dossier de pack",
     generic: "Une erreur est survenue",
     network: "Réseau indisponible — vérifiez la connexion",
     notInstalled: "Cette version n’est pas encore installée",
@@ -278,6 +291,8 @@ export default {
     modrinth: "Modrinth ne répond pas",
   },
   toast: {
+    imported: "Pack importé",
+    settingsReset: "Paramètres réinitialisés",
     saved: "Réglages enregistrés",
     installed: "{version} installée",
     installDone: "{version} est prête",
@@ -301,6 +316,8 @@ export default {
     langChanged: "Langue mise à jour",
   },
   confirm: {
+    resetSettings: "Réinitialiser les paramètres ?",
+    resetSettingsText: "L’apparence, le jeu, les performances et Java reviendront aux valeurs par défaut. Les comptes, packs et versions restent.",
     deleteVersion: "Supprimer la version ?",
     deleteVersionText: "Les fichiers de {id} seront supprimés de ce PC.",
     deleteProfile: "Supprimer l’instance ?",

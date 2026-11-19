@@ -57,6 +57,7 @@ export default {
     emptySub: "Versuche eine andere Suche oder einen anderen Filter.",
   },
   discover: {
+    addContent: "Inhalt hinzufügen",
     title: "Mods und Modpacks",
     sub: "Geprüfte Modrinth-Projekte mit Abhängigkeiten und Sicherheitsscan.",
     mods: "Mods",
@@ -79,6 +80,7 @@ export default {
     risk: { high: "Hohes Risiko", medium: "Prüfen", safe: "Sauber" },
   },
   instances: {
+    import: "Paket importieren",
     title: "Instanzen",
     sub: "Getrennte Welten für jedes Pack — eigene Mods, Konfigs und Spielstände.",
     create: "Neue Instanz",
@@ -119,6 +121,15 @@ export default {
     unsaved: "Ungespeicherte Änderungen",
   },
   set: {
+    "wall.clear": "Bild entfernen",
+    factoryReset: "Zurücksetzen",
+    factoryResetSub: "Setzt Aussehen, Spiel, Leistung und Java zurück.",
+    discord: "Discord Rich Presence",
+    discordSub: "Launcher und laufende Version im Discord-Profil anzeigen.",
+    discordId: "Discord-App-ID",
+    discordIdSub: "Erstelle eine App auf discord.com/developers und füge ihre Application ID ein.",
+    gameDefaults: "Spieleinstellungen für alle Pakete",
+    gameDefaultsSub: "Standardsprache, FPS und Grafik — neue Pakete übernehmen sie.",
     appearance: "Darstellung",
     layout: "Layout",
     game: "Spiel",
@@ -265,6 +276,8 @@ export default {
     files: "Dateien",
   },
   errors: {
+    importUnknown: "In diesem Ordner wurde kein MultiMC-, CurseForge- oder Modrinth-Paket gefunden",
+    importPath: "Wähle einen Paketordner",
     generic: "Etwas ist schiefgelaufen",
     network: "Kein Netzwerk — Verbindung prüfen",
     notInstalled: "Diese Version ist noch nicht installiert",
@@ -278,6 +291,8 @@ export default {
     modrinth: "Modrinth antwortet nicht",
   },
   toast: {
+    imported: "Paket importiert",
+    settingsReset: "Einstellungen zurückgesetzt",
     saved: "Einstellungen gespeichert",
     installed: "{version} installiert",
     installDone: "{version} ist spielbereit",
@@ -301,6 +316,8 @@ export default {
     langChanged: "Sprache aktualisiert",
   },
   confirm: {
+    resetSettings: "Einstellungen zurücksetzen?",
+    resetSettingsText: "Aussehen, Spiel, Leistung und Java werden zurückgesetzt. Konten, Pakete und Versionen bleiben.",
     deleteVersion: "Version löschen?",
     deleteVersionText: "Dateien von {id} werden von diesem PC entfernt.",
     deleteProfile: "Instanz löschen?",

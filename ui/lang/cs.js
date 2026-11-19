@@ -57,6 +57,7 @@ export default {
     emptySub: "Zkus jiné hledání nebo filtr.",
   },
   discover: {
+    addContent: "Přidat obsah",
     title: "Mody a modpacky",
     sub: "Ověřené projekty z Modrinthu — se závislostmi a bezpečnostní kontrolou.",
     mods: "Mody",
@@ -79,6 +80,7 @@ export default {
     risk: { high: "Vysoké riziko", medium: "Zkontrolovat", safe: "Čisté" },
   },
   instances: {
+    import: "Importovat balíček",
     title: "Instance",
     sub: "Oddělené světy pro každý pack — vlastní mody, konfigy a uložené hry.",
     create: "Nová instance",
@@ -119,6 +121,15 @@ export default {
     unsaved: "Neuložené změny",
   },
   set: {
+    "wall.clear": "Odebrat obrázek",
+    factoryReset: "Obnovit výchozí",
+    factoryResetSub: "Obnoví výchozí vzhled, hru, výkon a Java.",
+    discord: "Discord Rich Presence",
+    discordSub: "Zobrazovat launcher a spuštěnou verzi v profilu Discord.",
+    discordId: "ID aplikace Discord",
+    discordIdSub: "Vytvořte aplikaci na discord.com/developers a vložte její Application ID.",
+    gameDefaults: "Nastavení hry pro všechny balíčky",
+    gameDefaultsSub: "Výchozí jazyk, FPS a grafika — nové balíčky je zdědí.",
     appearance: "Vzhled",
     layout: "Rozložení",
     game: "Hra",
@@ -265,6 +276,8 @@ export default {
     files: "souborů",
   },
   errors: {
+    importUnknown: "V této složce nebyl nalezen balíček MultiMC, CurseForge ani Modrinth",
+    importPath: "Vyberte složku balíčku",
     generic: "Něco se pokazilo",
     network: "Bez sítě — zkontroluj připojení",
     notInstalled: "Tato verze ještě není nainstalovaná",
@@ -278,6 +291,8 @@ export default {
     modrinth: "Modrinth neodpovídá",
   },
   toast: {
+    imported: "Balíček importován",
+    settingsReset: "Nastavení obnoveno na výchozí",
     saved: "Nastavení uloženo",
     installed: "{version} nainstalována",
     installDone: "{version} je připravena",
@@ -301,6 +316,8 @@ export default {
     langChanged: "Jazyk aktualizován",
   },
   confirm: {
+    resetSettings: "Obnovit výchozí nastavení?",
+    resetSettingsText: "Vzhled, hra, výkon a Java se vrátí na výchozí. Účty, balíčky a verze zůstanou.",
     deleteVersion: "Smazat verzi?",
     deleteVersionText: "Soubory {id} budou z tohoto PC odstraněny.",
     deleteProfile: "Smazat instanci?",

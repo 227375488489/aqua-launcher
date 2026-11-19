@@ -492,6 +492,7 @@ pub async fn install(
         name,
         version_id,
         loader: "modpack".into(),
+        loader_version: None,
         dir: format!("profiles/{id}"),
         icon,
         created_at: now_secs(),
