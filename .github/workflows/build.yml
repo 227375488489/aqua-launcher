@@ -54,21 +54,21 @@ jobs:
           tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
           releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('Aqua Launcher {0}', github.ref_name) || '' }}
           releaseBody: |
-            Aqua Launcher 0.0.4 Beta — a fast, open Minecraft launcher built with Rust and Tauri.
+            Aqua Launcher 0.0.5 Beta — a fast, open Minecraft launcher built with Rust and Tauri.
 
             - Every Minecraft version, from the earliest alpha to the newest snapshot
             - Mods, modpacks, resource packs and shaders from Modrinth and CurseForge, separately or together
+            - Category filters and result counts across the whole catalog
+            - Rebuilt pack page: content tabs, inline "Add content" browser, real project icons
+            - Version menu with search, grouping and smooth scrolling
+            - Edit mode: drag widgets, rename headings and labels, reorder navigation
+            - Unified theme system: Light, Dark and OLED with any accent — surfaces, backdrop and taskbar icon follow it
+            - Unsaved-settings bar with save/discard, and leaving settings is blocked until resolved
+            - Update installer now really restarts the launcher into the new version
+            - Discord Rich Presence app ID 1573083334517723146
             - Fabric, Forge and NeoForge loaders, installed automatically
-            - Separate pack page with status, playtime and content tabs; Play selects the pack for launch
-            - Full version picker with installed/loader labels, pack grouping and downward scrolling
-            - Choose the target pack for catalog installs; correct project icons and IDs
             - Import packs from MultiMC/Prism and CurseForge folders; create packs without pre-downloading a version
-            - Global game defaults inherited by every new pack plus per-instance options (language, FPS, graphics, GPU)
-            - One-click GraalVM 21 install (experimental) and automatic pack repair before launch
-            - Appearance screen with live preview, System/Light/Dark/OLED themes and custom accent colours
             - 12 ready-made themes, wallpapers with preview and factory reset
-            - Discord Rich Presence for the launcher and the running version
-            - Built-in beta updater: update banner, background download and one-click restart
             - 12 fully translated languages: English, Russian, Ukrainian, Kazakh, Polish, Czech, Slovak, French, German, Italian, Spanish, Portuguese
             - Windows, macOS (universal) and Linux builds
           releaseDraft: false

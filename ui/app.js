@@ -11,8 +11,8 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const APP_VERSION = "0.0.4-beta";
-const APP_LABEL = "0.0.4 Beta";
+const APP_VERSION = "0.0.5-beta";
+const APP_LABEL = "0.0.5 Beta";
 const NAV_DEFAULT = ["home", "library", "instances", "discover", "accounts"];
 const WIDGET_DEFAULT = ["stats", "pc", "latest", "instances", "console"];
 const LINKS = {
@@ -77,6 +77,40 @@ function accentVars(hex) {
   };
 }
 
+/* Recolor the taskbar icon to the current accent (hue-rotate the source mark). */
+let iconSource = null;
+function syncWindowIcon(deg) {
+  try {
+    if (!iconSource) {
+      iconSource = new Image();
+      iconSource.src = "assets/logo.png";
+    }
+    const paint = () => {
+      try {
+        const size = 128;
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.filter = `hue-rotate(${Math.round(Number(deg) || 0)}deg)`;
+        ctx.drawImage(iconSource, 0, 0, size, size);
+        let link = document.querySelector('link[rel="icon"]');
+        if (!link) {
+          link = document.createElement("link");
+          link.rel = "icon";
+          document.head.appendChild(link);
+        }
+        link.href = canvas.toDataURL("image/png");
+        const data = ctx.getImageData(0, 0, size, size).data;
+        invoke("set_window_icon", { rgba: Array.from(data), width: size, height: size }).catch(() => {});
+      } catch {}
+    };
+    if (iconSource.complete && iconSource.naturalWidth) paint();
+    else iconSource.addEventListener("load", paint, { once: true });
+  } catch {}
+}
+
 const S = {
   boot: null,
   settings: {},
@@ -105,6 +139,7 @@ const S = {
   discoverLoader: "fabric",
   discoverResults: [],
   discoverBusy: false,
+  discoverCat: "all",
   running: null,
   launching: false,
   installing: new Set(),
@@ -113,6 +148,11 @@ const S = {
   log: [],
   uiNav: NAV_DEFAULT.map((id) => ({ id, on: true })),
   uiLayout: WIDGET_DEFAULT.map((id) => ({ id, on: true })),
+  uiText: {},
+  edit: false,
+  editChanged: false,
+  versionQuery: "",
+  icons: new Map(),
   loadToken: 0,
 };
 
@@ -336,11 +376,11 @@ function applyAppearance(s) {
   let custom = s.uiAccent === "custom" ? accentVars(accentHex) : null;
   if (theme === "light" && rgb) {
     const [h, sat, l] = rgbHsl(rgb);
-    const deep = Math.min(l, 0.42);
+    const deep = Math.min(l, 0.27);
     const soft = hslHex(h, Math.max(0.38, Math.min(0.82, sat + 0.08)), deep + 0.1);
     custom = {
       accent: hslHex(h, Math.max(0.4, Math.min(0.9, sat)), deep),
-      accent2: hslHex(h + 14, Math.max(0.4, Math.min(0.9, sat)), Math.min(0.5, deep + 0.08)),
+      accent2: hslHex(h + 14, Math.max(0.4, Math.min(0.9, sat)), Math.min(0.34, deep + 0.07)),
       soft: `rgba(${hexRgb(soft).join(",")},.13)`,
       ink: "#ffffff",
     };
@@ -355,7 +395,10 @@ function applyAppearance(s) {
     ["--accent", "--accent-2", "--accent-soft", "--accent-ink"].forEach((key) => root.style.removeProperty(key));
     root.dataset.accent = ACCENT_NAMES.includes(s.uiAccent) && s.uiAccent !== "custom" ? s.uiAccent : "aqua";
   }
-  if (rgb) root.style.setProperty("--logo-rotate", `${rgbHsl(rgb)[0] - 186}deg`);
+  if (rgb) {
+    root.style.setProperty("--logo-rotate", `${rgbHsl(rgb)[0] - 186}deg`);
+    syncWindowIcon(rgbHsl(rgb)[0] - 186);
+  }
   root.dataset.theme = s.uiTheme === "oled" ? "oled" : theme;
   root.dataset.radius = s.uiRadius || "soft";
   root.dataset.density = s.uiDensity || "normal";
@@ -415,6 +458,7 @@ function applyBoot(boot, resetSelected = false) {
   const lang = S.settings.language || "auto";
   i18n.init(lang);
   i18n.apply(document);
+  applyTexts();
   $("#app-version")?.remove();
   $("#rail-version").textContent = APP_LABEL;
   $("#rail-platform").textContent = platformLabel(S.platform);
@@ -560,6 +604,33 @@ function visibleBySettings(v) {
 }
 function renderVersionMenu() {
   const menu = $("#version-menu");
+  if (!menu) return;
+  menu.innerHTML = `<label class="menu-search">
+      <svg class="ico"><use href="#i-search"></use></svg>
+      <input id="version-search" type="search" placeholder="${esc(t("library.search"))}" autocomplete="off" spellcheck="false">
+      <kbd>esc</kbd>
+    </label>
+    <div class="menu-list" id="version-list"></div>`;
+  const input = $("#version-search");
+  input.value = S.versionQuery || "";
+  input.addEventListener("input", () => {
+    S.versionQuery = input.value;
+    renderVersionList();
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const first = $("#version-list [data-pick]");
+      if (first) first.click();
+    }
+  });
+  renderVersionList();
+}
+
+function renderVersionList() {
+  const host = $("#version-list");
+  if (!host) return;
+  const q = String(S.versionQuery || "").trim().toLowerCase();
   const known = new Map();
   [...S.remote, ...S.local].forEach((v) => {
     if (visibleBySettings(v) || isInstalled(v.id)) known.set(v.id, v);
@@ -568,11 +639,17 @@ function renderVersionMenu() {
     if (!known.has(p.versionId)) known.set(p.versionId, { id: p.versionId, kind: "release", releaseTime: "" });
   });
   const versions = sortVersions([...known.values()], "new");
+  const mark = (text) => {
+    const raw = String(text ?? "");
+    const at = q ? raw.toLowerCase().indexOf(q) : -1;
+    if (at < 0) return esc(raw);
+    return `${esc(raw.slice(0, at))}<mark>${esc(raw.slice(at, at + q.length))}</mark>${esc(raw.slice(at + q.length))}`;
+  };
   const item = (id, kind, sub, loader, profile) => {
     const current = profile ? S.boot?.activeProfile === profile.id : S.selected === id;
     const packSub = profile ? `${id} · ${profile.loader || "vanilla"}${profile.loaderVersion ? ` ${profile.loaderVersion}` : ""}` : sub;
     return `<button class="menu-item ${current ? "is-on" : ""}" data-pick="${esc(id)}" ${profile ? `data-profile-pick="${esc(profile.id)}"` : ""}>
-    <span class="mi-main"><b>${esc(profile ? profile.name : id)}</b><small>${esc(packSub)}</small></span>
+    <span class="mi-main"><b>${mark(profile ? profile.name : id)}</b><small>${esc(packSub)}</small></span>
     ${profile ? `<span class="chip ${S.boot?.activeProfile === profile.id ? "chip-soft" : ""}">${esc(S.boot?.activeProfile === profile.id ? t("common.active") : t("common.installed"))}</span>` : loader ? `<span class="chip">${esc(loader)}</span>` : ""}
     ${current ? `<svg class="ico" style="width:14px;height:14px;color:var(--accent)"><use href="#i-check"></use></svg>` : ""}
   </button>`;
@@ -580,14 +657,30 @@ function renderVersionMenu() {
   const parts = [];
   for (const v of versions) {
     const packs = S.profiles.filter((p) => p.versionId === v.id);
-    parts.push(item(v.id, v.kind, isInstalled(v.id) ? `${kindLabel(v.kind)} · ${t("common.installed")}` : kindLabel(v.kind), loaderLabel(v.id)));
+    const hitVersion = !q || `${v.id} ${v.kind || ""}`.toLowerCase().includes(q);
+    if (hitVersion) {
+      parts.push(item(v.id, v.kind, isInstalled(v.id) ? `${kindLabel(v.kind)} · ${t("common.installed")}` : kindLabel(v.kind), loaderLabel(v.id)));
+    }
     for (const p of packs) {
+      if (!hitVersion && !`${p.name} ${v.id} ${p.loader || ""}`.toLowerCase().includes(q)) continue;
       parts.push(item(v.id, "release", p.loader || "vanilla", "", p));
     }
   }
-  menu.innerHTML = `
-    <div class="menu-label">${esc(t("menu.available"))}</div>
-    ${parts.length ? parts.join("") : `<div class="menu-item"><span class="mi-main"><small>${esc(t("common.none"))}</small></span></div>`}`;
+  host.innerHTML = parts.length
+    ? `<div class="menu-label">${esc(t("menu.available"))}</div>${parts.join("")}`
+    : `<div class="menu-empty">${esc(t("pack.noResults"))}</div>`;
+}
+
+function fitVersionMenu() {
+  const menu = $("#version-menu");
+  const wrap = menu && menu.parentElement;
+  if (!menu || menu.hidden || !wrap) return;
+  const rect = wrap.getBoundingClientRect();
+  const below = innerHeight - rect.bottom - 16;
+  const above = rect.top - 16;
+  const up = below < 240 && above > below;
+  menu.classList.toggle("is-up", up);
+  menu.style.maxHeight = `${Math.max(160, Math.min(430, up ? above : below))}px`;
 }
 
 function toggleVersionMenu(force) {
@@ -596,6 +689,18 @@ function toggleVersionMenu(force) {
   const open = typeof force === "boolean" ? force : menu.hidden;
   menu.hidden = !open;
   trigger.setAttribute("aria-expanded", String(open));
+  if (open) {
+    S.versionQuery = "";
+    const input = $("#version-search");
+    if (input) {
+      input.value = "";
+      renderVersionList();
+      fitVersionMenu();
+      const list = $("#version-list");
+      if (list) list.scrollTop = 0;
+      requestAnimationFrame(() => input.focus());
+    }
+  }
 }
 function closeVersionMenu() {
   toggleVersionMenu(false);
@@ -677,6 +782,7 @@ function renderWidgets() {
     console: widgetConsole,
   };
   host.innerHTML = layout.map((id) => builders[id]?.() || "").join("");
+  if (S.edit) $$("#widgets .widget").forEach((el) => { el.draggable = true; });
   bindWidgetActions();
   const consoleBody = $("#console-body");
   if (consoleBody) consoleBody.scrollTop = consoleBody.scrollHeight;
@@ -1037,8 +1143,33 @@ function planDiscoverVisibility() {
   $("#fabric-notice").hidden = !(kind === "mod" && !hasLoaderProfile());
 }
 
+const DISCOVER_CATS = {
+  modpack: ["adventure", "technology", "magic", "quests", "skyblock", "hardcore", "optimization", "vanilla"],
+  mod: ["optimization", "adventure", "decoration", "technology", "magic", "library", "utility", "worldgen"],
+  resourcepack: ["realistic", "medieval", "modern", "cartoon", "fantasy", "simplistic", "themed", "tweaks"],
+  shader: ["realistic", "fantasy", "cartoon", "performance", "reflections", "vanilla", "low", "high"],
+};
+
+function catLabel(id) {
+  if (/^\d+x$/i.test(id)) return id;
+  const value = t(`cat.${id}`);
+  return value === `cat.${id}` ? id.charAt(0).toUpperCase() + id.slice(1) : value;
+}
+
+function renderDiscoverCats() {
+  const host = $("#discover-cats");
+  if (!host) return;
+  const cats = DISCOVER_CATS[S.discoverKind] || [];
+  host.hidden = false;
+  host.innerHTML = [{ id: "all", label: t("discover.all") }]
+    .concat(cats.map((id) => ({ id, label: catLabel(id) })))
+    .map((c) => `<button class="cat-chip ${S.discoverCat === c.id ? "is-on" : ""}" data-cat="${esc(c.id)}">${esc(c.label)}</button>`)
+    .join("");
+}
+
 async function searchDiscover() {
   planDiscoverVisibility();
+  renderDiscoverCats();
   const token = ++S.loadToken;
   S.discoverBusy = true;
   const empty = $("#discover-empty");
@@ -1076,6 +1207,14 @@ function renderDiscoverResults() {
   const host = $("#discover-results");
   const list = S.discoverResults;
   $("#discover-empty").hidden = list.length > 0 || S.discoverBusy;
+  const meta = $("#discover-meta");
+  if (meta) meta.hidden = !list.length;
+  if ($("#discover-count")) $("#discover-count").textContent = t("discover.resultsCount", { n: list.length });
+  if ($("#discover-source")) {
+    $("#discover-source").textContent = S.discoverKind === "modpack"
+      ? "Modrinth"
+      : S.discoverProvider === "both" ? "Modrinth + CurseForge" : S.discoverProvider === "curseforge" ? "CurseForge" : "Modrinth";
+  }
   host.innerHTML = list.map((hit) => {
     const installing = S.discoverInstalling?.has?.(hit.id);
     return `<article class="pcard" data-project="${esc(hit.id)}">
@@ -1317,6 +1456,13 @@ async function loadMods() {
   try {
     S.mods = await invoke("mods_list");
     S.modHealth = await invoke("mods_health");
+    const pid = activeProfile()?.id;
+    if (pid) {
+      try {
+        const map = await invoke("profile_icons", { id: pid });
+        Object.entries(map || {}).forEach(([file, url]) => { if (url) S.icons.set(`${pid}:${file}`, url); });
+      } catch {}
+    }
     renderMods();
     renderModHealth();
   } catch {
@@ -1340,11 +1486,16 @@ function renderMods() {
     return;
   }
   const riskKey = (risk) => (risk === "high" ? "discover.risk.high" : risk === "medium" ? "discover.risk.medium" : "discover.risk.safe");
-  host.innerHTML = S.mods.map((m) => `<div class="mod-row" data-mod="${esc(m.file)}">
+  const pid = activeProfile()?.id;
+  host.innerHTML = S.mods.map((m) => {
+    const icon = pid ? S.icons.get(`${pid}:${m.file}`) : null;
+    return `<div class="mod-row" data-mod="${esc(m.file)}">
+    ${icon ? `<img class="micon" src="${esc(icon)}" alt="" loading="lazy">` : `<span class="micon">${ico("i-layers")}</span>`}
     <div class="mname"><b>${esc(m.name)}</b><small>${esc(m.version || "")} · ${esc(m.loader || "")}</small></div>
     <span class="chip ${m.risk === "high" ? "danger" : m.risk === "medium" ? "warn" : "ok"}">${esc(t(riskKey(m.risk)))}</span>
     <button class="btn btn-quiet icon-only" data-mod-remove="${esc(m.file)}" title="${esc(t("common.remove"))}"><svg class="ico"><use href="#i-trash"></use></svg></button>
-  </div>`).join("");
+  </div>`;
+  }).join("");
   host.onclick = async (e) => {
     const btn = e.target.closest("[data-mod-remove]");
     if (!btn) return;
@@ -1572,6 +1723,14 @@ function ico(name) {
   return `<svg class="ico"><use href="#${name}"></use></svg>`;
 }
 
+const PACK_CATS = {
+  mod: ["optimization", "adventure", "magic", "technology", "decoration", "worldgen", "library", "storage", "food", "equipment", "utility"],
+  resourcepack: ["realistic", "simplistic", "medieval", "fantasy", "modern", "cartoon", "anime", "16x", "32x", "64x", "128x", "256x"],
+  shader: ["realistic", "fantasy", "cartoon", "performance", "low-end", "volumetric", "lighting", "water"],
+  datapack: ["adventure", "utility", "worldgen", "mobs", "recipes", "structures"],
+};
+const PACK_ICONS = { mod: "i-layers", resourcepack: "i-palette", shader: "i-sparkles", datapack: "i-folder" };
+
 async function openPack(id) {
   const profile = profileById(id);
   if (!profile) return;
@@ -1581,6 +1740,12 @@ async function openPack(id) {
   } catch {}
   let filter = "all";
   let query = "";
+  let addKind = "mod";
+  let addCat = "all";
+  let addResults = [];
+  let addBusy = false;
+  let addLoaded = false;
+  let addToken = 0;
   const kinds = [
     ["mod", t("project.mods")],
     ["resourcepack", t("project.resourcepacks")],
@@ -1588,17 +1753,30 @@ async function openPack(id) {
     ["datapack", t("project.datapacks")],
   ];
   const kindOf = (item) => item.kind || "mod";
+  const iconFor = (item) => S.icons.get(`${id}:${item.file}`) || "";
   const rows = () => {
     const list = contents.filter((item) => (filter === "all" || kindOf(item) === filter) && (!query || item.name.toLowerCase().includes(query)));
-    if (!list.length) return `<div class="empty"><p>${esc(t("instances.emptySub"))}</p></div>`;
-    return list.map((item) => `<div class="pd-row">
-      <div class="pd-row-icon"><img src="${artFor(item.name)}" alt=""></div>
+    if (!list.length) return `<div class="empty" style="padding:28px"><p>${esc(t("instances.emptySub"))}</p></div>`;
+    return list.map((item) => {
+      const icon = iconFor(item);
+      return `<div class="pd-row">
+      <div class="pd-row-icon">${icon ? `<img src="${esc(icon)}" alt="" loading="lazy">` : ico(PACK_ICONS[kindOf(item)] || "i-layers")}</div>
       <div class="pd-row-main"><b>${esc(item.name)}</b><span>${esc(item.file)}</span></div>
       <span class="chip">${esc(i18n.bytes(item.size || 0))}</span>
       <button class="btn btn-quiet icon-only" data-pack-remove="${esc(item.file)}" data-kind="${esc(kindOf(item))}" title="${esc(t("common.delete"))}">${ico("i-trash")}</button>
-    </div>`).join("");
+    </div>`;
+    }).join("");
   };
   const count = (kind) => contents.filter((item) => kindOf(item) === kind).length;
+  const addRows = () => {
+    if (addBusy && !addResults.length) return `<div class="empty" style="padding:26px"><p>${esc(t("common.loading"))}</p></div>`;
+    if (!addResults.length) return `<div class="empty" style="padding:26px"><p>${esc(t("pack.searchHint"))}</p></div>`;
+    return addResults.map((hit) => `<div class="pd-row">
+      <div class="pd-row-icon">${hit.icon ? `<img src="${esc(hit.icon)}" alt="" loading="lazy">` : ico(PACK_ICONS[addKind] || "i-layers")}</div>
+      <div class="pd-row-main"><b>${esc(hit.title)}</b><span>${esc(hit.author || "")} · ${esc(i18n.number(hit.downloads || 0))}${hit.provider ? ` · ${esc(hit.provider)}` : ""}</span></div>
+      <button class="btn btn-soft btn-sm" data-pack-install="${esc(hit.id)}" data-provider="${esc(hit.provider || "modrinth")}">${esc(t("common.install"))}</button>
+    </div>`).join("");
+  };
   const html = `
     <div class="pack-page-top">
       <button class="btn btn-quiet btn-sm" id="pack-back">${ico("i-chevron")}<span>${esc(t("common.back"))}</span></button>
@@ -1613,6 +1791,7 @@ async function openPack(id) {
           <button class="btn btn-primary" id="pack-play">${ico("i-play")}<span>${esc(t("common.play"))}</span></button>
           <button class="btn btn-soft" id="pack-add">${ico("i-plus")}<span>${esc(t("discover.addContent"))}</span></button>
           <button class="btn btn-quiet" id="pack-repair">${ico("i-shield")}<span>${esc(t("discover.repair"))}</span></button>
+          <button class="btn btn-quiet icon-only" id="pack-rename" title="${esc(t("edit.renameInstance"))}">${ico("i-edit")}</button>
         </div>
       </div>
     </div>
@@ -1627,12 +1806,16 @@ async function openPack(id) {
     </div>
     <div class="pd-search"><input class="input" id="pack-search" placeholder="${esc(t("project.search"))}"></div>
     <div class="pd-rows" id="pack-rows">${rows()}</div>
-    <div class="pack-add" id="pack-add-panel" hidden>
+    <div id="pack-add-panel" hidden>
+      <div class="pack-add-head"><b>${esc(t("pack.addTitle"))}</b><small>${esc(t("pack.addSub"))}</small>
+        <button class="btn btn-quiet icon-only" id="pack-add-close" title="${esc(t("common.cancel"))}">${ico("i-close")}</button>
+      </div>
       <div class="pd-subtabs" id="pack-add-kinds">
         ${kinds.map(([k, label], i) => `<button class="pd-subtab ${i === 0 ? "is-on" : ""}" data-addkind="${k}">${esc(label)}</button>`).join("")}
       </div>
-      <div class="pd-search"><input class="input" id="pack-add-search" placeholder="${esc(t("discover.search"))}"></div>
-      <div class="pack-results" id="pack-add-results"></div>
+      <div class="pd-search"><input class="input" id="pack-add-search" placeholder="${esc(t("pack.addSearch"))}" autocomplete="off"></div>
+      <div class="cat-row" id="pack-add-cats"></div>
+      <div class="pack-results" id="pack-add-results">${addRows()}</div>
     </div>`;
   const page = $("#pack-page-body");
   page.innerHTML = html;
@@ -1643,6 +1826,19 @@ async function openPack(id) {
     const paint = () => {
       host.innerHTML = rows();
       applyImgFallback(host, "img", artFor);
+      const all = $("#pack-kinds [data-packkind='all']");
+      if (all) all.textContent = `${t("project.overview")} ${contents.length}`;
+      kinds.forEach(([k]) => {
+        const chip = $(`#pack-kinds [data-packkind='${k}']`);
+        if (chip) chip.textContent = `${kinds.find(([k2]) => k2 === k)[1]} ${count(k)}`;
+      });
+    };
+    const loadIcons = async () => {
+      try {
+        const map = await invoke("profile_icons", { id });
+        Object.entries(map || {}).forEach(([file, url]) => { if (url) S.icons.set(`${id}:${file}`, url); });
+        paint();
+      } catch {}
     };
     $("#pack-kinds").addEventListener("click", (e) => {
       const btn = e.target.closest("[data-packkind]");
@@ -1671,7 +1867,16 @@ async function openPack(id) {
       activateProfile(id, true);
     });
     $("#pack-add").addEventListener("click", () => {
-      $("#pack-add-panel").hidden = !$("#pack-add-panel").hidden;
+      const panel = $("#pack-add-panel");
+      const open = panel.hidden;
+      panel.hidden = !open;
+      if (!open) return;
+      if (!addLoaded) searchAdd("");
+      panel.scrollIntoView({ block: "start", behavior: "smooth" });
+      $("#pack-add-search")?.focus({ preventScroll: true });
+    });
+    $("#pack-add-close").addEventListener("click", () => {
+      $("#pack-add-panel").hidden = true;
     });
     $("#pack-repair").addEventListener("click", async () => {
       try {
@@ -1681,12 +1886,47 @@ async function openPack(id) {
         toast(friendly(err), "err");
       }
     });
-    let addKind = "mod";
-    const search = async () => {
-      const q = $("#pack-add-search").value.trim();
-      if (!q) return;
-      const box = $("#pack-add-results");
-      box.innerHTML = `<div class="empty"><p>${esc(t("common.loading"))}</p></div>`;
+    $("#pack-rename").addEventListener("click", () => {
+      openModal(`<h3>${esc(t("edit.renameInstance"))}</h3>
+        <p>${esc(profile.versionId)} · ${esc(profile.loader || "vanilla")}</p>
+        <label class="input" style="margin:14px 0"><input class="input" id="pack-name-input" maxlength="60" value="${esc(profile.name)}"></label>
+        <div class="modal-actions"><button class="btn btn-quiet" data-close>${esc(t("common.cancel"))}</button><button class="btn btn-primary" id="pack-name-save">${esc(t("common.save"))}</button></div>`, () => {
+        const input = $("#pack-name-input");
+        input.focus();
+        input.select();
+        const save = async () => {
+          const name = input.value.trim();
+          if (!name) return;
+          try {
+            await invoke("profile_rename", { id, name });
+            closeModal();
+            await refreshBoot();
+            openPack(id);
+            toast(t("toast.saved"));
+          } catch (err) {
+            toast(friendly(err), "err");
+          }
+        };
+        $("#pack-name-save").addEventListener("click", save);
+        input.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
+      });
+    });
+
+    const paintCats = () => {
+      const box = $("#pack-add-cats");
+      box.innerHTML = [`<button class="cat-chip ${addCat === "all" ? "is-on" : ""}" data-addcat="all">${esc(t("discover.all"))}</button>`]
+        .concat(PACK_CATS[addKind].map((cat) => `<button class="cat-chip ${addCat === cat ? "is-on" : ""}" data-addcat="${cat}">${esc(catLabel(cat))}</button>`))
+        .join("");
+    };
+    const paintAdd = () => {
+      $("#pack-add-results").innerHTML = addRows();
+    };
+    const searchAdd = async (text) => {
+      const q = String(text ?? "").trim();
+      const token = ++addToken;
+      addBusy = true;
+      addResults = [];
+      paintAdd();
       try {
         const results = await invoke("catalog_search", {
           query: q,
@@ -1695,36 +1935,60 @@ async function openPack(id) {
           loader: addKind === "mod" ? profile.loader || "fabric" : null,
           provider: "both",
         });
-        box.innerHTML = results.length
-          ? results.slice(0, 12).map((hit) => `<div class="pd-row">
-              <div class="pd-row-icon">${hit.icon ? `<img src="${esc(hit.icon)}" alt="">` : icon("i-box")}</div>
-              <div class="pd-row-main"><b>${esc(hit.title)}</b><span>${esc(hit.author || "")} · ${esc(i18n.number(hit.downloads || 0))}</span></div>
-              <button class="btn btn-soft btn-sm" data-pack-install="${esc(hit.id)}" data-provider="${esc(hit.provider || "modrinth")}">${esc(t("common.install"))}</button>
-            </div>`).join("")
-          : `<div class="empty"><p>${esc(t("discover.noResults"))}</p></div>`;
-        applyImgFallback(box, "img", artFor);
+        if (token !== addToken) return;
+        addResults = (results || []).slice(0, 18);
+        addLoaded = true;
+        if (!addResults.length && q) {
+          addBusy = false;
+          return searchAdd("");
+        }
       } catch (err) {
-        box.innerHTML = `<div class="empty"><p>${esc(friendly(err))}</p></div>`;
+        if (token !== addToken) return;
+        addResults = [];
+        toast(friendly(err), "err");
+      } finally {
+        if (token === addToken) {
+          addBusy = false;
+          paintAdd();
+          applyImgFallback($("#pack-add-results"), "img", artFor);
+        }
       }
+    };
+    const resetAdd = (q) => {
+      addCat = "all";
+      const input = $("#pack-add-search");
+      input.value = q;
+      paintCats();
+      searchAdd(q);
     };
     $("#pack-add-kinds").addEventListener("click", (e) => {
       const btn = e.target.closest("[data-addkind]");
       if (!btn) return;
       addKind = btn.dataset.addkind;
       $$("#pack-add-kinds .pd-subtab").forEach((el) => el.classList.toggle("is-on", el === btn));
-      $("#pack-add-results").innerHTML = "";
+      resetAdd("");
+    });
+    $("#pack-add-cats").addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-addcat]");
+      if (!chip) return;
+      addCat = chip.dataset.addcat;
+      paintCats();
+      const q = addCat === "all" ? PACK_POPULAR[addKind] : addCat;
+      $("#pack-add-search").value = addCat === "all" ? "" : addCat;
+      searchAdd(q);
     });
     let timer;
-    $("#pack-add-search").addEventListener("input", () => {
+    $("#pack-add-search").addEventListener("input", (e) => {
       clearTimeout(timer);
-      timer = setTimeout(search, 380);
+      const value = e.target.value;
+      timer = setTimeout(() => searchAdd(value), 380);
     });
     $("#pack-add-results").addEventListener("click", async (e) => {
       const btn = e.target.closest("[data-pack-install]");
       if (!btn) return;
       btn.disabled = true;
       try {
-        const outcome = await invoke("mods_install", {
+        await invoke("mods_install", {
           project: btn.dataset.packInstall,
           version: profile.versionId,
           loader: profile.loader || "fabric",
@@ -1734,13 +1998,17 @@ async function openPack(id) {
         });
         contents = await invoke("profile_contents", { id });
         paint();
-        toast(t("toast.modInstalled", { count: outcome?.installed?.length || 1 }));
+        loadIcons();
+        toast(t("pack.added"));
       } catch (err) {
         toast(friendly(err), "err");
       } finally {
         btn.disabled = false;
       }
     });
+    paintCats();
+    paint();
+    loadIcons();
   })();
   applyImgFallback(page, "img", artFor);
 }
@@ -2055,11 +2323,77 @@ function paintRange(el) {
   el.style.setProperty("--fill", `${((value - min) / Math.max(1, max - min)) * 100}%`);
 }
 
+function showDirtyBar(on) {
+  const bar = $("#dirty-bar");
+  if (bar) bar.hidden = !on;
+}
+
 function markDirty() {
   S.dirty = true;
   const state = $("#save-state");
-  state.textContent = t("settings.unsaved");
-  state.classList.add("is-dirty");
+  if (state) {
+    state.textContent = t("settings.unsaved");
+    state.classList.add("is-dirty");
+  }
+  showDirtyBar(true);
+}
+
+function applyTexts() {
+  let map = {};
+  try { map = JSON.parse(S.settings.uiText || "{}") || {}; } catch {}
+  S.uiText = map;
+  $$("[data-edit-key]").forEach((el) => {
+    const value = map[el.dataset.editKey];
+    if (typeof value === "string" && value.trim()) el.textContent = value;
+  });
+}
+
+async function setEdit(on) {
+  S.edit = on;
+  document.documentElement.dataset.edit = on ? "on" : "off";
+  $("#edit-btn")?.classList.toggle("is-on", on);
+  const label = $("#edit-mode-btn")?.querySelector("span");
+  if (label) label.textContent = t(on ? "edit.disable" : "edit.enable");
+  $$("[data-edit-key]").forEach((el) => {
+    el.contentEditable = on ? "true" : "false";
+    el.spellcheck = false;
+  });
+  $$("#widgets .widget").forEach((el) => { el.draggable = on; });
+  let bar = $("#edit-bar");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "edit-bar";
+    bar.className = "edit-bar";
+    bar.innerHTML = `<svg class="ico"><use href="#i-grip"></use></svg>
+      <div><b>${esc(t("edit.barTitle"))}</b><small>${esc(t("edit.barHint"))}</small></div>
+      <button class="btn btn-quiet btn-sm" id="edit-reset">${esc(t("edit.reset"))}</button>
+      <button class="btn btn-primary btn-sm" id="edit-done">${esc(t("edit.done"))}</button>`;
+    document.body.append(bar);
+    $("#edit-done").addEventListener("click", () => setEdit(false));
+    $("#edit-reset").addEventListener("click", () => {
+      S.uiText = {};
+      S.settings.uiText = "";
+      i18n.apply(document);
+      applyTexts();
+      renderWidgets();
+      S.editChanged = true;
+      toast(t("edit.resetDone"));
+    });
+  }
+  bar.hidden = !on;
+  if (!on && S.editChanged) {
+    S.editChanged = false;
+    try {
+      await invoke("save_settings", { settings: S.settings });
+      S.dirty = false;
+      showDirtyBar(false);
+      const state = $("#save-state");
+      if (state) { state.textContent = t("settings.savedState"); state.classList.remove("is-dirty"); }
+      toast(t("edit.saved"));
+    } catch (err) {
+      toast(friendly(err), "err");
+    }
+  }
 }
 
 function renderOrderEditors() {
@@ -2192,6 +2526,7 @@ function bindSettings() {
     S.settings.language = e.target.value;
     i18n.init(e.target.value);
     i18n.apply(document);
+    applyTexts();
     buildRail();
     fillSettings();
     renderAll();
@@ -2422,6 +2757,7 @@ function bindSettings() {
       applyAppearance(S.settings);
       i18n.init(S.settings.language || "auto");
       i18n.apply(document);
+      applyTexts();
       renderAll();
       toast(t("toast.settingsReset"));
     } catch (err) { toast(friendly(err), "err"); }
@@ -2472,13 +2808,24 @@ async function saveSettings() {
   try {
     await invoke("save_settings", { settings: S.settings });
     S.dirty = false;
-    $("#save-state").textContent = t("settings.savedState");
-    $("#save-state").classList.remove("is-dirty");
+    showDirtyBar(false);
+    const state = $("#save-state");
+    if (state) {
+      state.textContent = t("settings.savedState");
+      state.classList.remove("is-dirty");
+    }
     await refreshBoot();
     toast(t("toast.saved"));
   } catch (err) {
     toast(friendly(err), "err");
   }
+}
+
+async function discardSettings() {
+  S.dirty = false;
+  showDirtyBar(false);
+  await refreshBoot();
+  toast(t("settings.discarded"));
 }
 
 function activateTab(name) {
@@ -2563,14 +2910,30 @@ function bindDiscover() {
     const tab = e.target.closest("[data-kind]");
     if (!tab) return;
     S.discoverKind = tab.dataset.kind;
+    S.discoverCat = "all";
+    S.discoverQuery = "";
+    const input = $("#discover-search");
+    if (input) input.value = "";
     $$("#discover-tabs .tab").forEach((el) => el.classList.toggle("is-on", el === tab));
     planDiscoverVisibility();
     S.discoverResults = [];
     searchDiscover();
   });
+  $("#discover-cats").addEventListener("click", (e) => {
+    const chip = e.target.closest("[data-cat]");
+    if (!chip) return;
+    S.discoverCat = chip.dataset.cat;
+    S.discoverQuery = chip.dataset.cat === "all" ? "" : chip.dataset.cat;
+    const input = $("#discover-search");
+    if (input) input.value = S.discoverQuery;
+    renderDiscoverCats();
+    searchDiscover();
+  });
   let timer = 0;
   $("#discover-search").addEventListener("input", (e) => {
     S.discoverQuery = e.target.value;
+    S.discoverCat = "all";
+    renderDiscoverCats();
     clearTimeout(timer);
     timer = setTimeout(searchDiscover, 420);
   });
@@ -2664,6 +3027,11 @@ function confirmAction(title, text, label) {
 
 function go(page, tab) {
   if (!page) return;
+  if (S.dirty && S.page === "settings" && page !== "settings") {
+    showDirtyBar(true);
+    toast(t("settings.unsavedHint"), "warn");
+    return;
+  }
   S.page = page;
   $$(".page").forEach((el) => { el.hidden = el.dataset.page !== page; });
   $$("[data-nav]").forEach((el) => el.classList.toggle("is-on", el.dataset.nav === page));
@@ -2780,9 +3148,76 @@ function bindStatic() {
   $("#customize-btn").addEventListener("click", () => go("settings", "layout"));
   $("#download-hide").addEventListener("click", () => hideBar());
 
+  $("#dirty-save").addEventListener("click", saveSettings);
+  $("#dirty-discard").addEventListener("click", discardSettings);
+  $("#edit-btn").addEventListener("click", () => setEdit(!S.edit));
+  $("#edit-mode-btn").addEventListener("click", () => setEdit(!S.edit));
+
+  document.addEventListener("input", (e) => {
+    const el = e.target.closest?.("[data-edit-key]");
+    if (!el || !S.edit) return;
+    const key = el.dataset.editKey;
+    const value = el.textContent.replace(/\s+/g, " ").trim();
+    const map = { ...(S.uiText || {}) };
+    if (value) map[key] = value; else delete map[key];
+    S.uiText = map;
+    S.settings.uiText = JSON.stringify(map);
+    S.editChanged = true;
+  });
+
+  let dragWidget = null;
+  const widgets = $("#widgets");
+  widgets.addEventListener("dragstart", (e) => {
+    const w = e.target.closest("[data-widget]");
+    if (!S.edit || !w) { e.preventDefault(); return; }
+    dragWidget = w.dataset.widget;
+    w.classList.add("is-drag");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", dragWidget);
+  });
+  widgets.addEventListener("dragover", (e) => {
+    if (!S.edit || !dragWidget) return;
+    const w = e.target.closest("[data-widget]");
+    if (!w || w.dataset.widget === dragWidget) return;
+    e.preventDefault();
+    const rect = w.getBoundingClientRect();
+    const after = e.clientX > rect.left + rect.width / 2;
+    $$("#widgets .widget").forEach((el) => el.classList.remove("drop-before", "drop-after"));
+    w.classList.add(after ? "drop-after" : "drop-before");
+  });
+  widgets.addEventListener("drop", (e) => {
+    if (!S.edit || !dragWidget) return;
+    const w = e.target.closest("[data-widget]");
+    const target = w?.dataset.widget;
+    const after = w?.classList.contains("drop-after");
+    $$("#widgets .widget").forEach((el) => el.classList.remove("drop-before", "drop-after", "is-drag"));
+    if (!w || target === dragWidget) return;
+    e.preventDefault();
+    const from = S.uiLayout.findIndex((x) => x.id === dragWidget);
+    let to = S.uiLayout.findIndex((x) => x.id === target);
+    if (from < 0 || to < 0) return;
+    const [item] = S.uiLayout.splice(from, 1);
+    if (from < to) to -= 1;
+    S.uiLayout.splice(to + (after ? 1 : 0), 0, item);
+    S.settings.uiLayout = JSON.stringify(S.uiLayout);
+    S.editChanged = true;
+    dragWidget = null;
+    renderWidgets();
+  });
+  widgets.addEventListener("dragend", () => {
+    dragWidget = null;
+    $$("#widgets .widget").forEach((el) => el.classList.remove("drop-before", "drop-after", "is-drag"));
+  });
+
   $("#win-min").addEventListener("click", () => invoke("win_minimize"));
   $("#win-max").addEventListener("click", () => invoke("win_toggle_maximize"));
-  $("#win-close").addEventListener("click", () => invoke("win_close"));
+  $("#win-close").addEventListener("click", async () => {
+    if (S.dirty) {
+      const ok = await confirmAction(t("settings.unsaved"), t("settings.unsavedHint"), t("settings.discard"));
+      if (!ok) return;
+    }
+    invoke("win_close");
+  });
 
   bindLibrary();
   bindDiscover();
@@ -2792,6 +3227,9 @@ function bindStatic() {
 
   window.matchMedia?.("(prefers-color-scheme: light)").addEventListener?.("change", () => {
     if (S.settings.uiTheme === "system") applyAppearance(S.settings);
+  });
+  window.addEventListener("resize", () => {
+    if (!$("#version-menu").hidden) fitVersionMenu();
   });
 }
 

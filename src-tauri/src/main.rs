@@ -43,8 +43,10 @@ fn main() {
             commands::profiles_list,
             commands::profile_activate,
             commands::profile_create,
+            commands::profile_rename,
             commands::profile_options,
             commands::profile_contents,
+            commands::profile_icons,
             commands::profile_file_remove,
             commands::profile_set_options,
             commands::game_defaults,
@@ -76,6 +78,7 @@ fn main() {
             commands::win_minimize,
             commands::win_toggle_maximize,
             commands::win_close,
+            commands::set_window_icon,
         ])
         .run(tauri::generate_context!())
         .expect("Не удалось запустить Aqua Launcher");

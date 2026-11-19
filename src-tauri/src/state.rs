@@ -46,6 +46,8 @@ pub struct Settings {
     pub ui_nav: String,
     /// JSON: порядок и видимость виджетов главного экрана.
     pub ui_layout: String,
+    /// JSON: пользовательские подписи интерфейса (режим редактирования).
+    pub ui_text: String,
     /// ocean | aurora | nebula | plain | custom
     pub ui_background: String,
     /// Свой цвет фона для ui_background == "custom".
@@ -107,6 +109,7 @@ impl Default for Settings {
             language: "auto".into(),
             ui_nav: String::new(),
             ui_layout: String::new(),
+            ui_text: String::new(),
             ui_background: "ocean".into(),
             ui_bg_custom: "#071420".into(),
             ui_grain: true,
@@ -117,7 +120,7 @@ impl Default for Settings {
             allow_experimental: false,
             auto_update: true,
             discord_rpc: false,
-            discord_client_id: String::new(),
+            discord_client_id: "1573083334517723146".into(),
             strict_mods: true,
             auto_repair: true,
             game_defaults: InstanceOptions::default(),
@@ -256,7 +259,14 @@ impl Config {
 
     pub fn load() -> Self {
         match std::fs::read_to_string(Self::path()) {
-            Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
+            Ok(raw) => {
+                let mut cfg: Self = serde_json::from_str(&raw).unwrap_or_default();
+                // Раньше поле было пустым: подставляем фирменное приложение Discord.
+                if cfg.settings.discord_client_id.trim().is_empty() {
+                    cfg.settings.discord_client_id = Settings::default().discord_client_id;
+                }
+                cfg
+            }
             Err(_) => Self::default(),
         }
     }

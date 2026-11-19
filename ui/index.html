@@ -47,6 +47,8 @@
     <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 4 2.4 5 5.6.8-4 3.9 1 5.5-5-2.7-5 2.7 1-5.5-4-3.9 5.6-.8Z"/></symbol>
     <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5 19 6v6c0 4-2.9 6.9-7 8.5-4.1-1.6-7-4.5-7-8.5V6Z"/><path d="m9 12 2 2 4-4"/></symbol>
     <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4.5 17a8.5 8.5 0 1 1 15 0"/><path d="M12 12.5 15.5 9"/><circle cx="12" cy="13" r="1.6"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M15.5 5.2 18.8 8.5M4 20l1-5L16.4 3.6a1.8 1.8 0 0 1 2.5 0l1.5 1.5a1.8 1.8 0 0 1 0 2.5L9 19Z"/></symbol>
+    <symbol id="i-grip" viewBox="0 0 24 24"><path d="M9 6h.1M15 6h.1M9 12h.1M15 12h.1M9 18h.1M15 18h.1" stroke-width="2.4"/></symbol>
   </svg>
 
   <div class="backdrop" aria-hidden="true">
@@ -60,10 +62,11 @@
     <header class="titlebar" data-tauri-drag-region>
       <div class="brand" data-tauri-drag-region>
         <img class="brand-mark" src="assets/logo-64.png" alt="" />
-        <span class="brand-word">aqua</span>
+        <span class="brand-word" data-edit-key="brand.word">aqua</span>
         <span class="brand-tag" data-i18n="brand.tag">launcher</span>
-        <span class="chip chip-soft chip-mono" id="version-chip">v0.0.4 Beta</span>
+        <span class="chip chip-soft chip-mono" id="version-chip">v0.0.5 Beta</span>
       </div>
+      <button class="edit-toggle" id="edit-btn" data-i18n-title="edit.toggle" aria-label="Edit layout"><svg class="ico"><use href="#i-layout"></use></svg></button>
       <div class="window-controls" id="window-controls">
         <button class="win-btn" id="win-min" data-i18n-title="window.minimize" aria-label="Minimize"><svg class="ico"><use href="#i-minus"></use></svg></button>
         <button class="win-btn" id="win-max" data-i18n-title="window.maximize" aria-label="Maximize"><svg class="ico"><use href="#i-square"></use></svg></button>
@@ -107,8 +110,8 @@
             <div class="hero-scrim"></div>
             <div class="hero-content">
               <span class="eyebrow"><svg class="ico"><use href="#i-sparkles"></use></svg><span data-i18n="home.eyebrow">Центр управления</span></span>
-              <h1 data-i18n="home.title">Мир ждёт тебя.</h1>
-              <p class="hero-sub" data-i18n="home.sub">Один клик отделяет тебя от нового приключения.</p>
+              <h1 data-i18n="home.title" data-edit-key="home.title">Мир ждёт тебя.</h1>
+              <p class="hero-sub" data-i18n="home.sub" data-edit-key="home.sub">Один клик отделяет тебя от нового приключения.</p>
               <div class="hero-controls">
                 <div class="select-wrap">
                   <button class="select" id="version-trigger" aria-haspopup="listbox">
@@ -142,7 +145,7 @@
           <header class="page-head">
             <div>
               <span class="eyebrow"><svg class="ico"><use href="#i-library"></use></svg><span data-i18n="nav.library">Библиотека</span></span>
-              <h1 data-i18n="library.title">Все версии Minecraft</h1>
+              <h1 data-i18n="library.title" data-edit-key="library.title">Все версии Minecraft</h1>
               <p data-i18n="library.sub">От первых альф до последних снапшотов — установка в один клик.</p>
             </div>
             <button class="btn btn-soft" id="library-refresh"><svg class="ico"><use href="#i-refresh"></use></svg><span data-i18n="common.refresh">Обновить</span></button>
@@ -182,7 +185,7 @@
           <header class="page-head">
             <div>
               <span class="eyebrow"><svg class="ico"><use href="#i-compass"></use></svg><span data-i18n="nav.discover">Каталог</span></span>
-              <h1 data-i18n="discover.title">Моды и сборки</h1>
+              <h1 data-i18n="discover.title" data-edit-key="discover.title">Моды и сборки</h1>
               <p data-i18n="discover.sub">Проверенные проекты с Modrinth — с зависимостями и проверкой безопасности.</p>
             </div>
             <button class="btn btn-soft" id="discover-refresh"><svg class="ico"><use href="#i-refresh"></use></svg><span data-i18n="common.refresh">Обновить</span></button>
@@ -220,6 +223,11 @@
               <svg class="ico"><use href="#i-chevron"></use></svg>
             </label>
           </div>
+          <div class="cat-row" id="discover-cats" hidden></div>
+          <div class="results-head" id="discover-meta" hidden>
+            <span id="discover-count"></span>
+            <span id="discover-source"></span>
+          </div>
           <div class="notice" id="fabric-notice" hidden>
             <svg class="ico"><use href="#i-alert"></use></svg>
             <div>
@@ -244,7 +252,7 @@
           <header class="page-head">
             <div>
               <span class="eyebrow"><svg class="ico"><use href="#i-layers"></use></svg><span data-i18n="nav.instances">Сборки</span></span>
-              <h1 data-i18n="instances.title">Мои сборки</h1>
+              <h1 data-i18n="instances.title" data-edit-key="instances.title">Мои сборки</h1>
               <p data-i18n="instances.sub">Изолированные миры, моды и настройки для каждого приключения.</p>
             </div>
             <div class="head-actions">
@@ -269,7 +277,7 @@
           <header class="page-head">
             <div>
               <span class="eyebrow"><svg class="ico"><use href="#i-user"></use></svg><span data-i18n="nav.accounts">Аккаунты</span></span>
-              <h1 data-i18n="accounts.title">Аккаунты</h1>
+              <h1 data-i18n="accounts.title" data-edit-key="accounts.title">Аккаунты</h1>
               <p data-i18n="accounts.sub">Microsoft для онлайна, локальный — для одиночной игры и тестов.</p>
             </div>
           </header>
@@ -294,7 +302,7 @@
           <header class="page-head settings-head">
             <div>
               <span class="eyebrow"><svg class="ico"><use href="#i-settings"></use></svg><span data-i18n="nav.settings">Настройки</span></span>
-              <h1 data-i18n="settings.title">Настройки</h1>
+              <h1 data-i18n="settings.title" data-edit-key="settings.title">Настройки</h1>
               <p data-i18n="settings.sub">Всё меняется сразу — и сохраняется, когда готов.</p>
             </div>
             <div class="settings-actions">
@@ -453,6 +461,10 @@
                       <button class="seg" data-play-pos="center" data-i18n="set.pos.center">По центру</button>
                       <button class="seg" data-play-pos="right" data-i18n="set.pos.right">Справа</button>
                     </div></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="edit.mode">Режим редактирования</b><span class="hint" data-i18n="edit.modeSub">Двигай виджеты, меняй названия и порядок</span></div>
+                    <div class="field-control"><button class="btn btn-soft btn-sm" id="edit-mode-btn"><svg class="ico"><use href="#i-layout"></use></svg><span data-i18n="edit.enable">Включить</span></button></div>
                   </div>
                   <div class="hr"></div>
                   <div class="field-stack">
@@ -627,6 +639,18 @@
           </div>
         </section>
       </main>
+    </div>
+
+    <div class="dirty-bar" id="dirty-bar" hidden role="status">
+      <svg class="ico"><use href="#i-alert"></use></svg>
+      <div class="dirty-copy">
+        <b data-i18n="settings.unsaved">Есть несохранённые настройки</b>
+        <span data-i18n="settings.unsavedHint">Сохрани изменения или отмени их, чтобы выйти.</span>
+      </div>
+      <div class="dirty-actions">
+        <button class="btn btn-quiet" id="dirty-discard" data-i18n="settings.discard">Отменить</button>
+        <button class="btn btn-primary" id="dirty-save" data-i18n="settings.save">Сохранить</button>
+      </div>
     </div>
 
     <div class="download-bar" id="download-bar" hidden>

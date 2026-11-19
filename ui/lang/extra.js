@@ -1,5 +1,147 @@
 // Generated translations for keys added after the original locale pass.
 export const EXTRA = {
+  "en": {
+    "edit": {
+      "toggle": "Edit layout",
+      "mode": "Edit mode",
+      "modeSub": "Move widgets, rename text, reorder everything",
+      "enable": "Customize",
+      "disable": "Done",
+      "barTitle": "Edit mode",
+      "barHint": "Drag widgets · click text to rename",
+      "saved": "Layout saved",
+      "done": "Done",
+      "reset": "Reset text",
+      "resetDone": "Text reset",
+      "renameInstance": "Rename"
+    },
+    "settings": {
+      "unsaved": "You have unsaved settings",
+      "unsavedHint": "Save or discard them before leaving.",
+      "discard": "Discard",
+      "discarded": "Changes discarded"
+    },
+    "cat": {
+      "adventure": "Adventure",
+      "technology": "Technology",
+      "magic": "Magic",
+      "quests": "Quests",
+      "skyblock": "Skyblock",
+      "hardcore": "Hardcore",
+      "optimization": "Optimization",
+      "vanilla": "Vanilla",
+      "decoration": "Decoration",
+      "library": "Library",
+      "utility": "Utility",
+      "worldgen": "Worldgen",
+      "realistic": "Realistic",
+      "medieval": "Medieval",
+      "modern": "Modern",
+      "cartoon": "Cartoon",
+      "fantasy": "Fantasy",
+      "simplistic": "Simplistic",
+      "themed": "Themed",
+      "tweaks": "Tweaks",
+      "performance": "Performance",
+      "reflections": "Reflections",
+      "low": "Low-end",
+      "high": "High-end",
+      "storage": "Storage",
+      "food": "Food",
+      "equipment": "Equipment",
+      "anime": "Anime",
+      "volumetric": "Volumetric",
+      "lighting": "Lighting",
+      "water": "Water",
+      "mobs": "Mobs",
+      "recipes": "Recipes",
+      "structures": "Structures"
+    },
+    "discover": {
+      "categories": "Categories",
+      "all": "All",
+      "resultsCount": "{n} found"
+    },
+    "pack": {
+      "addTitle": "Add content",
+      "addSub": "Mods, resource packs and shaders from Modrinth and CurseForge",
+      "addSearch": "Search content…",
+      "added": "Added to pack",
+      "noResults": "Nothing found",
+      "searchHint": "Type a name, or pick a category below"
+    }
+  },
+  "ru": {
+    "edit": {
+      "toggle": "Редактирование",
+      "mode": "Режим редактирования",
+      "modeSub": "Двигай виджеты, меняй названия и порядок",
+      "enable": "Настроить",
+      "disable": "Готово",
+      "barTitle": "Режим редактирования",
+      "barHint": "Перетаскивай виджеты · клик по тексту меняет название",
+      "saved": "Раскладка сохранена",
+      "done": "Готово",
+      "reset": "Сбросить текст",
+      "resetDone": "Текст сброшен",
+      "renameInstance": "Переименовать"
+    },
+    "settings": {
+      "unsaved": "У вас есть несохранённые настройки",
+      "unsavedHint": "Сохрани или отмени изменения, чтобы выйти.",
+      "discard": "Отменить",
+      "discarded": "Изменения отменены"
+    },
+    "cat": {
+      "adventure": "Приключения",
+      "technology": "Технологии",
+      "magic": "Магия",
+      "quests": "Квесты",
+      "skyblock": "Скайблок",
+      "hardcore": "Хардкор",
+      "optimization": "Оптимизация",
+      "vanilla": "Ваниль",
+      "decoration": "Декор",
+      "library": "Библиотеки",
+      "utility": "Утилиты",
+      "worldgen": "Генерация мира",
+      "realistic": "Реализм",
+      "medieval": "Средневековье",
+      "modern": "Современность",
+      "cartoon": "Мультяшный",
+      "fantasy": "Фэнтези",
+      "simplistic": "Минимализм",
+      "themed": "Тематические",
+      "tweaks": "Твики",
+      "performance": "Производительность",
+      "reflections": "Отражения",
+      "low": "Слабые ПК",
+      "high": "Мощные ПК",
+      "storage": "Хранилища",
+      "food": "Еда",
+      "equipment": "Снаряжение",
+      "anime": "Аниме",
+      "volumetric": "Объёмный свет",
+      "lighting": "Освещение",
+      "water": "Вода",
+      "mobs": "Мобы",
+      "recipes": "Рецепты",
+      "structures": "Структуры"
+    },
+    "discover": {
+      "categories": "Категории",
+      "all": "Все",
+      "resultsCount": "Найдено: {n}"
+    },
+    "pack": {
+      "addTitle": "Добавить контент",
+      "addSub": "Моды, ресурспаки и шейдеры из Modrinth и CurseForge",
+      "addSearch": "Поиск контента…",
+      "added": "Добавлено в сборку",
+      "noResults": "Ничего не найдено",
+      "searchHint": "Введи название или выбери категорию ниже"
+    }
+  },
   "uk": {
     "common": {
       "back": "Назад"

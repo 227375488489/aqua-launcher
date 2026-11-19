@@ -1179,6 +1179,21 @@ pub fn profile_create(
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn profile_rename(state: State<'_, AppState>, id: String, name: String) -> Result<Config, String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("profile_name_empty".into());
+    }
+    state
+        .update(|cfg| {
+            if let Some(profile) = cfg.profiles.iter_mut().find(|p| p.id == id) {
+                profile.name = name;
+            }
+        })
+        .map_err(|e| e.to_string())
+}
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfileFile {
@@ -1485,23 +1500,40 @@ pub async fn install_update(app: AppHandle, path: String) -> Result<(), String> 
         .to_lowercase();
     #[cfg(target_os = "windows")]
     {
-        if name.ends_with(".exe") {
-            std::process::Command::new(&file)
-                .arg("/S")
-                .spawn()
-                .map_err(|e| e.to_string())?;
+        use std::os::windows::process::CommandExt;
+        let installer = if name.ends_with(".exe") {
+            format!("\"{}\" /S", file.display())
         } else if name.ends_with(".msi") {
-            std::process::Command::new("msiexec")
-                .arg("/i")
-                .arg(&file)
-                .arg("/qb")
-                .spawn()
-                .map_err(|e| e.to_string())?;
+            format!("start \"\" /wait msiexec /i \"{}\" /qb", file.display())
         } else {
             app.opener().open_path(path, None::<&str>).map_err(|e| e.to_string())?;
             return Ok(());
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(900)).await;
+        };
+        // Скрипт ждёт выхода лаунчера, ставит обновление и снова запускает
+        // установленную копию: обновление действительно перезапускает приложение.
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let dir = crate::paths::data_dir().join("updates");
+        crate::paths::ensure_dir(&dir).map_err(|e| e.to_string())?;
+        let script = dir.join("restart-update.cmd");
+        let body = format!(
+            "@echo off\r\n\
+             ping 127.0.0.1 -n 3 >nul\r\n\
+             {installer}\r\n\
+             ping 127.0.0.1 -n 3 >nul\r\n\
+             start \"\" \"{}\"\r\n\
+             del \"%~f0\"\r\n",
+            exe.display()
+        );
+        std::fs::write(&script, body).map_err(|e| e.to_string())?;
+        std::process::Command::new("cmd")
+            .arg("/C")
+            .arg(&script)
+            .creation_flags(0x0800_0000)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
         app.exit(0);
         return Ok(());
     }
@@ -1510,13 +1542,151 @@ pub async fn install_update(app: AppHandle, path: String) -> Result<(), String> 
         use std::os::unix::fs::PermissionsExt;
         if name.ends_with(".appimage") {
             let _ = std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o755));
-            std::process::Command::new(&file).spawn().map_err(|e| e.to_string())?;
+            std::process::Command::new(&file)
+                .spawn()
+                .map_err(|e| e.to_string())?;
             app.exit(0);
             return Ok(());
         }
     }
     app.opener().open_path(path, None::<&str>).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Меняет иконку окна (панель задач) под текущий акцент.
+#[tauri::command]
+pub fn set_window_icon(
+    window: tauri::WebviewWindow,
+    rgba: Vec<u8>,
+    width: u32,
+    height: u32,
+) -> Result<(), String> {
+    let expected = width as usize * height as usize * 4;
+    if width == 0 || height == 0 || rgba.len() != expected {
+        return Err("bad_icon".into());
+    }
+    let icon = tauri::image::Image::new_owned(rgba, width, height);
+    window.set_icon(icon).map_err(|e| e.to_string())
+}
+
+fn hash_file(path: &std::path::Path) -> Option<String> {
+    use sha1::{Digest, Sha1};
+    use std::io::Read;
+    let mut file = std::fs::File::open(path).ok()?;
+    let mut hasher = Sha1::new();
+    let mut buffer = [0u8; 65536];
+    loop {
+        let read = file.read(&mut buffer).ok()?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Some(format!("{:x}", hasher.finalize()))
+}
+
+/// Иконки модов сборки. Файлы опознаются по SHA-1 через Modrinth и кешируются
+/// в `.aqua-icons.json` рядом со сборкой, поэтому повторный вход уже мгновенный.
+#[tauri::command]
+pub async fn profile_icons(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    use std::collections::HashMap;
+
+    let cfg = state.snapshot();
+    let profile = cfg.profile(&id).ok_or_else(|| "profile_not_found".to_string())?;
+    let root = cfg.profile_root(profile);
+    let cache_path = root.join(".aqua-icons.json");
+    let mut cache: HashMap<String, String> = std::fs::read_to_string(&cache_path)
+        .ok()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default();
+
+    let mut pending: Vec<(String, String)> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(root.join("mods")) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let name = path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or_default()
+                .to_string();
+            if !name.to_ascii_lowercase().ends_with(".jar") || cache.contains_key(&name) {
+                continue;
+            }
+            if let Some(hash) = hash_file(&path) {
+                pending.push((name, hash));
+            }
+        }
+    }
+    if pending.is_empty() {
+        return Ok(cache);
+    }
+
+    let ua = concat!("AquaLauncher/", env!("CARGO_PKG_VERSION"));
+    let mut project_ids: Vec<String> = Vec::new();
+    let mut by_file: HashMap<String, String> = HashMap::new();
+    for chunk in pending.chunks(24) {
+        let hashes: Vec<&str> = chunk.iter().map(|(_, hash)| hash.as_str()).collect();
+        let response = state
+            .http
+            .post("https://api.modrinth.com/v2/version_files")
+            .header("User-Agent", ua)
+            .json(&serde_json::json!({ "hashes": hashes, "algorithm": "sha1" }))
+            .send()
+            .await;
+        let Ok(response) = response else { continue };
+        if !response.status().is_success() {
+            continue;
+        }
+        let Ok(value) = response.json::<serde_json::Value>().await else { continue };
+        let Some(map) = value.as_object() else { continue };
+        for (name, hash) in chunk {
+            let Some(version) = map.get(hash.as_str()) else { continue };
+            let project = version["project_id"].as_str().unwrap_or_default();
+            if !project.is_empty() {
+                by_file.insert(name.clone(), project.to_string());
+                project_ids.push(project.to_string());
+            }
+        }
+    }
+
+    project_ids.sort();
+    project_ids.dedup();
+    let mut icons: HashMap<String, String> = HashMap::new();
+    if !project_ids.is_empty() {
+        let ids = serde_json::to_string(&project_ids).unwrap_or_else(|_| "[]".into());
+        let response = state
+            .http
+            .get("https://api.modrinth.com/v2/projects")
+            .header("User-Agent", ua)
+            .query(&[("ids", ids)])
+            .send()
+            .await;
+        if let Ok(response) = response {
+            if let Ok(list) = response.json::<Vec<serde_json::Value>>().await {
+                for project in list {
+                    if let (Some(id), Some(icon)) =
+                        (project["id"].as_str(), project["icon_url"].as_str())
+                    {
+                        icons.insert(id.to_string(), icon.to_string());
+                    }
+                }
+            }
+        }
+    }
+    for (name, project) in by_file {
+        cache.insert(name, icons.get(&project).cloned().unwrap_or_default());
+    }
+    for (name, _) in &pending {
+        cache.entry(name.clone()).or_default();
+    }
+    let _ = std::fs::write(&cache_path, serde_json::to_string(&cache).unwrap_or_default());
+    Ok(cache)
 }
 
 #[derive(Serialize)]
