@@ -129,6 +129,8 @@ export default {
     java: "Java",
     mods: "Моды",
     advanced: "Дополнительно",
+    autoUpdate: "Автообновление",
+    autoUpdateSub: "Скачивать новые версии лаунчера в фоне",
     language: "Язык",
     languageSub: "Язык интерфейса, даты и числа.",
     theme: "Тема",
@@ -389,5 +391,8 @@ export default {
     failed: "Не удалось проверить",
     available: "Доступна версия {version}",
     notes: "Что нового",
+    downloading: "Скачивание…",
+    restart: "Перезапустить",
+    ready: "Обновление скачано",
   },
 };

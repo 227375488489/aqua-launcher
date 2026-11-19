@@ -129,6 +129,8 @@ export default {
     java: "Java",
     mods: "Mods",
     advanced: "Advanced",
+    autoUpdate: "Auto-update",
+    autoUpdateSub: "Download new launcher versions in the background",
     language: "Language",
     languageSub: "Interface language, dates and numbers.",
     theme: "Theme",
@@ -389,5 +391,8 @@ export default {
     failed: "Could not check",
     available: "Version {version} is available",
     notes: "What's new",
+    downloading: "Downloading…",
+    restart: "Restart",
+    ready: "Update downloaded",
   },
 };

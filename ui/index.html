@@ -62,7 +62,7 @@
         <img class="brand-mark" src="assets/logo-64.png" alt="" />
         <span class="brand-word">aqua</span>
         <span class="brand-tag" data-i18n="brand.tag">launcher</span>
-        <span class="chip chip-soft chip-mono" id="version-chip">v0.1 Beta</span>
+        <span class="chip chip-soft chip-mono" id="version-chip">v0.0.1 Beta</span>
       </div>
       <div class="window-controls" id="window-controls">
         <button class="win-btn" id="win-min" data-i18n-title="window.minimize" aria-label="Minimize"><svg class="ico"><use href="#i-minus"></use></svg></button>
@@ -88,7 +88,7 @@
             <span data-i18n="nav.settings">Настройки</span>
           </button>
           <div class="rail-version">
-            <span id="rail-version">0.1 Beta</span><span class="dot"></span><span id="rail-platform">Windows</span>
+            <span id="rail-version">0.0.1 Beta</span><span class="dot"></span><span id="rail-platform">Windows</span>
           </div>
         </div>
       </aside>
@@ -96,9 +96,9 @@
       <main class="view" id="view">
         <div class="update-banner" id="update-banner" hidden>
           <span class="update-dot"></span>
-          <div class="update-text"><b data-i18n="update.title">Доступно обновление</b><span id="update-version">0.1 Beta</span></div>
+          <div class="update-text"><b data-i18n="update.title">Доступно обновление</b><span id="update-version">0.0.1 Beta</span><em id="update-detail"></em></div>
           <button class="btn btn-quiet btn-sm" id="update-notes" data-i18n="update.notes">Что нового</button>
-          <button class="btn btn-soft btn-sm" id="update-open"><svg class="ico"><use href="#i-download"></use></svg><span data-i18n="update.download">Скачать</span></button>
+          <button class="btn btn-soft btn-sm" id="update-open"><svg class="ico"><use href="#i-download"></use></svg><span id="update-label" data-i18n="update.download">Скачать</span></button>
           <button class="win-btn" id="update-hide" aria-label="Hide"><svg class="ico"><use href="#i-close"></use></svg></button>
         </div>
         <section class="page" id="page-home" data-page="home">
@@ -545,6 +545,10 @@
                     <button class="folder-btn" data-open="default"><svg class="ico"><use href="#i-drive"></use></svg><span data-i18n="set.folder.data">Данные</span></button>
                   </div>
                   <div class="field">
+                    <div class="field-label"><b data-i18n="set.autoUpdate">Автообновление</b><span class="hint" data-i18n="set.autoUpdateSub">Скачивать новые версии лаунчера в фоне</span></div>
+                    <div class="field-control"><button class="switch is-on" id="auto-update-switch" role="switch"><i></i></button></div>
+                  </div>
+                  <div class="field">
                     <div class="field-label"><b data-i18n="update.title">Обновления</b><span class="hint" id="update-state">—</span></div>
                     <div class="field-control"><button class="btn btn-quiet btn-sm" id="update-check"><svg class="ico"><use href="#i-refresh"></use></svg><span data-i18n="update.check">Проверить</span></button></div>
                   </div>
@@ -555,7 +559,7 @@
                   <div class="hr"></div>
                   <div class="about-row">
                     <img class="brand-mark" src="assets/logo-64.png" alt="" />
-                    <div><b>Aqua Launcher <span id="about-version">0.1 Beta</span></b><p data-i18n="set.aboutText">Открытый лаунчер на Rust + Tauri. Без рекламы и слежки.</p></div>
+                    <div><b>Aqua Launcher <span id="about-version">0.0.1 Beta</span></b><p data-i18n="set.aboutText">Открытый лаунчер на Rust + Tauri. Без рекламы и слежки.</p></div>
                     <button class="btn btn-soft btn-sm" id="about-github"><svg class="ico"><use href="#i-external"></use></svg><span>GitHub</span></button>
                   </div>
                 </div>

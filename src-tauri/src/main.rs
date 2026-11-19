@@ -40,6 +40,8 @@ fn main() {
             commands::profile_remove,
             commands::stats_reset,
             commands::check_update,
+            commands::download_update,
+            commands::install_update,
             commands::install_version,
             commands::launch,
             commands::stop_game,

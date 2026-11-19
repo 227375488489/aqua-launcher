@@ -11,8 +11,8 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const APP_VERSION = "0.1.0";
-const APP_LABEL = "0.1 Beta";
+const APP_VERSION = "0.0.1-beta";
+const APP_LABEL = "0.0.1 Beta";
 const NAV_DEFAULT = ["home", "library", "instances", "discover", "accounts"];
 const WIDGET_DEFAULT = ["stats", "pc", "latest", "instances", "console"];
 const LINKS = {
@@ -59,6 +59,11 @@ function hslHex(h, s, l) {
   const v = (x) => Math.round(x * 255).toString(16).padStart(2, "0");
   return `#${v(f(0))}${v(f(8))}${v(f(4))}`;
 }
+const ACCENT_HEX = {
+  aqua: "#5be9dc", mint: "#79f2b6", azure: "#71b7ff", violet: "#b79bff",
+  rose: "#ff9db5", amber: "#ffd27a", lime: "#c8f57b", ice: "#bfe9ff",
+  crimson: "#ff8a9a", sky: "#8fd6ff", sand: "#ffe0a3", plum: "#d8a5ff",
+};
 function accentVars(hex) {
   const rgb = hexRgb(hex);
   if (!rgb) return null;
@@ -319,18 +324,35 @@ function resolveTheme(theme) {
 
 function applyAppearance(s) {
   const root = document.documentElement;
-  const custom = s.uiAccent === "custom" ? accentVars(s.uiAccentCustom) : null;
+  const theme = resolveTheme(s.uiTheme || "dark");
+  const accentHex = s.uiAccent === "custom"
+    ? (s.uiAccentCustom || "#5ce8dc")
+    : (ACCENT_HEX[s.uiAccent] || ACCENT_HEX.aqua);
+  const rgb = hexRgb(accentHex);
+  let custom = s.uiAccent === "custom" ? accentVars(accentHex) : null;
+  if (theme === "light" && rgb) {
+    const [h, sat, l] = rgbHsl(rgb);
+    const deep = Math.min(l, 0.42);
+    const soft = hslHex(h, Math.max(0.38, Math.min(0.82, sat + 0.08)), deep + 0.1);
+    custom = {
+      accent: hslHex(h, Math.max(0.4, Math.min(0.9, sat)), deep),
+      accent2: hslHex(h + 14, Math.max(0.4, Math.min(0.9, sat)), Math.min(0.5, deep + 0.08)),
+      soft: `rgba(${hexRgb(soft).join(",")},.13)`,
+      ink: "#ffffff",
+    };
+  }
   if (custom) {
     root.style.setProperty("--accent", custom.accent);
     root.style.setProperty("--accent-2", custom.accent2);
     root.style.setProperty("--accent-soft", custom.soft);
     root.style.setProperty("--accent-ink", custom.ink);
-    root.dataset.accent = "custom";
+    root.dataset.accent = s.uiAccent === "custom" ? "custom" : (ACCENT_NAMES.includes(s.uiAccent) ? s.uiAccent : "aqua");
   } else {
     ["--accent", "--accent-2", "--accent-soft", "--accent-ink"].forEach((key) => root.style.removeProperty(key));
     root.dataset.accent = ACCENT_NAMES.includes(s.uiAccent) && s.uiAccent !== "custom" ? s.uiAccent : "aqua";
   }
-  root.dataset.theme = resolveTheme(s.uiTheme || "dark");
+  if (rgb) root.style.setProperty("--logo-rotate", `${rgbHsl(rgb)[0] - 186}deg`);
+  root.dataset.theme = theme;
   root.dataset.radius = s.uiRadius || "soft";
   root.dataset.density = s.uiDensity || "normal";
   root.dataset.font = s.uiFont === "system" ? "system" : "manrope";
@@ -1663,6 +1685,7 @@ function fillSettings() {
   setSwitch("#close-switch", Boolean(s.closeOnLaunch));
   setSwitch("#snapshots-switch", s.showSnapshots !== false);
   setSwitch("#old-switch", s.showOld !== false);
+  setSwitch("#auto-update-switch", s.autoUpdate !== false);
   setSwitch("#flags-switch", s.optimizedFlags !== false);
   setSwitch("#auto-java-switch", s.autoJava !== false);
   setSwitch("#strict-switch", s.strictMods !== false);
@@ -1772,6 +1795,7 @@ async function checkUpdate(manual = false) {
       if (label) label.textContent = `v${info.latest}`;
       if (state) state.textContent = t("update.available", { version: `v${info.latest}` });
       if (manual) toast(t("update.available", { version: `v${info.latest}` }));
+      if (S.settings?.autoUpdate && info.asset) downloadUpdate(true);
     } else {
       if (state) state.textContent = t("update.latest");
       if (manual) toast(t("update.latest"));
@@ -1779,6 +1803,51 @@ async function checkUpdate(manual = false) {
   } catch {
     if (state) state.textContent = t("update.failed");
     if (manual) toast(t("update.failed"), "err");
+  }
+}
+
+function setUpdateButton(labelKey) {
+  const label = $("#update-label");
+  if (label) label.textContent = t(labelKey);
+}
+
+async function downloadUpdate(auto = false) {
+  const info = S.update;
+  if (!info?.available || S.updateBusy) return;
+  if (info.path) return installUpdate();
+  if (!info.asset) {
+    openUrl(info.url || `${LINKS.github}/releases/latest`);
+    return;
+  }
+  S.updateBusy = true;
+  setUpdateButton("update.downloading");
+  const detail = $("#update-detail");
+  if (detail) detail.textContent = "0%";
+  try {
+    const path = await invoke("download_update", { url: info.asset, filename: info.assetName || "aqua-update.exe" });
+    info.path = path;
+    setUpdateButton("update.restart");
+    if (detail) detail.textContent = "100%";
+    if (!auto) toast(t("update.ready"));
+  } catch (err) {
+    if (detail) detail.textContent = "";
+    setUpdateButton("update.download");
+    toast(friendly(err), "err");
+  } finally {
+    S.updateBusy = false;
+  }
+}
+
+async function installUpdate() {
+  const path = S.update?.path;
+  if (!path || S.updateBusy) {
+    downloadUpdate();
+    return;
+  }
+  try {
+    await invoke("install_update", { path });
+  } catch (err) {
+    toast(friendly(err), "err");
   }
 }
 
@@ -1888,6 +1957,7 @@ function bindSettings() {
   bindSwitch("#close-switch", "closeOnLaunch");
   bindSwitch("#snapshots-switch", "showSnapshots", () => { renderAll(); });
   bindSwitch("#old-switch", "showOld", () => { renderAll(); });
+  bindSwitch("#auto-update-switch", "autoUpdate");
   bindSwitch("#flags-switch", "optimizedFlags");
   bindSwitch("#auto-java-switch", "autoJava");
   bindSwitch("#strict-switch", "strictMods");
@@ -1943,7 +2013,11 @@ function bindSettings() {
     }
   });
   $("#update-check").addEventListener("click", () => checkUpdate(true));
-  $("#update-open").addEventListener("click", () => openUrl(S.update?.url || `${LINKS.github}/releases/latest`));
+  $("#update-open").addEventListener("click", () => {
+    if (S.update?.path) installUpdate();
+    else if (S.update?.available) downloadUpdate();
+    else openUrl(S.update?.url || `${LINKS.github}/releases/latest`);
+  });
   $("#update-hide").addEventListener("click", () => { $("#update-banner").hidden = true; });
   $("#update-notes")?.addEventListener("click", () => {
     const info = S.update;
@@ -2211,6 +2285,15 @@ function appendLog(text, kind = "") {
 
 async function bindBackend() {
   await listen("install://progress", (e) => updateDownload(e.payload || {}));
+  await listen("update://progress", (e) => {
+    const p = e.payload || {};
+    const total = Number(p.total || 0);
+    const bytes = Number(p.bytes || 0);
+    const pct = total > 0 ? Math.min(100, Math.round((bytes / total) * 100)) : 0;
+    if (S.update) S.update.percent = pct;
+    const detail = $("#update-detail");
+    if (detail) detail.textContent = total > 0 ? `${pct}% · ${i18n.bytes(bytes)} / ${i18n.bytes(total)}` : `${i18n.bytes(bytes)}`;
+  });
   await listen("mods://progress", (e) => {
     const p = e.payload || {};
     showBar("download", `${i18n.number(p.done || 0)} ${t("progress.files")}`, 0);

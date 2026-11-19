@@ -133,6 +133,7 @@ let settings = {
   uiGlass: 62,
   uiPlayPosition: pick("playpos", "left"),
   strictMods: true,
+  autoUpdate: true,
   language: pick("lang", "ru"),
 };
 
@@ -240,7 +241,7 @@ const handlers = {
       gameDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher\\minecraft" : "/home/sviat/.local/share/AquaLauncher/minecraft",
       activeDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher\\minecraft\\profiles\\instance-vanilla" : "/home/sviat/.local/share/AquaLauncher/minecraft/profiles/instance-vanilla",
       dataDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher" : "/home/sviat/.local/share/AquaLauncher",
-      appVersion: "0.1.0",
+      appVersion: "0.0.1-beta",
       running,
       lastVersion,
       profiles,
@@ -425,14 +426,31 @@ const handlers = {
   },
 
   check_update() {
+    const demo = new URLSearchParams(location.search).has("update");
     return {
-      current: "0.1.0",
-      latest: "0.1.0",
-      url: "https://github.com/227375488489/aqua-launcher/releases/latest",
-      notes: "",
+      current: "0.0.1-beta",
+      latest: demo ? "0.0.2-beta" : "0.0.1-beta",
+      url: "https://github.com/227375488489/aqua-launcher/releases",
+      notes: demo ? "## Beta 0.0.2\n\n- Auto update test\n- Theme fixes" : "",
       published: date(Date.now() - 3 * day),
-      available: false,
+      available: demo,
+      asset: demo ? "https://github.com/227375488489/aqua-launcher/releases/download/v0.0.2-beta/Aqua.Launcher_0.0.2-beta_x64-setup.exe" : "",
+      assetName: demo ? "Aqua.Launcher_0.0.2-beta_x64-setup.exe" : "",
     };
+  },
+
+  async download_update({ filename }) {
+    const total = 12_400_000;
+    for (let i = 1; i <= 24; i += 1) {
+      await sleep(70);
+      emit("update://progress", { bytes: Math.round((total * i) / 24), total });
+    }
+    return `C:\\Users\\demo\\AppData\\Roaming\\AquaLauncher\\updates\\${filename || "aqua-update.exe"}`;
+  },
+
+  async install_update() {
+    await sleep(250);
+    return null;
   },
 
   modpack_search({ query }) {

@@ -910,6 +910,8 @@ pub async fn check_update(state: State<'_, AppState>) -> Result<UpdateInfo, Stri
             notes: String::new(),
             published: None,
             available: false,
+            asset: String::new(),
+            asset_name: String::new(),
         });
     };
     let latest = release["tag_name"]
@@ -921,7 +923,128 @@ pub async fn check_update(state: State<'_, AppState>) -> Result<UpdateInfo, Stri
     let notes = release["body"].as_str().unwrap_or_default().to_string();
     let published = release["published_at"].as_str().map(str::to_string);
     let available = version_greater(&latest, &current);
-    Ok(UpdateInfo { current, latest, url, notes, published, available })
+    let (asset, asset_name) = pick_asset(release).unwrap_or_default();
+    Ok(UpdateInfo { current, latest, url, notes, published, available, asset, asset_name })
+}
+
+fn pick_asset(release: &serde_json::Value) -> Option<(String, String)> {
+    let os = std::env::consts::OS;
+    let assets = release["assets"].as_array()?;
+    let mut best: Option<(i32, String, String)> = None;
+    for item in assets {
+        let name = item["name"].as_str().unwrap_or_default();
+        let lower = name.to_lowercase();
+        let score = match os {
+            "windows" => {
+                if lower.ends_with(".exe") { 100 } else if lower.ends_with(".msi") { 80 } else { -1 }
+            }
+            "macos" => {
+                if lower.ends_with(".dmg") { 100 } else if lower.ends_with(".app.tar.gz") { 70 } else { -1 }
+            }
+            _ => {
+                if lower.ends_with(".appimage") { 100 } else if lower.ends_with(".deb") { 60 } else if lower.ends_with(".rpm") { 50 } else { -1 }
+            }
+        };
+        if score < 0 { continue; }
+        let url = item["browser_download_url"].as_str().unwrap_or_default().to_string();
+        if !url.starts_with("https://") { continue; }
+        if best.as_ref().map(|(s, _, _)| score > *s).unwrap_or(true) {
+            best = Some((score, url, name.to_string()));
+        }
+    }
+    best.map(|(_, url, name)| (url, name))
+}
+
+#[tauri::command]
+pub async fn download_update(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    url: String,
+    filename: String,
+) -> Result<String, String> {
+    use futures::StreamExt;
+    use tokio::io::AsyncWriteExt;
+    if !url.starts_with("https://github.com/") {
+        return Err("update_bad_url".into());
+    }
+    let safe = filename
+        .rsplit(['/', '\\'])
+        .next()
+        .filter(|name| !name.is_empty())
+        .unwrap_or("aqua-update.bin");
+    let dir = crate::paths::data_dir().join("updates");
+    crate::paths::ensure_dir(&dir).map_err(|e| e.to_string())?;
+    let dest = dir.join(safe);
+    let response = state
+        .http
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("update_network:{e}"))?
+        .error_for_status()
+        .map_err(|e| format!("update_http:{e}"))?;
+    let total = response.content_length().unwrap_or(0);
+    let mut stream = response.bytes_stream();
+    let mut file = tokio::fs::File::create(&dest).await.map_err(|e| e.to_string())?;
+    let mut done: u64 = 0;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| format!("update_network:{e}"))?;
+        file.write_all(&chunk).await.map_err(|e| e.to_string())?;
+        done += chunk.len() as u64;
+        let _ = app.emit(
+            "update://progress",
+            serde_json::json!({ "bytes": done, "total": total }),
+        );
+    }
+    file.flush().await.map_err(|e| e.to_string())?;
+    Ok(dest.display().to_string())
+}
+
+#[tauri::command]
+pub async fn install_update(app: AppHandle, path: String) -> Result<(), String> {
+    let file = PathBuf::from(&path);
+    if !file.exists() {
+        return Err("update_missing".into());
+    }
+    let name = file
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default()
+        .to_lowercase();
+    #[cfg(target_os = "windows")]
+    {
+        if name.ends_with(".exe") {
+            std::process::Command::new(&file)
+                .arg("/S")
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        } else if name.ends_with(".msi") {
+            std::process::Command::new("msiexec")
+                .arg("/i")
+                .arg(&file)
+                .arg("/qb")
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        } else {
+            app.opener().open_path(path, None::<&str>).map_err(|e| e.to_string())?;
+            return Ok(());
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(900)).await;
+        app.exit(0);
+        return Ok(());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if name.ends_with(".appimage") {
+            let _ = std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o755));
+            std::process::Command::new(&file).spawn().map_err(|e| e.to_string())?;
+            app.exit(0);
+            return Ok(());
+        }
+    }
+    app.opener().open_path(path, None::<&str>).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -933,6 +1056,8 @@ pub struct UpdateInfo {
     pub notes: String,
     pub published: Option<String>,
     pub available: bool,
+    pub asset: String,
+    pub asset_name: String,
 }
 
 fn version_greater(a: &str, b: &str) -> bool {
