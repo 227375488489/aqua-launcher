@@ -433,6 +433,47 @@ const handlers = {
     return config();
   },
 
+  profile_set_version({ id, versionId, loader, loaderVersion }) {
+    const profile = profiles.find((p) => p.id === id);
+    if (profile) {
+      profile.versionId = versionId;
+      profile.loader = loader || profile.loader;
+      profile.loaderVersion = loaderVersion || "";
+    }
+    return config();
+  },
+
+  profile_clone({ id, name, versionId, loader, loaderVersion }) {
+    const source = profiles.find((p) => p.id === id);
+    const copy = {
+      ...(source || {}),
+      id: `instance-${Date.now()}`,
+      name: name || "New pack",
+      versionId,
+      loader: loader || source?.loader || "vanilla",
+      loaderVersion: loaderVersion || "",
+      createdAt: Math.floor(Date.now() / 1000),
+    };
+    profiles.push(copy);
+    activeProfile = copy.id;
+    lastVersion = copy.versionId;
+    return config();
+  },
+
+  profile_set_icon({ id, path }) {
+    const profile = profiles.find((p) => p.id === id);
+    if (profile) profile.icon = path || null;
+    return config();
+  },
+
+  mods_quarantine() {
+    return [];
+  },
+
+  mods_retry_pending() {
+    return { restored: [], remaining: [] };
+  },
+
   game_defaults() {
     return settings.gameDefaults || {};
   },
@@ -605,7 +646,7 @@ const handlers = {
       .map((m) => ({ ...m, id: `cf:${m.slug || m.id}`, provider: "curseforge", sources: ["curseforge"] }));
   },
 
-  catalog_search({ query, kind, provider }) {
+  catalog_search({ query, kind, provider, category, sort, limit = 20, offset = 0 }) {
     const source = provider || "modrinth";
     const pick = (fn) => fn({ query, kind });
     let hits = [];
@@ -623,7 +664,12 @@ const handlers = {
       }
       hits = merged;
     }
-    return hits.sort((a, b) => b.downloads - a.downloads);
+    if (category && category !== "all") {
+      hits = hits.filter((hit) => (hit.categories || []).some((c) => String(c).toLowerCase().replace(/\s+/g, "-") === category));
+    }
+    if (sort === "downloads") hits.sort((a, b) => b.downloads - a.downloads);
+    else if (sort === "newest") hits.reverse();
+    return hits.slice(offset, offset + limit);
   },
 
   async curse_project({ project }) {

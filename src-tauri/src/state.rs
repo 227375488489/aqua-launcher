@@ -146,6 +146,8 @@ pub struct InstanceOptions {
     pub fullscreen: Option<bool>,
     /// Windows: high | default
     pub gpu: Option<String>,
+    /// Своя память для сборки (МБ), иначе берётся из глобальных настроек.
+    pub memory_mb: Option<u32>,
 }
 
 impl InstanceOptions {
@@ -163,6 +165,7 @@ impl InstanceOptions {
             sound: self.sound.or(base.sound),
             fullscreen: self.fullscreen.or(base.fullscreen),
             gpu: self.gpu.clone().or_else(|| base.gpu.clone()),
+            memory_mb: self.memory_mb.or(base.memory_mb),
         }
     }
 }

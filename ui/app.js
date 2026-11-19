@@ -11,8 +11,8 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const APP_VERSION = "0.0.5-beta";
-const APP_LABEL = "0.0.5 Beta";
+const APP_VERSION = "0.0.6-beta";
+const APP_LABEL = "0.0.6 Beta";
 const NAV_DEFAULT = ["home", "library", "instances", "discover", "accounts"];
 const WIDGET_DEFAULT = ["stats", "pc", "latest", "instances", "console"];
 const LINKS = {
@@ -140,6 +140,13 @@ const S = {
   discoverResults: [],
   discoverBusy: false,
   discoverCat: "all",
+  discoverPage: 1,
+  discoverPer: 20,
+  discoverSort: "featured",
+  discoverTotal: null,
+  discoverHasMore: false,
+  modsQuery: "",
+  savedSettings: null,
   running: null,
   launching: false,
   installing: new Set(),
@@ -400,6 +407,13 @@ function applyAppearance(s) {
     syncWindowIcon(rgbHsl(rgb)[0] - 186);
   }
   root.dataset.theme = s.uiTheme === "oled" ? "oled" : theme;
+  const themeBtn = $("#theme-btn");
+  if (themeBtn) {
+    const light = theme === "light";
+    themeBtn.querySelector("use")?.setAttribute("href", light ? "#i-moon" : "#i-sun");
+    themeBtn.title = t(light ? "theme.toDark" : "theme.toLight");
+    themeBtn.setAttribute("aria-label", themeBtn.title);
+  }
   root.dataset.radius = s.uiRadius || "soft";
   root.dataset.density = s.uiDensity || "normal";
   root.dataset.font = s.uiFont === "system" ? "system" : "manrope";
@@ -439,6 +453,7 @@ function applyBoot(boot, resetSelected = false) {
   if (!boot) return;
   S.boot = boot;
   S.settings = boot.settings || S.settings;
+  S.savedSettings = JSON.parse(JSON.stringify(S.settings || {}));
   S.accounts = boot.accounts || [];
   S.active = boot.active || null;
   S.local = boot.local || [];
@@ -645,26 +660,42 @@ function renderVersionList() {
     if (at < 0) return esc(raw);
     return `${esc(raw.slice(0, at))}<mark>${esc(raw.slice(at, at + q.length))}</mark>${esc(raw.slice(at + q.length))}`;
   };
-  const item = (id, kind, sub, loader, profile) => {
+  const item = (id, kind, sub, loader, profile, child = false) => {
     const current = profile ? S.boot?.activeProfile === profile.id : S.selected === id;
     const packSub = profile ? `${id} · ${profile.loader || "vanilla"}${profile.loaderVersion ? ` ${profile.loaderVersion}` : ""}` : sub;
-    return `<button class="menu-item ${current ? "is-on" : ""}" data-pick="${esc(id)}" ${profile ? `data-profile-pick="${esc(profile.id)}"` : ""}>
+    return `<button class="menu-item ${current ? "is-on" : ""} ${child ? "is-child" : ""}" data-pick="${esc(id)}" ${profile ? `data-profile-pick="${esc(profile.id)}"` : ""}>
     <span class="mi-main"><b>${mark(profile ? profile.name : id)}</b><small>${esc(packSub)}</small></span>
     ${profile ? `<span class="chip ${S.boot?.activeProfile === profile.id ? "chip-soft" : ""}">${esc(S.boot?.activeProfile === profile.id ? t("common.active") : t("common.installed"))}</span>` : loader ? `<span class="chip">${esc(loader)}</span>` : ""}
     ${current ? `<svg class="ico" style="width:14px;height:14px;color:var(--accent)"><use href="#i-check"></use></svg>` : ""}
   </button>`;
   };
-  const parts = [];
+  const hit = (v) => !q || `${v.id} ${v.kind || ""}`.toLowerCase().includes(q);
+  const groups = new Map();
   for (const v of versions) {
-    const packs = S.profiles.filter((p) => p.versionId === v.id);
-    const hitVersion = !q || `${v.id} ${v.kind || ""}`.toLowerCase().includes(q);
-    if (hitVersion) {
-      parts.push(item(v.id, v.kind, isInstalled(v.id) ? `${kindLabel(v.kind)} · ${t("common.installed")}` : kindLabel(v.kind), loaderLabel(v.id)));
+    const base = baseOf(v.id) || v.id;
+    if (!groups.has(base)) groups.set(base, { base: null, children: [] });
+    const group = groups.get(base);
+    if (v.id === base) group.base = v;
+    else group.children.push(v);
+  }
+  const parts = [];
+  for (const [baseId, group] of groups) {
+    const rows = [];
+    const baseVersion = group.base || { id: baseId, kind: "release" };
+    const baseHit = hit(baseVersion);
+    if (group.base && baseHit) {
+      rows.push(item(baseVersion.id, baseVersion.kind, isInstalled(baseVersion.id) ? `${kindLabel(baseVersion.kind)} · ${t("common.installed")}` : kindLabel(baseVersion.kind), loaderLabel(baseVersion.id)));
     }
-    for (const p of packs) {
-      if (!hitVersion && !`${p.name} ${v.id} ${p.loader || ""}`.toLowerCase().includes(q)) continue;
-      parts.push(item(v.id, "release", p.loader || "vanilla", "", p));
+    for (const child of group.children) {
+      if (!baseHit && !hit(child)) continue;
+      rows.push(item(child.id, child.kind, isInstalled(child.id) ? `${kindLabel(child.kind)} · ${t("common.installed")}` : kindLabel(child.kind), loaderLabel(child.id), null, true));
     }
+    const versionIds = [baseId, ...group.children.map((c) => c.id)];
+    for (const p of S.profiles.filter((profile) => versionIds.includes(profile.versionId))) {
+      if (!baseHit && !`${p.name} ${p.versionId} ${p.loader || ""}`.toLowerCase().includes(q)) continue;
+      rows.push(item(p.versionId, "release", p.loader || "vanilla", "", p));
+    }
+    if (rows.length) parts.push(rows.join(""));
   }
   host.innerHTML = parts.length
     ? `<div class="menu-label">${esc(t("menu.available"))}</div>${parts.join("")}`
@@ -865,7 +896,7 @@ function widgetConsole() {
 function bindWidgetActions() {
   $$("[data-goto]", $("#widgets")).forEach((el) => el.addEventListener("click", () => go(el.dataset.goto, el.dataset.tabTarget)));
   $$("[data-pick-latest]", $("#widgets")).forEach((el) => el.addEventListener("click", () => setSelected(el.dataset.pickLatest)));
-  $$("[data-instance]", $("#widgets")).forEach((el) => el.addEventListener("click", () => activateProfile(el.dataset.instance)));
+  $$("[data-instance]", $("#widgets")).forEach((el) => el.addEventListener("click", () => openPack(el.dataset.instance)));
   $("#console-clear")?.addEventListener("click", () => {
     S.log = [];
     renderWidgets();
@@ -1134,15 +1165,6 @@ function hasLoaderProfile() {
 
 /* ------------------------------------------------------------------ discover */
 
-function planDiscoverVisibility() {
-  const kind = S.discoverKind;
-  $("#discover-version-wrap").hidden = kind === "modpack" || kind === "shader";
-  $("#discover-loader-wrap").hidden = kind !== "mod";
-  if ($("#discover-profile-wrap")) $("#discover-profile-wrap").hidden = kind === "modpack";
-  $("#discover-provider").hidden = kind === "modpack";
-  $("#fabric-notice").hidden = !(kind === "mod" && !hasLoaderProfile());
-}
-
 const DISCOVER_CATS = {
   modpack: ["adventure", "technology", "magic", "quests", "skyblock", "hardcore", "optimization", "vanilla"],
   mod: ["optimization", "adventure", "decoration", "technology", "magic", "library", "utility", "worldgen"],
@@ -1156,6 +1178,79 @@ function catLabel(id) {
   return value === `cat.${id}` ? id.charAt(0).toUpperCase() + id.slice(1) : value;
 }
 
+function planDiscoverVisibility() {
+  const kind = S.discoverKind;
+  $("#discover-version-filter").hidden = kind === "modpack" || kind === "shader";
+  $("#discover-loader-filter").hidden = kind !== "mod";
+  $("#discover-profile-filter").hidden = kind === "modpack";
+  $("#discover-provider-wrap").hidden = kind === "modpack";
+  $("#fabric-notice").hidden = !(kind === "mod" && !hasLoaderProfile());
+  updateCatalogChrome();
+}
+
+function providerName() {
+  if (S.discoverKind === "modpack") return "Modrinth";
+  if (S.discoverProvider === "curseforge") return "CurseForge";
+  if (S.discoverProvider === "both") return "Modrinth + CurseForge";
+  return "Modrinth";
+}
+
+function catalogKindLabel() {
+  const map = { modpack: "catalog.kindPacks", mod: "catalog.kindMods", resourcepack: "catalog.kindRp", shader: "catalog.kindShaders" };
+  return t(map[S.discoverKind] || "catalog.kindMods");
+}
+
+function updateCatalogChrome() {
+  const source = providerName();
+  const kind = catalogKindLabel();
+  const sub = $("#discover-sub");
+  if (sub) {
+    sub.removeAttribute("data-i18n");
+    sub.textContent = t("catalog.sub", { kind, source });
+  }
+  const search = $("#discover-search");
+  if (search) {
+    search.removeAttribute("data-i18n-ph");
+    search.placeholder = t("catalog.searchIn", { source });
+  }
+  $("#discover-source") && ($("#discover-source").textContent = source);
+}
+
+function activeFilterCount() {
+  let n = 0;
+  if (S.discoverKind !== "modpack" && S.discoverProvider !== "modrinth") n++;
+  if (S.discoverCat !== "all") n++;
+  if (S.discoverKind !== "modpack" && S.discoverKind !== "shader" && S.discoverVersion) n++;
+  if (S.discoverKind === "mod" && S.discoverLoader) n++;
+  return n;
+}
+
+function renderDiscoverActive() {
+  const host = $("#discover-active");
+  if (!host) return;
+  const chips = [];
+  if (S.discoverKind !== "modpack" && S.discoverProvider !== "modrinth") {
+    chips.push(`<button class="filter-chip" data-clear="provider">${esc(providerName())}<svg class="ico"><use href="#i-close"></use></svg></button>`);
+  }
+  if (S.discoverCat !== "all") {
+    chips.push(`<button class="filter-chip" data-clear="cat">${esc(catLabel(S.discoverCat))}<svg class="ico"><use href="#i-close"></use></svg></button>`);
+  }
+  if (S.discoverKind !== "modpack" && S.discoverKind !== "shader" && S.discoverVersion) {
+    chips.push(`<button class="filter-chip" data-clear="version">${esc(S.discoverVersion)}<svg class="ico"><use href="#i-close"></use></svg></button>`);
+  }
+  if (S.discoverKind === "mod" && S.discoverLoader) {
+    chips.push(`<button class="filter-chip" data-clear="loader">${esc(S.discoverLoader === "forge" ? "Forge" : S.discoverLoader === "neoforge" ? "NeoForge" : "Fabric")}<svg class="ico"><use href="#i-close"></use></svg></button>`);
+  }
+  host.hidden = !chips.length;
+  host.innerHTML = chips.join("");
+  const badge = $("#discover-filter-count");
+  if (badge) {
+    const n = activeFilterCount();
+    badge.hidden = !n;
+    badge.textContent = String(n);
+  }
+}
+
 function renderDiscoverCats() {
   const host = $("#discover-cats");
   if (!host) return;
@@ -1163,24 +1258,56 @@ function renderDiscoverCats() {
   host.hidden = false;
   host.innerHTML = [{ id: "all", label: t("discover.all") }]
     .concat(cats.map((id) => ({ id, label: catLabel(id) })))
-    .map((c) => `<button class="cat-chip ${S.discoverCat === c.id ? "is-on" : ""}" data-cat="${esc(c.id)}">${esc(c.label)}</button>`)
+    .map((c) => `<button class="cat-chip ${S.discoverCat === c.id ? "is-on" : ""}" data-cat="${esc(c.id)}" aria-pressed="${S.discoverCat === c.id}">${esc(c.label)}</button>`)
     .join("");
 }
 
-async function searchDiscover() {
+function renderDiscoverPager() {
+  const host = $("#discover-pager");
+  if (!host) return;
+  const per = S.discoverPer;
+  const offset = (S.discoverPage - 1) * per;
+  const known = S.discoverTotal == null ? offset + S.discoverResults.length + (S.discoverHasMore ? 1 : 0) : S.discoverTotal;
+  const pages = Math.max(1, Math.ceil(known / per));
+  host.hidden = S.discoverBusy || (!S.discoverResults.length && S.discoverPage === 1);
+  if (host.hidden) return;
+  const count = $("#discover-page-count");
+  if (count) {
+    count.textContent = `${offset + 1}–${offset + S.discoverResults.length} · ${t("catalog.resultsCount", { n: known })}`;
+  }
+  const nums = [];
+  const from = Math.max(1, Math.min(S.discoverPage - 2, pages - 4));
+  const to = Math.min(pages, from + 4);
+  for (let i = from; i <= to; i++) nums.push(i);
+  $("#discover-pages").innerHTML = [
+    `<button class="pager-btn" data-page="${S.discoverPage - 1}" ${S.discoverPage <= 1 ? "disabled" : ""} aria-label="prev"><svg class="ico"><use href="#i-chevron"></use></svg></button>`,
+    ...nums.map((n) => `<button class="pager-btn ${n === S.discoverPage ? "is-on" : ""}" data-page="${n}">${n}</button>`),
+    `<button class="pager-btn" data-page="${S.discoverPage + 1}" ${!S.discoverHasMore ? "disabled" : ""} aria-label="next"><svg class="ico"><use href="#i-chevron"></use></svg></button>`,
+  ].join("");
+  const perSelect = $("#discover-per");
+  if (perSelect) perSelect.value = String(per);
+}
+
+async function searchDiscover(reset = true) {
   planDiscoverVisibility();
   renderDiscoverCats();
+  renderDiscoverActive();
+  if (reset) S.discoverPage = 1;
   const token = ++S.loadToken;
   S.discoverBusy = true;
   const empty = $("#discover-empty");
   empty.hidden = true;
-  if (!S.discoverResults.length) {
-    $("#discover-results").innerHTML = `<div class="pcard"><p class="widget-empty">${esc(t("common.loading"))}</p></div>`;
+  const offset = (S.discoverPage - 1) * S.discoverPer;
+  if (!S.discoverResults.length || reset) {
+    $("#discover-results").innerHTML = `<div class="result-skeleton"><span class="spinner"></span><span>${esc(t("common.loading"))}</span></div>`;
   }
   try {
     let results;
     if (S.discoverKind === "modpack") {
-      results = await invoke("modpack_search", { query: S.discoverQuery });
+      const all = await invoke("modpack_search", { query: S.discoverQuery });
+      S.discoverTotal = (all || []).length;
+      results = (all || []).slice(offset, offset + S.discoverPer);
+      S.discoverHasMore = offset + results.length < S.discoverTotal;
     } else {
       results = await invoke("catalog_search", {
         query: S.discoverQuery,
@@ -1188,7 +1315,13 @@ async function searchDiscover() {
         version: S.discoverKind === "shader" ? null : S.discoverVersion || null,
         loader: S.discoverKind === "mod" ? S.discoverLoader : null,
         provider: S.discoverProvider,
+        category: S.discoverCat === "all" ? null : S.discoverCat,
+        sort: S.discoverSort,
+        limit: S.discoverPer,
+        offset,
       });
+      S.discoverTotal = null;
+      S.discoverHasMore = (results || []).length >= S.discoverPer;
     }
     if (token !== S.loadToken) return;
     S.discoverResults = results || [];
@@ -1199,7 +1332,10 @@ async function searchDiscover() {
     renderDiscoverResults();
     toast(friendly(err), "err");
   } finally {
-    if (token === S.loadToken) S.discoverBusy = false;
+    if (token === S.loadToken) {
+      S.discoverBusy = false;
+      renderDiscoverPager();
+    }
   }
 }
 
@@ -1209,33 +1345,34 @@ function renderDiscoverResults() {
   $("#discover-empty").hidden = list.length > 0 || S.discoverBusy;
   const meta = $("#discover-meta");
   if (meta) meta.hidden = !list.length;
-  if ($("#discover-count")) $("#discover-count").textContent = t("discover.resultsCount", { n: list.length });
-  if ($("#discover-source")) {
-    $("#discover-source").textContent = S.discoverKind === "modpack"
-      ? "Modrinth"
-      : S.discoverProvider === "both" ? "Modrinth + CurseForge" : S.discoverProvider === "curseforge" ? "CurseForge" : "Modrinth";
+  if ($("#discover-count")) {
+    const offset = (S.discoverPage - 1) * S.discoverPer;
+    const total = S.discoverTotal == null ? offset + list.length + (S.discoverHasMore ? 1 : 0) : S.discoverTotal;
+    $("#discover-count").textContent = t("catalog.resultsCount", { n: total });
   }
+  updateCatalogChrome();
   host.innerHTML = list.map((hit) => {
     const installing = S.discoverInstalling?.has?.(hit.id);
-    return `<article class="pcard" data-project="${esc(hit.id)}">
-      <img src="${esc(hit.icon || artFor(hit.title))}" alt="" loading="lazy" data-seed="${esc(hit.title)}">
-      <div class="pcard-body">
-        <h3 title="${esc(hit.title)}">${esc(hit.title)}</h3>
-        <p>${esc(hit.description || "")}</p>
-        <div class="pcard-tags">${(hit.categories || []).slice(0, 3).map((c) => `<span class="tag">${esc(c)}</span>`).join("")}${(hit.sources || []).map((s) => `<span class="tag src">${s === "curseforge" ? "CurseForge" : "Modrinth"}</span>`).join("")}</div>
-        <div class="pcard-foot">
-          <span>${esc(hit.author || "")}</span>
-          <span>·</span>
-          <span>${i18n.number(hit.downloads || 0)} ${esc(t("common.downloads"))}</span>
-          <button class="btn btn-primary btn-sm" data-install="${esc(hit.id)}" ${installing ? "disabled" : ""}>
-            <svg class="ico"><use href="#${installing ? "i-refresh" : "i-download"}"></use></svg>
-            <span>${esc(installing ? t("discover.installing") : S.discoverKind === "modpack" ? t("discover.installPack") : t("common.install"))}</span>
-          </button>
-        </div>
+    const cats = (hit.categories || []).slice(0, 3).map((c) => `<span class="tag">${esc(catLabel(c))}</span>`).join("");
+    const sources = (hit.sources || [hit.provider]).filter(Boolean).map((s) => `<span class="tag src">${s === "curseforge" ? "CurseForge" : "Modrinth"}</span>`).join("");
+    return `<article class="result-row" data-project="${esc(hit.id)}">
+      <img class="rr-icon" src="${esc(hit.icon || artFor(hit.title))}" alt="" loading="lazy" data-seed="${esc(hit.title)}">
+      <div class="rr-main">
+        <div class="rr-head"><h3 title="${esc(hit.title)}">${esc(hit.title)}</h3><span class="rr-author">${esc(t("catalog.by", { name: hit.author || "—" }))}</span></div>
+        <p class="rr-desc">${esc(hit.description || "")}</p>
+        <div class="rr-tags">${cats}${sources}</div>
+      </div>
+      <div class="rr-side">
+        <span class="rr-downloads"><svg class="ico"><use href="#i-download"></use></svg>${i18n.number(hit.downloads || 0)}</span>
+        <button class="btn btn-primary btn-sm" data-install="${esc(hit.id)}" ${installing ? "disabled" : ""}>
+          <svg class="ico"><use href="#${installing ? "i-refresh" : "i-download"}"></use></svg>
+          <span>${esc(installing ? t("discover.installing") : S.discoverKind === "modpack" ? t("discover.installPack") : t("common.install"))}</span>
+        </button>
       </div>
     </article>`;
   }).join("");
   applyImgFallback(host, "img", artFor);
+  renderDiscoverPager();
 }
 
 async function installProject(hit) {
@@ -1474,24 +1611,30 @@ async function loadMods() {
 function renderMods() {
   const host = $("#mods-list");
   if (!host) return;
-  const health = S.modHealth;
-  const healthText = health
-    ? health.missing?.length
-      ? `${t("discover.missing")}: ${health.missing.length}`
-      : t("discover.healthOk")
-    : "—";
-  $("#discover-installed-sub").textContent = `${S.mods.length} ${t("discover.installed").toLowerCase()} · ${healthText}`;
+  const q = (S.modsQuery || "").trim().toLowerCase();
+  const list = q
+    ? S.mods.filter((m) => `${m.name} ${m.file} ${m.version || ""} ${m.loader || ""}`.toLowerCase().includes(q))
+    : S.mods;
+  const count = $("#mods-count");
+  if (count) {
+    count.hidden = !S.mods.length;
+    count.textContent = String(S.mods.length);
+  }
   if (!S.mods.length) {
-    host.innerHTML = `<div class="empty" style="padding:26px"><p>${esc(t("discover.noneInstalled"))}</p></div>`;
+    host.innerHTML = `<div class="empty mods-empty"><p>${esc(t("discover.noneInstalled"))}</p></div>`;
+    return;
+  }
+  if (!list.length) {
+    host.innerHTML = `<div class="empty mods-empty"><p>${esc(t("catalog.noMatches"))}</p></div>`;
     return;
   }
   const riskKey = (risk) => (risk === "high" ? "discover.risk.high" : risk === "medium" ? "discover.risk.medium" : "discover.risk.safe");
   const pid = activeProfile()?.id;
-  host.innerHTML = S.mods.map((m) => {
+  host.innerHTML = list.map((m) => {
     const icon = pid ? S.icons.get(`${pid}:${m.file}`) : null;
     return `<div class="mod-row" data-mod="${esc(m.file)}">
     ${icon ? `<img class="micon" src="${esc(icon)}" alt="" loading="lazy">` : `<span class="micon">${ico("i-layers")}</span>`}
-    <div class="mname"><b>${esc(m.name)}</b><small>${esc(m.version || "")} · ${esc(m.loader || "")}</small></div>
+    <div class="mname"><b title="${esc(m.name)}">${esc(m.name)}</b><small>${esc([m.version, m.loader, i18n.bytes(m.size)].filter(Boolean).join(" · "))}</small></div>
     <span class="chip ${m.risk === "high" ? "danger" : m.risk === "medium" ? "warn" : "ok"}">${esc(t(riskKey(m.risk)))}</span>
     <button class="btn btn-quiet icon-only" data-mod-remove="${esc(m.file)}" title="${esc(t("common.remove"))}"><svg class="ico"><use href="#i-trash"></use></svg></button>
   </div>`;
@@ -1746,6 +1889,11 @@ async function openPack(id) {
   let addBusy = false;
   let addLoaded = false;
   let addToken = 0;
+  let addSort = "featured";
+  let addProvider = "both";
+  let addPage = 1;
+  let addPer = 20;
+  let addHasMore = false;
   const kinds = [
     ["mod", t("project.mods")],
     ["resourcepack", t("project.resourcepacks")],
@@ -1759,63 +1907,109 @@ async function openPack(id) {
     if (!list.length) return `<div class="empty" style="padding:28px"><p>${esc(t("instances.emptySub"))}</p></div>`;
     return list.map((item) => {
       const icon = iconFor(item);
-      return `<div class="pd-row">
-      <div class="pd-row-icon">${icon ? `<img src="${esc(icon)}" alt="" loading="lazy">` : ico(PACK_ICONS[kindOf(item)] || "i-layers")}</div>
+      const kind = kindOf(item);
+      return `<div class="pd-row ${kind === "pending" ? "is-pending" : ""}">
+      <div class="pd-row-icon">${icon ? `<img src="${esc(icon)}" alt="" loading="lazy">` : ico(PACK_ICONS[kind] || "i-layers")}</div>
       <div class="pd-row-main"><b>${esc(item.name)}</b><span>${esc(item.file)}</span></div>
-      <span class="chip">${esc(i18n.bytes(item.size || 0))}</span>
-      <button class="btn btn-quiet icon-only" data-pack-remove="${esc(item.file)}" data-kind="${esc(kindOf(item))}" title="${esc(t("common.delete"))}">${ico("i-trash")}</button>
+      ${kind === "pending" ? `<span class="chip warn">${esc(t("pack.pendingChip"))}</span>` : `<span class="chip">${esc(i18n.bytes(item.size || 0))}</span>`}
+      <button class="btn btn-quiet icon-only" data-pack-remove="${esc(item.file)}" data-kind="${esc(kind)}" title="${esc(t("common.delete"))}">${ico("i-trash")}</button>
     </div>`;
     }).join("");
   };
   const count = (kind) => contents.filter((item) => kindOf(item) === kind).length;
+  const pendingCount = () => count("pending");
+  const statusText = () => (pendingCount() ? t("pack.pendingCount", { n: pendingCount() }) : t("status.ready"));
   const addRows = () => {
-    if (addBusy && !addResults.length) return `<div class="empty" style="padding:26px"><p>${esc(t("common.loading"))}</p></div>`;
+    if (addBusy && !addResults.length) return `<div class="result-skeleton"><span class="spinner"></span><span>${esc(t("common.loading"))}</span></div>`;
     if (!addResults.length) return `<div class="empty" style="padding:26px"><p>${esc(t("pack.searchHint"))}</p></div>`;
-    return addResults.map((hit) => `<div class="pd-row">
-      <div class="pd-row-icon">${hit.icon ? `<img src="${esc(hit.icon)}" alt="" loading="lazy">` : ico(PACK_ICONS[addKind] || "i-layers")}</div>
-      <div class="pd-row-main"><b>${esc(hit.title)}</b><span>${esc(hit.author || "")} · ${esc(i18n.number(hit.downloads || 0))}${hit.provider ? ` · ${esc(hit.provider)}` : ""}</span></div>
-      <button class="btn btn-soft btn-sm" data-pack-install="${esc(hit.id)}" data-provider="${esc(hit.provider || "modrinth")}">${esc(t("common.install"))}</button>
-    </div>`).join("");
+    return addResults.map((hit) => {
+      const cats = (hit.categories || []).slice(0, 3).map((c) => `<span class="tag">${esc(catLabel(c))}</span>`).join("");
+      return `<div class="result-row add-row">
+        <div class="pd-row-icon">${hit.icon ? `<img src="${esc(hit.icon)}" alt="" loading="lazy">` : ico(PACK_ICONS[addKind] || "i-layers")}</div>
+        <div class="rr-main">
+          <div class="rr-head"><h3>${esc(hit.title)}</h3><span class="rr-author">${esc(t("catalog.by", { name: hit.author || "—" }))}</span></div>
+          <p class="rr-desc">${esc(hit.description || "")}</p>
+          <div class="rr-tags">${cats}<span class="tag src">${esc(hit.provider === "curseforge" ? "CurseForge" : "Modrinth")}</span></div>
+        </div>
+        <div class="rr-side">
+          <span class="rr-downloads">${ico("i-download")}${i18n.number(hit.downloads || 0)}</span>
+          <button class="btn btn-primary btn-sm" data-pack-install="${esc(hit.id)}" data-provider="${esc(hit.provider || "modrinth")}">${esc(t("common.install"))}</button>
+        </div>
+      </div>`;
+    }).join("");
   };
   const html = `
     <div class="pack-page-top">
       <button class="btn btn-quiet btn-sm" id="pack-back">${ico("i-chevron")}<span>${esc(t("common.back"))}</span></button>
     </div>
     <div class="pack-head">
-      ${profile.icon ? `<img class="pack-cover" src="${esc(profile.icon)}" alt="">` : `<span class="pack-cover">${ico("i-layers")}</span>`}
+      <button class="pack-cover-btn" id="pack-cover-btn" title="${esc(t("pack.changeCover"))}">
+        ${profile.icon ? `<img class="pack-cover" src="${esc(profile.icon)}" alt="">` : `<span class="pack-cover">${ico("i-layers")}</span>`}
+        <span class="pack-cover-edit">${ico("i-palette")}</span>
+      </button>
       <div class="pack-title">
-        <div class="pack-eyebrow"><span class="chip">${esc(profile.loader || "vanilla")}</span><span class="chip">${esc(profile.versionId)}</span>${profile.loaderVersion ? `<span class="chip chip-soft">${esc(profile.loaderVersion)}</span>` : ""}</div>
+        <div class="pack-eyebrow"><span class="chip">${esc(profile.loader || "vanilla")}</span><span class="chip">${esc(profile.versionId)}</span>${profile.loaderVersion ? `<span class="chip chip-soft">${esc(profile.loaderVersion)}</span>` : ""}${pendingCount() ? `<span class="chip warn">${esc(t("pack.pendingCount", { n: pendingCount() }))}</span>` : ""}</div>
         <h2>${esc(profile.name)}</h2>
-        <p>${esc(profile.versionId)} · ${esc(profile.loader || "vanilla")}${profile.loaderVersion ? ` ${esc(profile.loaderVersion)}` : ""}</p>
+        <p>${esc(t("pack.contentsCount", { n: contents.length }))}</p>
         <div class="pack-actions">
           <button class="btn btn-primary" id="pack-play">${ico("i-play")}<span>${esc(t("common.play"))}</span></button>
           <button class="btn btn-soft" id="pack-add">${ico("i-plus")}<span>${esc(t("discover.addContent"))}</span></button>
+          <button class="btn btn-quiet" id="pack-version">${ico("i-refresh")}<span>${esc(t("pack.updateVersion"))}</span></button>
+          <button class="btn btn-quiet" id="pack-retry" ${pendingCount() ? "" : "hidden"}>${ico("i-zap")}<span>${esc(t("pack.retryPending"))}</span></button>
           <button class="btn btn-quiet" id="pack-repair">${ico("i-shield")}<span>${esc(t("discover.repair"))}</span></button>
           <button class="btn btn-quiet icon-only" id="pack-rename" title="${esc(t("edit.renameInstance"))}">${ico("i-edit")}</button>
         </div>
       </div>
     </div>
     <div class="pack-stats">
-      <div><span>${esc(t("pack.status"))}</span><b>${esc(t("status.ready"))}</b></div>
+      <div><span>${esc(t("pack.status"))}</span><b id="pack-status">${esc(statusText())}</b></div>
+      <div><span>${esc(t("pack.modsCount"))}</span><b id="pack-mods-count">${count("mod") + count("pending")}</b></div>
       <div><span>${esc(t("stats.last"))}</span><b>${esc(S.stats.lastPlayed ? i18n.date(new Date(S.stats.lastPlayed * 1000)) : t("stats.never"))}</b></div>
       <div><span>${esc(t("stats.playtime"))}</span><b>${esc(duration(S.stats.playtimeSecs?.[profile.versionId] || 0))}</b></div>
     </div>
     <div class="pd-subtabs" id="pack-kinds">
       <button class="pd-subtab is-on" data-packkind="all">${esc(t("project.overview"))} ${contents.length}</button>
       ${kinds.map(([k, label]) => `<button class="pd-subtab" data-packkind="${k}">${esc(label)} ${count(k)}</button>`).join("")}
+      ${pendingCount() ? `<button class="pd-subtab" data-packkind="pending">${esc(t("pack.pendingChip"))} ${pendingCount()}</button>` : ""}
     </div>
     <div class="pd-search"><input class="input" id="pack-search" placeholder="${esc(t("project.search"))}"></div>
     <div class="pd-rows" id="pack-rows">${rows()}</div>
     <div id="pack-add-panel" hidden>
-      <div class="pack-add-head"><b>${esc(t("pack.addTitle"))}</b><small>${esc(t("pack.addSub"))}</small>
+      <div class="pack-add-head">
+        <div><b>${esc(t("pack.addTitle"))}</b><small>${esc(t("pack.addSub"))}</small></div>
         <button class="btn btn-quiet icon-only" id="pack-add-close" title="${esc(t("common.cancel"))}">${ico("i-close")}</button>
+      </div>
+      <div class="pack-lockchips">
+        <span class="lock-chip">${ico("i-layers")}${esc(profile.loader || "vanilla")}</span>
+        <span class="lock-chip">${ico("i-gamepad")}${esc(profile.versionId)}</span>
+        <span class="lock-chip lock-chip-hint">${esc(t("pack.filteredHint"))}</span>
       </div>
       <div class="pd-subtabs" id="pack-add-kinds">
         ${kinds.map(([k, label], i) => `<button class="pd-subtab ${i === 0 ? "is-on" : ""}" data-addkind="${k}">${esc(label)}</button>`).join("")}
       </div>
-      <div class="pd-search"><input class="input" id="pack-add-search" placeholder="${esc(t("pack.addSearch"))}" autocomplete="off"></div>
+      <div class="pack-add-bar">
+        <label class="input search"><svg class="ico"><use href="#i-search"></use></svg><input id="pack-add-search" placeholder="${esc(t("pack.addSearch"))}" autocomplete="off"></label>
+        <label class="select-inline"><select id="pack-add-sort">
+          <option value="featured" data-i18n="catalog.sortFeatured">${esc(t("catalog.sortFeatured"))}</option>
+          <option value="downloads">${esc(t("catalog.sortDownloads"))}</option>
+          <option value="updated">${esc(t("catalog.sortUpdated"))}</option>
+          <option value="newest">${esc(t("catalog.sortNewest"))}</option>
+        </select><svg class="ico"><use href="#i-chevron"></use></svg></label>
+        <label class="select-inline"><select id="pack-add-provider">
+          <option value="both" data-i18n="discover.both">${esc(t("discover.both"))}</option>
+          <option value="modrinth">Modrinth</option>
+          <option value="curseforge">CurseForge</option>
+        </select><svg class="ico"><use href="#i-chevron"></use></svg></label>
+      </div>
       <div class="cat-row" id="pack-add-cats"></div>
       <div class="pack-results" id="pack-add-results">${addRows()}</div>
+      <div class="pager pack-pager" id="pack-add-pager" hidden>
+        <span class="pager-count" id="pack-add-page-count"></span>
+        <div class="pager-pages" id="pack-add-pages"></div>
+        <label class="select-inline pager-size"><select id="pack-add-per">
+          <option value="20">20</option><option value="30">30</option><option value="50">50</option>
+        </select><svg class="ico"><use href="#i-chevron"></use></svg></label>
+      </div>
     </div>`;
   const page = $("#pack-page-body");
   page.innerHTML = html;
@@ -1832,6 +2026,17 @@ async function openPack(id) {
         const chip = $(`#pack-kinds [data-packkind='${k}']`);
         if (chip) chip.textContent = `${kinds.find(([k2]) => k2 === k)[1]} ${count(k)}`;
       });
+      const pendingTab = $("#pack-kinds [data-packkind='pending']");
+      if (pendingTab) {
+        pendingTab.hidden = !pendingCount();
+        pendingTab.textContent = `${t("pack.pendingChip")} ${pendingCount()}`;
+      }
+      const status = $("#pack-status");
+      if (status) status.textContent = statusText();
+      const retry = $("#pack-retry");
+      if (retry) retry.hidden = !pendingCount();
+      const mods = $("#pack-mods-count");
+      if (mods) mods.textContent = String(count("mod") + count("pending"));
     };
     const loadIcons = async () => {
       try {
@@ -1855,9 +2060,14 @@ async function openPack(id) {
       const remove = e.target.closest("[data-pack-remove]");
       if (!remove) return;
       try {
-        await invoke("profile_file_remove", { id, file: remove.dataset.packRemove, kind: remove.dataset.kind });
+        const kind = remove.dataset.kind === "pending" ? "mod" : remove.dataset.kind;
+        await invoke("profile_file_remove", { id, file: remove.dataset.packRemove, kind });
         contents = await invoke("profile_contents", { id });
         paint();
+        const status = $("#pack-status");
+        if (status) status.textContent = statusText();
+        const modsCount = $("#pack-mods-count");
+        if (modsCount) modsCount.textContent = String(count("mod") + count("pending"));
         toast(t("toast.removed"));
       } catch (err) {
         toast(friendly(err), "err");
@@ -1912,6 +2122,107 @@ async function openPack(id) {
       });
     });
 
+    const retryPending = async (silent) => {
+      if (!pendingCount()) return;
+      try {
+        const version = baseOf(profile.versionId) || profile.versionId;
+        const result = await invoke("mods_retry_pending", { id, version, loader: profile.loader || "fabric" });
+        const restored = result?.restored?.length || 0;
+        if (restored) {
+          contents = await invoke("profile_contents", { id });
+          paint();
+          loadIcons();
+          const status = $("#pack-status");
+          if (status) status.textContent = statusText();
+          toast(t("pack.restored", { n: restored }));
+        } else if (!silent) {
+          toast(t("pack.nothingPending"));
+        }
+      } catch (err) {
+        if (!silent) toast(friendly(err), "err");
+      }
+    };
+    $("#pack-retry").addEventListener("click", () => retryPending(false));
+
+    $("#pack-cover-btn").addEventListener("click", async () => {
+      try {
+        const path = await invoke("pick_wallpaper");
+        if (!path) return;
+        await invoke("profile_set_icon", { id, path });
+        await refreshBoot();
+        openPack(id);
+        toast(t("pack.coverChanged"));
+      } catch (err) {
+        toast(friendly(err), "err");
+      }
+    });
+
+    $("#pack-version").addEventListener("click", () => {
+      const versions = [...new Set([
+        ...S.remote.filter((v) => v.kind === "release").map((v) => v.id),
+        ...S.local.map((v) => v.id),
+      ])];
+      const current = baseOf(profile.versionId) || profile.versionId;
+      openModal(`<h3>${esc(t("pack.updateTitle"))}</h3>
+        <p>${esc(t("pack.updateSub"))}</p>
+        <div class="pack-update-grid">
+          <label class="field"><span>${esc(t("pack.targetVersion"))}</span>
+            <select class="input" id="pack-up-version">${versions.map((v) => `<option value="${esc(v)}" ${v === current ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>
+          </label>
+          <label class="field"><span>${esc(t("pack.loader"))}</span>
+            <select class="input" id="pack-up-loader">${["fabric", "forge", "neoforge", "vanilla"].map((l) => `<option value="${l}" ${(profile.loader || "vanilla") === l ? "selected" : ""}>${esc(l === "vanilla" ? t("pack.vanilla") : l.charAt(0).toUpperCase() + l.slice(1))}</option>`).join("")}</select>
+          </label>
+          <label class="field"><span>${esc(t("pack.loaderVersion"))}</span>
+            <input class="input" id="pack-up-loader-version" placeholder="${esc(t("pack.loaderAuto"))}" value="${esc(profile.loaderVersion || "")}">
+          </label>
+          <label class="field"><span>${esc(t("pack.newName"))}</span>
+            <input class="input" id="pack-up-name" maxlength="60" value="${esc(profile.name)}" disabled>
+          </label>
+        </div>
+        <div class="pack-modes">
+          <label class="pack-mode is-on"><input type="radio" name="pack-mode" value="current" checked><span><b>${esc(t("pack.updateCurrent"))}</b><small>${esc(t("pack.updateCurrentSub", { n: count("mod") }))}</small></span></label>
+          <label class="pack-mode"><input type="radio" name="pack-mode" value="new"><span><b>${esc(t("pack.createNew"))}</b><small>${esc(t("pack.createNewSub"))}</small></span></label>
+        </div>
+        <div class="notice warn"><svg class="ico"><use href="#i-alert"></use></svg><div><p>${esc(t("pack.pendingWarning"))}</p></div></div>
+        <div class="modal-actions"><button class="btn btn-quiet" data-close>${esc(t("common.cancel"))}</button><button class="btn btn-primary" id="pack-up-apply">${esc(t("pack.applyUpdate"))}</button></div>`, () => {
+        const nameInput = $("#pack-up-name");
+        $$("input[name=pack-mode]", $("#modal-root")).forEach((radio) => radio.addEventListener("change", () => {
+          nameInput.disabled = radio.value !== "new" || !radio.checked;
+          $$(".pack-mode", $("#modal-root")).forEach((el) => el.classList.toggle("is-on", el.contains(radio) && radio.checked));
+        }));
+        $("#pack-up-apply").addEventListener("click", async () => {
+          const version = $("#pack-up-version").value;
+          const loader = $("#pack-up-loader").value;
+          const loaderVersion = $("#pack-up-loader-version").value.trim() || null;
+          const mode = $$("input[name=pack-mode]", $("#modal-root")).find((r) => r.checked)?.value || "current";
+          const name = nameInput.value.trim() || profile.name;
+          if (!version) return;
+          const btn = $("#pack-up-apply");
+          btn.disabled = true;
+          try {
+            let targetId = id;
+            if (mode === "new") {
+              const cfg = await invoke("profile_clone", { id, name, versionId: version, loader, loaderVersion });
+              targetId = cfg?.activeProfile || id;
+            } else {
+              await invoke("profile_set_version", { id, versionId: version, loader, loaderVersion });
+            }
+            let disabled = [];
+            try {
+              disabled = await invoke("mods_quarantine", { id: targetId, version, loader });
+            } catch {}
+            closeModal();
+            await refreshBoot();
+            openPack(targetId);
+            toast(disabled.length ? t("pack.updateDone", { n: disabled.length }) : t("pack.updateClean"));
+          } catch (err) {
+            btn.disabled = false;
+            toast(friendly(err), "err");
+          }
+        });
+      });
+    });
+
     const paintCats = () => {
       const box = $("#pack-add-cats");
       box.innerHTML = [`<button class="cat-chip ${addCat === "all" ? "is-on" : ""}" data-addcat="all">${esc(t("discover.all"))}</button>`]
@@ -1919,10 +2230,36 @@ async function openPack(id) {
         .join("");
     };
     const paintAdd = () => {
-      $("#pack-add-results").innerHTML = addRows();
+      const host = $("#pack-add-results");
+      host.innerHTML = addRows();
+      applyImgFallback(host, "img", artFor);
+      renderAddPager();
     };
-    const searchAdd = async (text) => {
+    const renderAddPager = () => {
+      const host = $("#pack-add-pager");
+      if (!host) return;
+      const offset = (addPage - 1) * addPer;
+      const known = offset + addResults.length + (addHasMore ? 1 : 0);
+      host.hidden = addBusy || (!addResults.length && addPage === 1);
+      if (host.hidden) return;
+      const countEl = $("#pack-add-page-count");
+      if (countEl) countEl.textContent = `${offset + 1}–${offset + addResults.length} · ${t("catalog.resultsCount", { n: known })}`;
+      const pages = Math.max(1, Math.ceil(known / addPer));
+      const from = Math.max(1, Math.min(addPage - 2, pages - 4));
+      const to = Math.min(pages, from + 4);
+      const nums = [];
+      for (let i = from; i <= to; i++) nums.push(i);
+      $("#pack-add-pages").innerHTML = [
+        `<button class="pager-btn" data-addpage="${addPage - 1}" ${addPage <= 1 ? "disabled" : ""} aria-label="prev"><svg class="ico"><use href="#i-chevron"></use></svg></button>`,
+        ...nums.map((n) => `<button class="pager-btn ${n === addPage ? "is-on" : ""}" data-addpage="${n}">${n}</button>`),
+        `<button class="pager-btn" data-addpage="${addPage + 1}" ${!addHasMore ? "disabled" : ""} aria-label="next"><svg class="ico"><use href="#i-chevron"></use></svg></button>`,
+      ].join("");
+      const perSelect = $("#pack-add-per");
+      if (perSelect) perSelect.value = String(addPer);
+    };
+    const searchAdd = async (text, resetPage = true) => {
       const q = String(text ?? "").trim();
+      if (resetPage) addPage = 1;
       const token = ++addToken;
       addBusy = true;
       addResults = [];
@@ -1931,17 +2268,18 @@ async function openPack(id) {
         const results = await invoke("catalog_search", {
           query: q,
           kind: addKind,
-          version: profile.versionId,
+          version: baseOf(profile.versionId) || profile.versionId,
           loader: addKind === "mod" ? profile.loader || "fabric" : null,
-          provider: "both",
+          provider: addProvider,
+          category: addCat === "all" ? null : addCat,
+          sort: addSort,
+          limit: addPer,
+          offset: (addPage - 1) * addPer,
         });
         if (token !== addToken) return;
-        addResults = (results || []).slice(0, 18);
         addLoaded = true;
-        if (!addResults.length && q) {
-          addBusy = false;
-          return searchAdd("");
-        }
+        addHasMore = (results || []).length >= addPer;
+        addResults = results || [];
       } catch (err) {
         if (token !== addToken) return;
         addResults = [];
@@ -1950,21 +2288,23 @@ async function openPack(id) {
         if (token === addToken) {
           addBusy = false;
           paintAdd();
-          applyImgFallback($("#pack-add-results"), "img", artFor);
         }
       }
     };
     const resetAdd = (q) => {
       addCat = "all";
+      addPage = 1;
       const input = $("#pack-add-search");
       input.value = q;
       paintCats();
-      searchAdd(q);
+      searchAdd(q, true);
     };
     $("#pack-add-kinds").addEventListener("click", (e) => {
       const btn = e.target.closest("[data-addkind]");
       if (!btn) return;
       addKind = btn.dataset.addkind;
+      addCat = "all";
+      addPage = 1;
       $$("#pack-add-kinds .pd-subtab").forEach((el) => el.classList.toggle("is-on", el === btn));
       resetAdd("");
     });
@@ -1972,10 +2312,31 @@ async function openPack(id) {
       const chip = e.target.closest("[data-addcat]");
       if (!chip) return;
       addCat = chip.dataset.addcat;
+      addPage = 1;
       paintCats();
-      const q = addCat === "all" ? PACK_POPULAR[addKind] : addCat;
-      $("#pack-add-search").value = addCat === "all" ? "" : addCat;
-      searchAdd(q);
+      searchAdd($("#pack-add-search").value, true);
+    });
+    $("#pack-add-sort").addEventListener("change", (e) => {
+      addSort = e.target.value;
+      searchAdd($("#pack-add-search").value, true);
+    });
+    $("#pack-add-provider").addEventListener("change", (e) => {
+      addProvider = e.target.value;
+      searchAdd($("#pack-add-search").value, true);
+    });
+    $("#pack-add-per").addEventListener("change", (e) => {
+      addPer = Number(e.target.value) || 20;
+      addPage = 1;
+      searchAdd($("#pack-add-search").value, true);
+    });
+    $("#pack-add-pages").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-addpage]");
+      if (!btn || btn.disabled) return;
+      const page = Number(btn.dataset.addpage);
+      if (!page || page === addPage) return;
+      addPage = page;
+      searchAdd($("#pack-add-search").value, false);
+      $("#pack-add-results").scrollIntoView({ block: "start", behavior: "smooth" });
     });
     let timer;
     $("#pack-add-search").addEventListener("input", (e) => {
@@ -1990,7 +2351,7 @@ async function openPack(id) {
       try {
         await invoke("mods_install", {
           project: btn.dataset.packInstall,
-          version: profile.versionId,
+          version: baseOf(profile.versionId) || profile.versionId,
           loader: profile.loader || "fabric",
           kind: addKind,
           provider: btn.dataset.provider,
@@ -1999,6 +2360,8 @@ async function openPack(id) {
         contents = await invoke("profile_contents", { id });
         paint();
         loadIcons();
+        $("#pack-status").textContent = statusText();
+        $("#pack-mods-count").textContent = String(count("mod") + count("pending"));
         toast(t("pack.added"));
       } catch (err) {
         toast(friendly(err), "err");
@@ -2009,6 +2372,7 @@ async function openPack(id) {
     paintCats();
     paint();
     loadIcons();
+    void retryPending(true);
   })();
   applyImgFallback(page, "img", artFor);
 }
@@ -2084,6 +2448,11 @@ function openInstanceOptions(id) {
       ${optionSelect("sound", t("opt.sound"), [["true", t("opt.on")], ["false", t("opt.off")]], bool(o.sound))}
       ${optionSelect("fullscreen", "Fullscreen", [["true", t("opt.on")], ["false", t("opt.off")]], bool(o.fullscreen))}
       ${optionSelect("gpu", t("opt.gpu"), [["high", t("opt.gpuHigh")], ["default", t("opt.gpuDefault")]], o.gpu)}
+      ${optionSelect("memoryMb", t("opt.memory"), [["2048", "2 GB"], ["3072", "3 GB"], ["4096", "4 GB"], ["6144", "6 GB"], ["8192", "8 GB"], ["10240", "10 GB"], ["12288", "12 GB"]], o.memoryMb ? String(o.memoryMb) : "")}
+    </div>
+    <div class="mem-hint">
+      <div><b>${esc(t("opt.memRecoTitle"))}</b><span id="opt-mem-hint"></span></div>
+      <button class="btn btn-soft btn-sm" id="opt-mem-apply">${esc(t("opt.memApply"))}</button>
     </div>
     <div class="modal-actions">
       <button class="btn btn-quiet" id="opt-reset">${esc(t("common.reset"))}</button>
@@ -2091,13 +2460,24 @@ function openInstanceOptions(id) {
       <button class="btn btn-primary" id="opt-save">${esc(t("common.save"))}</button>
     </div>`;
   openModal(html, () => {
+    const active = profile.id === activeProfile()?.id;
+    const mods = active ? S.mods.length : 0;
+    const ram = Number(S.system?.specs?.ramGb) || 16;
+    let reco = mods > 30 ? 8192 : mods > 0 ? 6144 : 4096;
+    reco = Math.min(reco, Math.max(2048, Math.floor(ram / 2) * 1024), 8192);
+    const hint = $("#opt-mem-hint");
+    if (hint) hint.textContent = t("opt.memHint", { gb: Math.round(reco / 1024), mods });
+    $("#opt-mem-apply")?.addEventListener("click", () => {
+      const select = $("[data-opt=\"memoryMb\"]");
+      if (select) select.value = String(reco);
+    });
     const collect = () => {
       const result = {};
       $$("[data-opt]").forEach((el) => {
         const key = el.dataset.opt;
         const value = el.value;
         if (!value) return;
-        result[key] = value === "true" ? true : value === "false" ? false : value;
+        result[key] = key === "memoryMb" ? Number(value) : value === "true" ? true : value === "false" ? false : value;
       });
       $$("[data-optnum]").forEach((el) => {
         if (el.value === "") return;
@@ -2329,13 +2709,17 @@ function showDirtyBar(on) {
 }
 
 function markDirty() {
-  S.dirty = true;
+  let dirty = true;
+  try {
+    dirty = JSON.stringify(S.settings) !== JSON.stringify(S.savedSettings || {});
+  } catch {}
+  S.dirty = dirty;
   const state = $("#save-state");
   if (state) {
-    state.textContent = t("settings.unsaved");
-    state.classList.add("is-dirty");
+    state.textContent = dirty ? t("settings.unsaved") : t("settings.savedState");
+    state.classList.toggle("is-dirty", dirty);
   }
-  showDirtyBar(true);
+  showDirtyBar(dirty);
 }
 
 function applyTexts() {
@@ -2417,33 +2801,58 @@ function renderOrderEditors() {
 
 function renderOrderList(host, items, labelOf, onChange) {
   if (!host) return;
-  host.innerHTML = items.map((item, index) => `<div class="order-row ${item.on ? "" : "is-hidden"}" data-id="${esc(item.id)}">
-    <span class="grip">${index + 1}</span><b>${esc(labelOf(item.id))}</b>
-    <button class="icon-btn" data-move="up" title="${esc(t("common.up"))}" ${index === 0 ? "disabled" : ""}><svg class="ico" style="transform:rotate(180deg)"><use href="#i-chevron"></use></svg></button>
-    <button class="icon-btn" data-move="down" title="${esc(t("common.down"))}" ${index === items.length - 1 ? "disabled" : ""}><svg class="ico"><use href="#i-chevron"></use></svg></button>
-    <button class="icon-btn" data-visible title="${esc(t("common.visible"))}"><svg class="ico"><use href="#${item.on ? "i-check" : "i-close"}"></use></svg></button>
+  const icons = {
+    home: "i-home", library: "i-library", discover: "i-compass", instances: "i-layers", accounts: "i-user",
+    stats: "i-gauge", pc: "i-cpu", latest: "i-sparkles", console: "i-terminal",
+  };
+  host.innerHTML = items.map((item) => `<div class="layout-card ${item.on ? "" : "is-hidden"}" data-id="${esc(item.id)}" draggable="true">
+    <span class="lc-grip" aria-hidden="true">${ico("i-grip")}</span>
+    <span class="lc-icon">${ico(icons[item.id] || WIDGET_META[item.id]?.icon || "i-layers")}</span>
+    <span class="lc-name">${esc(labelOf(item.id))}</span>
+    <button class="icon-btn lc-eye" data-visible title="${esc(t("common.visible"))}" aria-pressed="${item.on}"><svg class="ico"><use href="#${item.on ? "i-check" : "i-close"}"></use></svg></button>
   </div>`).join("");
   host.onclick = (e) => {
     const row = e.target.closest("[data-id]");
     if (!row) return;
-    const id = row.dataset.id;
-    const index = items.findIndex((x) => x.id === id);
-    const move = e.target.closest("[data-move]");
-    if (move && index >= 0) {
-      const delta = move.dataset.move === "up" ? -1 : 1;
-      const next = index + delta;
-      if (next >= 0 && next < items.length) {
-        [items[index], items[next]] = [items[next], items[index]];
+    if (e.target.closest("[data-visible]")) {
+      const item = items.find((x) => x.id === row.dataset.id);
+      if (item) {
+        item.on = !item.on;
         onChange(items);
         renderOrderEditors();
       }
-      return;
     }
-    if (e.target.closest("[data-visible]") && index >= 0) {
-      items[index].on = !items[index].on;
-      onChange(items);
-      renderOrderEditors();
-    }
+  };
+  let dragId = null;
+  host.ondragstart = (e) => {
+    const row = e.target.closest("[data-id]");
+    if (!row) return;
+    dragId = row.dataset.id;
+    row.classList.add("is-drag");
+    e.dataTransfer.effectAllowed = "move";
+  };
+  host.ondragover = (e) => {
+    e.preventDefault();
+    const row = e.target.closest("[data-id]");
+    $$(".layout-card", host).forEach((el) => el.classList.toggle("is-over", el === row && el.dataset.id !== dragId));
+  };
+  host.ondragleave = () => $$(".layout-card", host).forEach((el) => el.classList.remove("is-over"));
+  host.ondrop = (e) => {
+    e.preventDefault();
+    const target = e.target.closest("[data-id]");
+    $$(".layout-card", host).forEach((el) => el.classList.remove("is-over", "is-drag"));
+    if (!target || !dragId || target.dataset.id === dragId) return;
+    const from = items.findIndex((x) => x.id === dragId);
+    const to = items.findIndex((x) => x.id === target.dataset.id);
+    if (from < 0 || to < 0) return;
+    const [moved] = items.splice(from, 1);
+    items.splice(to, 0, moved);
+    onChange(items);
+    renderOrderEditors();
+  };
+  host.ondragend = () => {
+    dragId = null;
+    $$(".layout-card", host).forEach((el) => el.classList.remove("is-over", "is-drag"));
   };
 }
 
@@ -2807,6 +3216,7 @@ function bindSwitch(selector, field, after) {
 async function saveSettings() {
   try {
     await invoke("save_settings", { settings: S.settings });
+    S.savedSettings = JSON.parse(JSON.stringify(S.settings || {}));
     S.dirty = false;
     showDirtyBar(false);
     const state = $("#save-state");
@@ -2862,7 +3272,8 @@ function renderSystem() {
   }
   const specs = report.specs;
   const rec = report.recommendation;
-  reco.innerHTML = `<svg class="ico"><use href="#i-zap"></use></svg><div><b>${esc(t(`tier.${rec.tier}`))}</b><span>${esc(t("set.reco", { ram: rec.memoryMb / 1024, distance: rec.renderDistance }))}</span></div>`;
+  const packGb = Math.min(S.mods.length > 30 ? 8 : S.mods.length > 0 ? 6 : 4, Math.max(2, Math.floor(specs.ramGb / 2)));
+  reco.innerHTML = `<svg class="ico"><use href="#i-zap"></use></svg><div><b>${esc(t(`tier.${rec.tier}`))}</b><span>${esc(t("set.reco", { ram: rec.memoryMb / 1024, distance: rec.renderDistance }))}</span><span>${esc(t("set.recoPack", { gb: packGb, mods: S.mods.length }))}</span></div>`;
   const rows = [
     [t("pc.cpu"), `${specs.cpu} · ${i18n.number(specs.cores)}C/${i18n.number(specs.threads)}T`],
     [t("pc.gpu"), specs.gpu],
@@ -2905,45 +3316,54 @@ function fillDiscoverVersions() {
   }
 }
 
+function closeCatalogPanel() {
+  const panel = $("#discover-panel");
+  const btn = $("#discover-filters");
+  if (!panel || panel.hidden) return;
+  panel.hidden = true;
+  btn?.setAttribute("aria-expanded", "false");
+}
+
 function bindDiscover() {
   $("#discover-tabs").addEventListener("click", (e) => {
     const tab = e.target.closest("[data-kind]");
-    if (!tab) return;
+    if (!tab || tab.dataset.kind === S.discoverKind) return;
     S.discoverKind = tab.dataset.kind;
     S.discoverCat = "all";
     S.discoverQuery = "";
+    S.discoverPage = 1;
     const input = $("#discover-search");
     if (input) input.value = "";
     $$("#discover-tabs .tab").forEach((el) => el.classList.toggle("is-on", el === tab));
     planDiscoverVisibility();
     S.discoverResults = [];
-    searchDiscover();
+    searchDiscover(true);
   });
   $("#discover-cats").addEventListener("click", (e) => {
     const chip = e.target.closest("[data-cat]");
     if (!chip) return;
     S.discoverCat = chip.dataset.cat;
-    S.discoverQuery = chip.dataset.cat === "all" ? "" : chip.dataset.cat;
-    const input = $("#discover-search");
-    if (input) input.value = S.discoverQuery;
     renderDiscoverCats();
-    searchDiscover();
+    renderDiscoverActive();
+    searchDiscover(true);
   });
   let timer = 0;
   $("#discover-search").addEventListener("input", (e) => {
     S.discoverQuery = e.target.value;
-    S.discoverCat = "all";
-    renderDiscoverCats();
     clearTimeout(timer);
-    timer = setTimeout(searchDiscover, 420);
+    timer = setTimeout(() => searchDiscover(true), 420);
+  });
+  $("#discover-sort").addEventListener("change", (e) => {
+    S.discoverSort = e.target.value;
+    searchDiscover(true);
   });
   $("#discover-version").addEventListener("change", (e) => {
     S.discoverVersion = e.target.value;
-    searchDiscover();
+    searchDiscover(true);
   });
   $("#discover-loader").addEventListener("change", (e) => {
     S.discoverLoader = e.target.value;
-    searchDiscover();
+    searchDiscover(true);
   });
   $("#discover-profile")?.addEventListener("change", (e) => {
     S.discoverProfile = e.target.value;
@@ -2956,16 +3376,78 @@ function bindDiscover() {
       const loaderSelect = $("#discover-loader");
       if (loaderSelect) loaderSelect.value = S.discoverLoader;
     }
-    searchDiscover();
+    searchDiscover(true);
   });
   $("#discover-provider").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-provider]");
     if (!btn) return;
     S.discoverProvider = btn.dataset.provider;
     $$("#discover-provider [data-provider]").forEach((el) => el.classList.toggle("is-on", el === btn));
-    searchDiscover();
+    searchDiscover(true);
   });
-  $("#discover-refresh").addEventListener("click", () => searchDiscover());
+  $("#discover-filters").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const panel = $("#discover-panel");
+    panel.hidden = !panel.hidden;
+    e.currentTarget.setAttribute("aria-expanded", String(!panel.hidden));
+  });
+  $("#discover-panel").addEventListener("click", (e) => e.stopPropagation());
+  $("#discover-panel-close").addEventListener("click", closeCatalogPanel);
+  $("#discover-panel-apply").addEventListener("click", () => {
+    closeCatalogPanel();
+    searchDiscover(true);
+  });
+  document.addEventListener("click", closeCatalogPanel);
+  $("#discover-reset").addEventListener("click", () => {
+    S.discoverProvider = "modrinth";
+    S.discoverCat = "all";
+    S.discoverQuery = "";
+    S.discoverSort = "featured";
+    S.discoverPage = 1;
+    $$("#discover-provider [data-provider]").forEach((el) => el.classList.toggle("is-on", el.dataset.provider === "modrinth"));
+    const input = $("#discover-search");
+    if (input) input.value = "";
+    const sort = $("#discover-sort");
+    if (sort) sort.value = "featured";
+    renderDiscoverCats();
+    searchDiscover(true);
+  });
+  $("#discover-active").addEventListener("click", (e) => {
+    const chip = e.target.closest("[data-clear]");
+    if (!chip) return;
+    const field = chip.dataset.clear;
+    if (field === "provider") {
+      S.discoverProvider = "modrinth";
+      $$("#discover-provider [data-provider]").forEach((el) => el.classList.toggle("is-on", el.dataset.provider === "modrinth"));
+    } else if (field === "cat") {
+      S.discoverCat = "all";
+      renderDiscoverCats();
+    } else if (field === "loader") {
+      S.discoverLoader = "fabric";
+      const el = $("#discover-loader");
+      if (el) el.value = "fabric";
+    } else if (field === "version") {
+      S.discoverVersion = "";
+      const el = $("#discover-version");
+      if (el) el.value = "";
+    }
+    searchDiscover(true);
+  });
+  $("#discover-pages").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-page]");
+    if (!btn || btn.disabled) return;
+    const page = Number(btn.dataset.page);
+    if (!page || page === S.discoverPage) return;
+    S.discoverPage = page;
+    searchDiscover(false);
+    $("#view").scrollTo({ top: 0, behavior: "smooth" });
+  });
+  $("#discover-per").addEventListener("change", (e) => {
+    S.discoverPer = Number(e.target.value) || 20;
+    S.discoverPage = 1;
+    searchDiscover(true);
+  });
+  $("#discover-refresh").addEventListener("click", () => searchDiscover(true));
   $("#discover-results").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-install]");
     if (btn) {
@@ -2975,6 +3457,10 @@ function bindDiscover() {
     }
     const card = e.target.closest("[data-project]");
     if (card) openProject(card.dataset.project);
+  });
+  $("#mods-search").addEventListener("input", (e) => {
+    S.modsQuery = e.target.value;
+    renderMods();
   });
   $("#fabric-create").addEventListener("click", installDiscoverLoader);
   $("#mods-repair").addEventListener("click", repairMods);
@@ -3150,8 +3636,15 @@ function bindStatic() {
 
   $("#dirty-save").addEventListener("click", saveSettings);
   $("#dirty-discard").addEventListener("click", discardSettings);
-  $("#edit-btn").addEventListener("click", () => setEdit(!S.edit));
+  $("#edit-btn")?.addEventListener("click", () => setEdit(!S.edit));
   $("#edit-mode-btn").addEventListener("click", () => setEdit(!S.edit));
+  $("#theme-btn").addEventListener("click", () => {
+    const next = resolveTheme(S.settings.uiTheme || "dark") === "light" ? "dark" : "light";
+    S.settings.uiTheme = next;
+    applyAppearance(S.settings);
+    setSegmented("#theme-choice", "data-theme-choice", next);
+    markDirty();
+  });
 
   document.addEventListener("input", (e) => {
     const el = e.target.closest?.("[data-edit-key]");

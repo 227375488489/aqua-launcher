@@ -1,6 +1,9 @@
 // Generated translations for keys added after the original locale pass.
 export const EXTRA = {
   "en": {
+    "common": {
+      "apply": "Apply"
+    },
     "edit": {
       "toggle": "Edit layout",
       "mode": "Edit mode",
@@ -68,10 +71,80 @@ export const EXTRA = {
       "addSearch": "Search content…",
       "added": "Added to pack",
       "noResults": "Nothing found",
-      "searchHint": "Type a name, or pick a category below"
+      "searchHint": "Type a name, or pick a category below",
+      "changeCover": "Change pack cover",
+      "coverChanged": "Pack cover updated",
+      "contentsCount": "{n} items in this pack",
+      "modsCount": "Mods",
+      "updateVersion": "Update version",
+      "pendingCount": "{n} awaiting version",
+      "pendingChip": "Awaiting version",
+      "filteredHint": "Results are limited to this pack's version and loader",
+      "updateTitle": "Update pack version",
+      "updateSub": "Move the pack to another Minecraft version, or copy it to a new pack.",
+      "targetVersion": "Minecraft version",
+      "loader": "Modloader",
+      "loaderVersion": "Loader version",
+      "loaderAuto": "Auto (recommended)",
+      "newName": "New pack name",
+      "updateCurrent": "Update this pack",
+      "updateCurrentSub": "{n} mods will move with it. Incompatible ones will wait.",
+      "createNew": "Create a new pack",
+      "createNewSub": "Copies mods and configs, keeps the current pack untouched.",
+      "pendingWarning": "Mods that do not support the new version will be disabled and marked “Awaiting version”. They download automatically once a compatible build appears.",
+      "applyUpdate": "Apply update",
+      "updateDone": "Updated. {n} mods are awaiting a compatible version.",
+      "updateClean": "Updated. All mods are compatible.",
+      "retryPending": "Retry pending",
+      "restored": "{n} mods restored",
+      "nothingPending": "No compatible updates yet",
+      "vanilla": "Vanilla"
+    },
+    "catalog": {
+      "sort": "Sort",
+      "sortFeatured": "Featured",
+      "sortDownloads": "Downloads",
+      "sortUpdated": "Updated",
+      "sortNewest": "Newest",
+      "filters": "Filters",
+      "source": "Source",
+      "version": "Game version",
+      "loader": "Modloader",
+      "installTo": "Install to",
+      "categories": "Categories",
+      "reset": "Reset",
+      "resultsCount": "{n} projects",
+      "by": "by {name}",
+      "kindPacks": "modpacks",
+      "kindMods": "mods",
+      "kindRp": "resource packs",
+      "kindShaders": "shaders",
+      "sub": "Search {kind} on {source} — with dependencies and safety checks.",
+      "searchIn": "Search {source}…",
+      "noMatches": "No matches"
+    },
+    "theme": {
+      "quick": "Toggle theme",
+      "toDark": "Switch to dark theme",
+      "toLight": "Switch to light theme"
+    },
+    "mods": {
+      "searchInstalled": "Search installed content…"
+    },
+    "opt": {
+      "memory": "Memory",
+      "memRecoTitle": "Recommended for this pack",
+      "memHint": "{gb} GB for {mods} mods. More than 8 GB rarely helps and can hurt garbage collection.",
+      "memApply": "Apply"
+    },
+    "set": {
+      "recoPack": "For your current pack ({mods} mods): {gb} GB is enough"
     }
   },
   "ru": {
+    "common": {
+      "apply": "Применить"
+    },
     "edit": {
       "toggle": "Редактирование",
       "mode": "Режим редактирования",
@@ -139,7 +212,74 @@ export const EXTRA = {
       "addSearch": "Поиск контента…",
       "added": "Добавлено в сборку",
       "noResults": "Ничего не найдено",
-      "searchHint": "Введи название или выбери категорию ниже"
+      "searchHint": "Введи название или выбери категорию ниже",
+      "changeCover": "Сменить обложку",
+      "coverChanged": "Обложка сборки обновлена",
+      "contentsCount": "{n} элементов в сборке",
+      "modsCount": "Модов",
+      "updateVersion": "Обновить версию",
+      "pendingCount": "{n} ждут версию",
+      "pendingChip": "Ожидает версии",
+      "filteredHint": "Показано только совместимое с версией и загрузчиком сборки",
+      "updateTitle": "Обновление версии сборки",
+      "updateSub": "Перенеси сборку на другую версию Minecraft или создай из неё новую.",
+      "targetVersion": "Версия Minecraft",
+      "loader": "Загрузчик",
+      "loaderVersion": "Версия загрузчика",
+      "loaderAuto": "Авто (рекомендуется)",
+      "newName": "Название новой сборки",
+      "updateCurrent": "Обновить эту сборку",
+      "updateCurrentSub": "{n} модов переедут вместе с ней. Несовместимые подождут.",
+      "createNew": "Создать новую сборку",
+      "createNewSub": "Скопирует моды и конфиги, текущая сборка останется нетронутой.",
+      "pendingWarning": "Моды без поддержки новой версии будут отключены и помечены «Ожидает версии». Они скачаются автоматически, когда появится совместимая сборка.",
+      "applyUpdate": "Обновить",
+      "updateDone": "Готово. {n} модов ждут совместимую версию.",
+      "updateClean": "Готово. Все моды совместимы.",
+      "retryPending": "Повторить ожидание",
+      "restored": "Восстановлено модов: {n}",
+      "nothingPending": "Совместимых обновлений пока нет",
+      "vanilla": "Ваниль"
+    },
+    "catalog": {
+      "sort": "Сортировка",
+      "sortFeatured": "По популярности",
+      "sortDownloads": "По загрузкам",
+      "sortUpdated": "Обновлённые",
+      "sortNewest": "Новые",
+      "filters": "Фильтры",
+      "source": "Источник",
+      "version": "Версия игры",
+      "loader": "Загрузчик",
+      "installTo": "Установить в",
+      "categories": "Категории",
+      "reset": "Сбросить",
+      "resultsCount": "Проектов: {n}",
+      "by": "от {name}",
+      "kindPacks": "сборки",
+      "kindMods": "моды",
+      "kindRp": "ресурспаки",
+      "kindShaders": "шейдеры",
+      "sub": "Поиск: {kind} на {source} — с зависимостями и проверкой безопасности.",
+      "searchIn": "Поиск по {source}…",
+      "noMatches": "Совпадений нет"
+    },
+    "theme": {
+      "quick": "Переключить тему",
+      "toDark": "Тёмная тема",
+      "toLight": "Светлая тема"
+    },
+    "mods": {
+      "searchInstalled": "Поиск по установленному…"
+    },
+    "opt": {
+      "memory": "Память",
+      "memRecoTitle": "Рекомендация для этой сборки",
+      "memHint": "{gb} ГБ для {mods} модов. Больше 8 ГБ редко помогает и мешает сборке мусора.",
+      "memApply": "Применить"
+    },
+    "set": {
+      "recoPack": "Для текущей сборки ({mods} модов) хватит {gb} ГБ"
     }
   },
   "uk": {

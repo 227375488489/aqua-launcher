@@ -49,6 +49,8 @@
     <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4.5 17a8.5 8.5 0 1 1 15 0"/><path d="M12 12.5 15.5 9"/><circle cx="12" cy="13" r="1.6"/></symbol>
     <symbol id="i-edit" viewBox="0 0 24 24"><path d="M15.5 5.2 18.8 8.5M4 20l1-5L16.4 3.6a1.8 1.8 0 0 1 2.5 0l1.5 1.5a1.8 1.8 0 0 1 0 2.5L9 19Z"/></symbol>
     <symbol id="i-grip" viewBox="0 0 24 24"><path d="M9 6h.1M15 6h.1M9 12h.1M15 12h.1M9 18h.1M15 18h.1" stroke-width="2.4"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.2A8.2 8.2 0 0 1 9.8 4a8.4 8.4 0 1 0 10.2 10.2Z"/></symbol>
   </svg>
 
   <div class="backdrop" aria-hidden="true">
@@ -64,9 +66,9 @@
         <img class="brand-mark" src="assets/logo-64.png" alt="" />
         <span class="brand-word" data-edit-key="brand.word">aqua</span>
         <span class="brand-tag" data-i18n="brand.tag">launcher</span>
-        <span class="chip chip-soft chip-mono" id="version-chip">v0.0.5 Beta</span>
+        <span class="chip chip-soft chip-mono" id="version-chip">v0.0.6 Beta</span>
       </div>
-      <button class="edit-toggle" id="edit-btn" data-i18n-title="edit.toggle" aria-label="Edit layout"><svg class="ico"><use href="#i-layout"></use></svg></button>
+      <button class="edit-toggle theme-toggle" id="theme-btn" data-i18n-title="theme.quick" aria-label="Toggle theme"><svg class="ico"><use href="#i-moon"></use></svg></button>
       <div class="window-controls" id="window-controls">
         <button class="win-btn" id="win-min" data-i18n-title="window.minimize" aria-label="Minimize"><svg class="ico"><use href="#i-minus"></use></svg></button>
         <button class="win-btn" id="win-max" data-i18n-title="window.maximize" aria-label="Maximize"><svg class="ico"><use href="#i-square"></use></svg></button>
@@ -186,7 +188,7 @@
             <div>
               <span class="eyebrow"><svg class="ico"><use href="#i-compass"></use></svg><span data-i18n="nav.discover">Каталог</span></span>
               <h1 data-i18n="discover.title" data-edit-key="discover.title">Моды и сборки</h1>
-              <p data-i18n="discover.sub">Проверенные проекты с Modrinth — с зависимостями и проверкой безопасности.</p>
+              <p id="discover-sub" data-i18n="discover.sub">Проверенные проекты с Modrinth — с зависимостями и проверкой безопасности.</p>
             </div>
             <button class="btn btn-soft" id="discover-refresh"><svg class="ico"><use href="#i-refresh"></use></svg><span data-i18n="common.refresh">Обновить</span></button>
           </header>
@@ -196,34 +198,75 @@
             <button class="tab" data-kind="resourcepack" data-i18n="discover.resourcepacks">Ресурспаки</button>
             <button class="tab" data-kind="shader" data-i18n="discover.shaders">Шейдеры</button>
           </div>
-          <div class="toolbar">
-            <label class="input search">
+          <div class="catalog-bar">
+            <label class="input search catalog-search">
               <svg class="ico"><use href="#i-search"></use></svg>
               <input id="discover-search" type="search" data-i18n-ph="discover.search" placeholder="Найти проект…" autocomplete="off">
             </label>
-            <div class="segmented" id="discover-provider">
-              <button class="seg is-on" data-provider="modrinth">Modrinth</button>
-              <button class="seg" data-provider="curseforge">CurseForge</button>
-              <button class="seg" data-provider="both" data-i18n="discover.both">Оба</button>
-            </div>
-            <label class="select-inline" id="discover-version-wrap">
-              <select id="discover-version"></select>
-              <svg class="ico"><use href="#i-chevron"></use></svg>
-            </label>
-            <label class="select-inline" id="discover-loader-wrap">
-              <select id="discover-loader">
-                <option value="fabric">Fabric</option>
-                <option value="forge">Forge</option>
-                <option value="neoforge">NeoForge</option>
+            <label class="select-inline catalog-sort" id="discover-sort-wrap">
+              <span class="sort-label" data-i18n="catalog.sort">Сортировка</span>
+              <select id="discover-sort">
+                <option value="featured" data-i18n="catalog.sortFeatured">По популярности</option>
+                <option value="downloads" data-i18n="catalog.sortDownloads">По загрузкам</option>
+                <option value="updated" data-i18n="catalog.sortUpdated">Обновлённые</option>
+                <option value="newest" data-i18n="catalog.sortNewest">Новые</option>
               </select>
               <svg class="ico"><use href="#i-chevron"></use></svg>
             </label>
-            <label class="select-inline" id="discover-profile-wrap">
-              <select id="discover-profile"></select>
-              <svg class="ico"><use href="#i-chevron"></use></svg>
-            </label>
+            <button class="btn btn-soft catalog-filters" id="discover-filters" aria-expanded="false">
+              <svg class="ico"><use href="#i-layers"></use></svg>
+              <span data-i18n="catalog.filters">Фильтры</span>
+              <b class="filter-count" id="discover-filter-count" hidden>0</b>
+            </button>
           </div>
-          <div class="cat-row" id="discover-cats" hidden></div>
+          <div class="catalog-panel" id="discover-panel" hidden>
+            <div class="catalog-panel-head">
+              <b data-i18n="catalog.filters">Фильтры</b>
+              <button class="icon-btn" id="discover-panel-close" data-i18n-title="common.close"><svg class="ico"><use href="#i-close"></use></svg></button>
+            </div>
+            <div class="catalog-filter" id="discover-provider-wrap">
+              <span data-i18n="catalog.source">Источник</span>
+              <div class="segmented" id="discover-provider">
+                <button class="seg is-on" data-provider="modrinth">Modrinth</button>
+                <button class="seg" data-provider="curseforge">CurseForge</button>
+                <button class="seg" data-provider="both" data-i18n="discover.both">Оба</button>
+              </div>
+            </div>
+            <div class="catalog-filter" id="discover-version-filter">
+              <span data-i18n="catalog.version">Версия игры</span>
+              <label class="select-inline" id="discover-version-wrap">
+                <select id="discover-version"></select>
+                <svg class="ico"><use href="#i-chevron"></use></svg>
+              </label>
+            </div>
+            <div class="catalog-filter" id="discover-loader-filter">
+              <span data-i18n="catalog.loader">Загрузчик</span>
+              <label class="select-inline" id="discover-loader-wrap">
+                <select id="discover-loader">
+                  <option value="fabric">Fabric</option>
+                  <option value="forge">Forge</option>
+                  <option value="neoforge">NeoForge</option>
+                </select>
+                <svg class="ico"><use href="#i-chevron"></use></svg>
+              </label>
+            </div>
+            <div class="catalog-filter" id="discover-profile-filter">
+              <span data-i18n="catalog.installTo">Установить в</span>
+              <label class="select-inline" id="discover-profile-wrap">
+                <select id="discover-profile"></select>
+                <svg class="ico"><use href="#i-chevron"></use></svg>
+              </label>
+            </div>
+            <div class="catalog-filter catalog-filter-block" id="discover-cat-filter">
+              <span data-i18n="catalog.categories">Категории</span>
+              <div class="cat-row" id="discover-cats"></div>
+            </div>
+            <div class="catalog-panel-foot">
+              <button class="btn btn-quiet btn-sm" id="discover-reset" data-i18n="catalog.reset">Сбросить</button>
+              <button class="btn btn-primary btn-sm" id="discover-panel-apply" data-i18n="common.apply">Применить</button>
+            </div>
+          </div>
+          <div class="active-filters" id="discover-active" hidden></div>
           <div class="results-head" id="discover-meta" hidden>
             <span id="discover-count"></span>
             <span id="discover-source"></span>
@@ -236,15 +279,31 @@
             </div>
             <button class="btn btn-primary btn-sm" id="fabric-create" data-i18n="discover.installLoader">Установить загрузчик</button>
           </div>
-          <div class="grid project-grid" id="discover-results"></div>
+          <div class="result-list" id="discover-results"></div>
           <div class="empty" id="discover-empty" hidden>
             <svg class="ico"><use href="#i-compass"></use></svg>
             <h3 data-i18n="discover.noResults">Пока ничего нет</h3>
             <p data-i18n="discover.noResultsSub">Измени запрос или версию игры.</p>
           </div>
-          <div class="section-head"><div><h2 data-i18n="discover.installed">Установлено</h2><p id="discover-installed-sub">—</p></div>
+          <div class="pager" id="discover-pager" hidden>
+            <span class="pager-count" id="discover-page-count"></span>
+            <div class="pager-pages" id="discover-pages"></div>
+            <label class="select-inline pager-size">
+              <select id="discover-per">
+                <option value="20">20</option>
+                <option value="30">30</option>
+                <option value="50">50</option>
+              </select>
+              <svg class="ico"><use href="#i-chevron"></use></svg>
+            </label>
+          </div>
+          <div class="section-head"><div class="head-inline"><h2 data-i18n="discover.installed">Установлено</h2><span class="chip" id="mods-count"></span></div>
             <button class="btn btn-quiet btn-sm" id="mods-repair"><svg class="ico"><use href="#i-shield"></use></svg><span data-i18n="discover.repair">Починить</span></button>
           </div>
+          <label class="input search mods-search">
+            <svg class="ico"><use href="#i-search"></use></svg>
+            <input id="mods-search" type="search" data-i18n-ph="mods.searchInstalled" placeholder="Поиск по установленным…" autocomplete="off">
+          </label>
           <div class="mod-list" id="mods-list"></div>
         </section>
 
@@ -649,7 +708,7 @@
       </div>
       <div class="dirty-actions">
         <button class="btn btn-quiet" id="dirty-discard" data-i18n="settings.discard">Отменить</button>
-        <button class="btn btn-primary" id="dirty-save" data-i18n="settings.save">Сохранить</button>
+        <button class="btn btn-primary" id="dirty-save" data-i18n="common.save">Сохранить</button>
       </div>
     </div>
 

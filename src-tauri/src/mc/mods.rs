@@ -102,12 +102,17 @@ pub struct InstalledMod {
     pub notes: Vec<String>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn search(
     client: &reqwest::Client,
     query: &str,
     kind: &str,
     game_version: Option<&str>,
     loader: Option<&str>,
+    offset: u32,
+    limit: u32,
+    category: Option<&str>,
+    sort: &str,
 ) -> Result<Vec<Hit>> {
     let mut facets: Vec<Vec<String>> = vec![vec![format!("project_type:{}", kind)]];
     if let Some(v) = game_version {
@@ -116,7 +121,18 @@ pub async fn search(
     if let Some(l) = loader {
         facets.push(vec![format!("categories:{}", l)]);
     }
+    if let Some(c) = category.filter(|c| !c.is_empty() && *c != "all") {
+        facets.push(vec![format!("categories:{}", c)]);
+    }
     let facets = serde_json::to_string(&facets)?;
+    let index = match sort {
+        "downloads" => "downloads",
+        "updated" => "updated",
+        "newest" => "newest",
+        "follows" => "follows",
+        _ => "relevance",
+    };
+    let limit = limit.clamp(1, 100);
     let mut last_error = None;
     for attempt in 0..3u64 {
         let response = client
@@ -124,7 +140,9 @@ pub async fn search(
             .header("User-Agent", UA)
             .query(&[
                 ("query", query.to_string()),
-                ("limit", "30".to_string()),
+                ("offset", offset.to_string()),
+                ("limit", limit.to_string()),
+                ("index", index.to_string()),
                 ("facets", facets.clone()),
             ])
             .send()

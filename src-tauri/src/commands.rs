@@ -164,6 +164,10 @@ pub async fn modrinth_search(
         &kind,
         version.as_deref(),
         loader.as_deref(),
+        0,
+        30,
+        None,
+        "",
     )
     .await
     .map_err(|e| e.to_string())
@@ -371,6 +375,11 @@ pub async fn launch(app: AppHandle, state: State<'_, AppState>, id: String) -> R
         .unwrap_or_else(|| cfg.settings.game_defaults.clone());
     let _ = options::apply(&game_dir, &instance_options);
 
+    let mut effective_settings = cfg.settings.clone();
+    if let Some(memory) = instance_options.memory_mb.filter(|mb| *mb >= 1024) {
+        effective_settings.memory_mb = memory;
+    }
+
     let java_path = java::ensure(&app, &state.http, &root, &cfg.settings, meta.java_major())
         .await
         .map_err(|e| e.to_string())?;
@@ -388,7 +397,7 @@ pub async fn launch(app: AppHandle, state: State<'_, AppState>, id: String) -> R
         &id,
         &jar_version,
         &account,
-        &cfg.settings,
+        &effective_settings,
         &java_path,
     )
     .map_err(|e| e.to_string())?;
@@ -702,14 +711,14 @@ pub async fn pick_folder(app: AppHandle) -> Option<String> {
         .map(|p| p.display().to_string())
 }
 
-fn copy_tree(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+fn copy_dir(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
     std::fs::create_dir_all(to)?;
     for entry in std::fs::read_dir(from)? {
         let entry = entry?;
         let src = entry.path();
         let dst = to.join(entry.file_name());
         if src.is_dir() {
-            copy_tree(&src, &dst)?;
+            copy_dir(&src, &dst)?;
         } else if src.is_file() {
             std::fs::copy(&src, &dst)?;
         }
@@ -804,12 +813,12 @@ fn import_one(cfg: &mut crate::state::Config, path: &std::path::Path, name: &str
     for candidate in [".minecraft", "minecraft"] {
         let dir = path.join(candidate);
         if dir.is_dir() {
-            copy_tree(&dir, &target)?;
+            copy_dir(&dir, &target)?;
             break;
         }
     }
     if !target.exists() {
-        copy_tree(path, &target)?;
+        copy_dir(path, &target)?;
     }
     cfg.profiles.push(crate::state::Profile {
         id: id.clone(),
@@ -976,6 +985,8 @@ pub async fn curse_search(
         version.as_deref(),
         loader.as_deref(),
         30,
+        0,
+        "",
     )
     .await
     .map_err(|e| e.to_string())
@@ -989,8 +1000,18 @@ pub async fn catalog_search(
     version: Option<String>,
     loader: Option<String>,
     provider: Option<String>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    category: Option<String>,
+    sort: Option<String>,
 ) -> Result<Vec<mods::Hit>, String> {
     let provider = provider.unwrap_or_else(|| "modrinth".into());
+    let limit = limit.unwrap_or(20).clamp(1, 100);
+    let offset = offset.unwrap_or(0);
+    let sort = sort.unwrap_or_default();
+    let category = category
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty() && value != "all");
     let mut hits = Vec::new();
     if provider != "curseforge" {
         let found = mods::search(
@@ -999,6 +1020,10 @@ pub async fn catalog_search(
             &kind,
             version.as_deref(),
             loader.as_deref(),
+            offset,
+            limit,
+            category.as_deref(),
+            &sort,
         )
         .await
         .map_err(|e| e.to_string())?;
@@ -1011,7 +1036,9 @@ pub async fn catalog_search(
             &kind,
             version.as_deref(),
             loader.as_deref(),
-            30,
+            limit,
+            offset,
+            &sort,
         )
         .await
         .map_err(|e| e.to_string())?;
@@ -1043,7 +1070,21 @@ pub async fn catalog_search(
         hits = merged;
     }
 
-    hits.sort_by(|a, b| b.downloads.cmp(&a.downloads));
+    if let Some(wanted) = category {
+        let norm = |value: &str| -> String {
+            value
+                .chars()
+                .filter(|c| c.is_alphanumeric())
+                .flat_map(|c| c.to_lowercase())
+                .collect()
+        };
+        let wanted = norm(&wanted);
+        hits.retain(|hit| hit.categories.iter().any(|slug| norm(slug) == wanted));
+    }
+    if sort == "downloads" {
+        hits.sort_by(|a, b| b.downloads.cmp(&a.downloads));
+    }
+    hits.truncate(limit as usize);
     Ok(hits)
 }
 
@@ -1140,23 +1181,7 @@ pub fn profile_create(
     }
     let dir = format!("profiles/{id}");
     crate::paths::ensure_dir(&cfg.game_root().join(&dir)).map_err(|e| e.to_string())?;
-    let lower = version_id.to_ascii_lowercase();
-    let loader = loader
-        .map(|value| value.trim().to_ascii_lowercase())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| {
-            if lower.contains("neoforge") {
-                "neoforge".into()
-            } else if lower.contains("forge") {
-                "forge".into()
-            } else if lower.contains("fabric") {
-                "fabric".into()
-            } else if lower.contains("quilt") {
-                "quilt".into()
-            } else {
-                "vanilla".into()
-            }
-        });
+    let loader = normalize_loader(&version_id, loader);
     let loader_version = loader_version
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
@@ -1175,6 +1200,183 @@ pub fn profile_create(
                 created_at: stamp,
                 options,
             });
+        })
+        .map_err(|e| e.to_string())
+}
+
+fn normalize_loader(version_id: &str, loader: Option<String>) -> String {
+    loader
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| {
+            let lower = version_id.to_ascii_lowercase();
+            if lower.contains("neoforge") {
+                "neoforge".into()
+            } else if lower.contains("forge") {
+                "forge".into()
+            } else if lower.contains("fabric") {
+                "fabric".into()
+            } else if lower.contains("quilt") {
+                "quilt".into()
+            } else {
+                "vanilla".into()
+            }
+        })
+}
+
+#[tauri::command]
+pub fn profile_set_version(
+    state: State<'_, AppState>,
+    id: String,
+    version_id: String,
+    loader: Option<String>,
+    loader_version: Option<String>,
+) -> Result<Config, String> {
+    let version_id = version_id.trim().to_string();
+    if version_id.is_empty() {
+        return Err("profile_version_empty".into());
+    }
+    let loader = loader
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty());
+    let loader_version = loader_version
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    state
+        .update(|cfg| {
+            if let Some(profile) = cfg.profiles.iter_mut().find(|p| p.id == id) {
+                profile.version_id = version_id;
+                if let Some(loader) = loader {
+                    profile.loader = loader;
+                }
+                if loader_version.is_some() {
+                    profile.loader_version = loader_version;
+                }
+            }
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn profile_clone(
+    state: State<'_, AppState>,
+    id: String,
+    name: String,
+    version_id: String,
+    loader: Option<String>,
+    loader_version: Option<String>,
+) -> Result<Config, String> {
+    let cfg = state.snapshot();
+    let source = cfg.profile(&id).cloned().ok_or_else(|| "profile_not_found".to_string())?;
+    let version_id = version_id.trim().to_string();
+    if version_id.is_empty() {
+        return Err("profile_version_empty".into());
+    }
+    let name = {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            format!("{} copy", source.name)
+        } else {
+            trimmed.to_string()
+        }
+    };
+    let stamp = crate::state::now_secs();
+    let mut new_id = format!("instance-{stamp}");
+    let mut suffix = 2;
+    while cfg.profiles.iter().any(|p| p.id == new_id) {
+        new_id = format!("instance-{stamp}-{suffix}");
+        suffix += 1;
+    }
+    let dir = format!("profiles/{new_id}");
+    let target = cfg.game_root().join(&dir);
+    crate::paths::ensure_dir(&target).map_err(|e| e.to_string())?;
+    let source_root = cfg.profile_root(&source);
+    for folder in [
+        "mods",
+        "config",
+        "defaultconfigs",
+        "resourcepacks",
+        "shaderpacks",
+        "datapacks",
+    ] {
+        let from = source_root.join(folder);
+        if from.is_dir() {
+            copy_dir(&from, &target.join(folder)).map_err(|e| e.to_string())?;
+        }
+    }
+    let options_txt = source_root.join("options.txt");
+    if options_txt.is_file() {
+        std::fs::copy(&options_txt, target.join("options.txt")).map_err(|e| e.to_string())?;
+    }
+    let loader = normalize_loader(&version_id, loader);
+    let loader_version = loader_version
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let options = cfg.settings.game_defaults.clone();
+    state
+        .update(|c| {
+            c.active_profile = Some(new_id.clone());
+            c.profiles.push(Profile {
+                id: new_id,
+                name,
+                version_id,
+                loader,
+                loader_version,
+                dir,
+                icon: None,
+                created_at: stamp,
+                options,
+            });
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn profile_set_icon(
+    state: State<'_, AppState>,
+    id: String,
+    path: Option<String>,
+) -> Result<Config, String> {
+    let cfg = state.snapshot();
+    let profile = cfg.profile(&id).ok_or_else(|| "profile_not_found".to_string())?;
+    let root = cfg.profile_root(profile);
+    let source = path
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let icon = match source {
+        Some(source) => {
+            let source = PathBuf::from(source);
+            let ext = source
+                .extension()
+                .and_then(|value| value.to_str())
+                .map(|value| value.to_ascii_lowercase())
+                .unwrap_or_default();
+            if !matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp") {
+                return Err("image_invalid".into());
+            }
+            if !source.is_file() {
+                return Err("image_invalid".into());
+            }
+            crate::paths::ensure_dir(&root).map_err(|e| e.to_string())?;
+            if let Ok(entries) = std::fs::read_dir(&root) {
+                for entry in entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if name.starts_with(".aqua-icon.") {
+                        let _ = std::fs::remove_file(entry.path());
+                    }
+                }
+            }
+            let dest = root.join(format!(".aqua-icon.{ext}"));
+            std::fs::copy(&source, &dest).map_err(|e| e.to_string())?;
+            Some(dest.display().to_string())
+        }
+        None => None,
+    };
+    state
+        .update(|cfg| {
+            if let Some(profile) = cfg.profiles.iter_mut().find(|p| p.id == id) {
+                profile.icon = icon;
+            }
         })
         .map_err(|e| e.to_string())
 }
@@ -1220,6 +1422,25 @@ pub fn profile_contents(
             size: m.size,
         })
         .collect();
+    if let Ok(entries) = std::fs::read_dir(root.join("mods")) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let file = entry.file_name().to_string_lossy().to_string();
+            let Some(name) = file.strip_suffix(".jar.disabled").map(|value| value.to_string()) else {
+                continue;
+            };
+            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            out.push(ProfileFile {
+                file,
+                name,
+                kind: "pending".into(),
+                size,
+            });
+        }
+    }
     for (folder, kind) in [
         ("resourcepacks", "resourcepack"),
         ("shaderpacks", "shader"),
@@ -1687,6 +1908,258 @@ pub async fn profile_icons(
     }
     let _ = std::fs::write(&cache_path, serde_json::to_string(&cache).unwrap_or_default());
     Ok(cache)
+}
+
+const MODRINTH_UA: &str = concat!("AquaLauncher/", env!("CARGO_PKG_VERSION"));
+
+/// Modrinth: какие из хешей ему вообще известны.
+async fn modrinth_known(
+    client: &reqwest::Client,
+    hashes: &[&str],
+) -> Option<serde_json::Map<String, serde_json::Value>> {
+    let response = client
+        .post("https://api.modrinth.com/v2/version_files")
+        .header("User-Agent", MODRINTH_UA)
+        .json(&serde_json::json!({ "hashes": hashes, "algorithm": "sha1" }))
+        .send()
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    response.json().await.ok()
+}
+
+/// Modrinth: версии, совместимые с целевой игрой и загрузчиком (только для известных хешей).
+async fn modrinth_update(
+    client: &reqwest::Client,
+    hashes: &[&str],
+    version: &str,
+    loader: &str,
+) -> Option<serde_json::Map<String, serde_json::Value>> {
+    let response = client
+        .post("https://api.modrinth.com/v2/version_files/update")
+        .header("User-Agent", MODRINTH_UA)
+        .json(&serde_json::json!({
+            "hashes": hashes,
+            "algorithm": "sha1",
+            "loaders": [loader],
+            "game_versions": [version],
+        }))
+        .send()
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    response.json().await.ok()
+}
+
+/// Отключает моды, у которых нет сборки под выбранную версию игры.
+/// Неизвестные Modrinth jar (например, с CurseForge) остаются включёнными.
+#[tauri::command]
+pub async fn mods_quarantine(
+    state: State<'_, AppState>,
+    id: String,
+    version: String,
+    loader: String,
+) -> Result<Vec<String>, String> {
+    let cfg = state.snapshot();
+    let profile = cfg.profile(&id).ok_or_else(|| "profile_not_found".to_string())?;
+    let dir = cfg.profile_root(profile).join("mods");
+    let mut files: Vec<(String, String)> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !name.to_ascii_lowercase().ends_with(".jar") {
+                continue;
+            }
+            if let Some(hash) = hash_file(&path) {
+                files.push((name, hash));
+            }
+        }
+    }
+    if files.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let all: Vec<&str> = files.iter().map(|(_, hash)| hash.as_str()).collect();
+    let mut known = std::collections::HashSet::new();
+    for chunk in all.chunks(24) {
+        let Some(map) = modrinth_known(&state.http, chunk).await else { continue };
+        for hash in chunk {
+            if map.contains_key(*hash) {
+                known.insert(hash.to_string());
+            }
+        }
+    }
+    if known.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let known_list: Vec<&str> = known.iter().map(|hash| hash.as_str()).collect();
+    let mut verified = std::collections::HashSet::new();
+    let mut compatible = std::collections::HashSet::new();
+    for chunk in known_list.chunks(24) {
+        let Some(map) = modrinth_update(&state.http, chunk, &version, &loader).await else {
+            continue;
+        };
+        for hash in chunk {
+            verified.insert(hash.to_string());
+            if map.contains_key(*hash) {
+                compatible.insert(hash.to_string());
+            }
+        }
+    }
+
+    let mut disabled = Vec::new();
+    for (name, hash) in files {
+        if !verified.contains(&hash) || compatible.contains(&hash) {
+            continue;
+        }
+        if std::fs::rename(dir.join(&name), dir.join(format!("{name}.disabled"))).is_ok() {
+            disabled.push(name);
+        }
+    }
+    disabled.sort();
+    Ok(disabled)
+}
+
+#[derive(serde::Deserialize, Default)]
+struct PendingVersion {
+    #[serde(default)]
+    files: Vec<PendingFile>,
+}
+
+#[derive(serde::Deserialize, Default)]
+struct PendingFile {
+    #[serde(default)]
+    url: String,
+    #[serde(default)]
+    filename: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingResult {
+    pub restored: Vec<String>,
+    pub remaining: Vec<String>,
+}
+
+fn safe_mod_name(name: &str) -> Option<String> {
+    let name = name.rsplit(['/', '\\']).next().unwrap_or_default().trim();
+    if name.is_empty() || name.contains("..") {
+        return None;
+    }
+    Some(name.to_string())
+}
+
+/// Возвращает отключённые моды, у которых появилась сборка под новую версию.
+#[tauri::command]
+pub async fn mods_retry_pending(
+    state: State<'_, AppState>,
+    id: String,
+    version: String,
+    loader: String,
+) -> Result<PendingResult, String> {
+    let cfg = state.snapshot();
+    let profile = cfg.profile(&id).ok_or_else(|| "profile_not_found".to_string())?;
+    let dir = cfg.profile_root(profile).join("mods");
+    crate::paths::ensure_dir(&dir).map_err(|e| e.to_string())?;
+
+    let mut entries: Vec<(String, String)> = Vec::new();
+    if let Ok(items) = std::fs::read_dir(&dir) {
+        for entry in items.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !name.to_ascii_lowercase().ends_with(".jar.disabled") {
+                continue;
+            }
+            if let Some(hash) = hash_file(&path) {
+                entries.push((name, hash));
+            }
+        }
+    }
+    if entries.is_empty() {
+        return Ok(PendingResult {
+            restored: Vec::new(),
+            remaining: Vec::new(),
+        });
+    }
+
+    let all: Vec<&str> = entries.iter().map(|(_, hash)| hash.as_str()).collect();
+    let mut targets: std::collections::HashMap<String, (String, String)> =
+        std::collections::HashMap::new();
+    for chunk in all.chunks(24) {
+        let Some(map) = modrinth_update(&state.http, chunk, &version, &loader).await else {
+            continue;
+        };
+        for (hash, item) in map {
+            let Ok(parsed) = serde_json::from_value::<PendingVersion>(item) else {
+                continue;
+            };
+            let Some(file) = parsed
+                .files
+                .into_iter()
+                .find(|file| !file.url.is_empty() && !file.filename.is_empty())
+            else {
+                continue;
+            };
+            targets.insert(hash, (file.url, file.filename));
+        }
+    }
+
+    let mut restored = Vec::new();
+    let mut remaining = Vec::new();
+    for (disabled, hash) in entries {
+        let Some((url, filename)) = targets.get(&hash) else {
+            remaining.push(disabled);
+            continue;
+        };
+        let Some(name) = safe_mod_name(filename) else {
+            remaining.push(disabled);
+            continue;
+        };
+        let Ok(response) = state.http.get(url.as_str()).send().await else {
+            remaining.push(disabled);
+            continue;
+        };
+        if !response.status().is_success() {
+            remaining.push(disabled);
+            continue;
+        }
+        let Ok(bytes) = response.bytes().await else {
+            remaining.push(disabled);
+            continue;
+        };
+        let temp = dir.join(format!(".aqua-{name}.tmp"));
+        if std::fs::write(&temp, &bytes).is_err() {
+            let _ = std::fs::remove_file(&temp);
+            remaining.push(disabled);
+            continue;
+        }
+        let dest = dir.join(&name);
+        if dest.exists() {
+            let _ = std::fs::remove_file(&dest);
+        }
+        if std::fs::rename(&temp, &dest).is_err() {
+            let _ = std::fs::remove_file(&temp);
+            remaining.push(disabled);
+            continue;
+        }
+        let _ = std::fs::remove_file(dir.join(&disabled));
+        restored.push(name);
+    }
+    restored.sort();
+    remaining.sort();
+    Ok(PendingResult { restored, remaining })
 }
 
 #[derive(Serialize)]

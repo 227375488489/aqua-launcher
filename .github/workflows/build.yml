@@ -54,21 +54,20 @@ jobs:
           tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
           releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('Aqua Launcher {0}', github.ref_name) || '' }}
           releaseBody: |
-            Aqua Launcher 0.0.5 Beta — a fast, open Minecraft launcher built with Rust and Tauri.
+            Aqua Launcher 0.0.6 Beta — a fast, open Minecraft launcher built with Rust and Tauri.
 
-            - Every Minecraft version, from the earliest alpha to the newest snapshot
-            - Mods, modpacks, resource packs and shaders from Modrinth and CurseForge, separately or together
-            - Category filters and result counts across the whole catalog
-            - Rebuilt pack page: content tabs, inline "Add content" browser, real project icons
-            - Version menu with search, grouping and smooth scrolling
-            - Edit mode: drag widgets, rename headings and labels, reorder navigation
-            - Unified theme system: Light, Dark and OLED with any accent — surfaces, backdrop and taskbar icon follow it
-            - Unsaved-settings bar with save/discard, and leaving settings is blocked until resolved
-            - Update installer now really restarts the launcher into the new version
-            - Discord Rich Presence app ID 1573083334517723146
+            - Full catalog filters: source, game version, modloader, categories, sorting and active filter chips
+            - Numbered pages with 20/30/50 results per page; provider-aware search labels for Modrinth, CurseForge and both
+            - Compact installed-content grid with its own search and count
+            - "Add content" opens a catalog inside the pack, pre-filtered to its exact version and loader
+            - Pack editing: change cover, rename, update the Minecraft version, or clone the pack to a new version
+            - Incompatible mods are disabled as "Awaiting version" and restored automatically when a compatible build appears
+            - Loader versions grouped under their base Minecraft version in the version menu
+            - Visual layout editor: drag navigation and widget cards, hide with one click
+            - Quick light/dark toggle in the titlebar; unsaved indicator now clears when a value is reverted
+            - Per-instance memory with a realistic recommendation (32 GB systems no longer get 10 GB)
+            - Everything from 0.0.5: rebuilt pack page, real project icons, taskbar icon theming, real restart on update, edit mode, Discord RPC 1573083334517723146
             - Fabric, Forge and NeoForge loaders, installed automatically
-            - Import packs from MultiMC/Prism and CurseForge folders; create packs without pre-downloading a version
-            - 12 ready-made themes, wallpapers with preview and factory reset
             - 12 fully translated languages: English, Russian, Ukrainian, Kazakh, Polish, Czech, Slovak, French, German, Italian, Spanish, Portuguese
             - Windows, macOS (universal) and Linux builds
           releaseDraft: false

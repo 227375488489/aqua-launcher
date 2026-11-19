@@ -191,6 +191,7 @@ fn to_hit(item: CfMod) -> Hit {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn search(
     client: &reqwest::Client,
     query: &str,
@@ -198,16 +199,26 @@ pub async fn search(
     game_version: Option<&str>,
     loader: Option<&str>,
     limit: u32,
+    offset: u32,
+    sort: &str,
 ) -> Result<Vec<Hit>> {
+    let page_size = limit.clamp(1, 50);
+    let sort_field = match sort {
+        "downloads" => 6,
+        "updated" => 3,
+        "newest" => 11,
+        _ => 2,
+    };
     let mut req = client
         .get(format!("{API}/mods/search"))
         .query(&[
             ("gameId", "432".to_string()),
             ("classId", class_of(kind).to_string()),
             ("searchFilter", query.to_string()),
-            ("sortField", "2".to_string()),
+            ("sortField", sort_field.to_string()),
             ("sortOrder", "desc".to_string()),
-            ("pageSize", limit.to_string()),
+            ("pageSize", page_size.to_string()),
+            ("index", offset.to_string()),
         ])
         .header("User-Agent", UA);
     if let Some(version) = game_version.filter(|v| !v.is_empty() && !v.starts_with("cf:")) {
