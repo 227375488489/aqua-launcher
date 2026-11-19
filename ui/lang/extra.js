@@ -1,8 +1,12 @@
 // Generated translations for keys added after the original locale pass.
 export const EXTRA = {
   "uk": {
+    "common": {
+      "back": "Назад"
+    },
     "discover": {
       "both": "Обидва",
+      "activeProfile": "Активний пакет",
       "needsLoader": "Для цього потрібен завантажувач модів",
       "needsLoaderSub": "Вибраний завантажувач буде встановлено та створено окремий екземпляр.",
       "installLoader": "Встановити завантажувач"
@@ -10,6 +14,9 @@ export const EXTRA = {
     "set": {
       "autoUpdate": "Автоматичне оновлення",
       "autoUpdateSub": "Завантажуйте нові версії панелі запуску у фоновому режимі",
+      "theme": {
+        "oled": "OLED"
+      },
       "themes": "Готові теми",
       "themesSub": "Змініть фон і акцент в один клік.",
       "bg": {
@@ -21,14 +28,20 @@ export const EXTRA = {
       "snapshotsSub": "Тестування збірок у списках версій.",
       "old": "Показати застарілі версії",
       "oldSub": "Альфа-, бета-версії та архівні випуски.",
-      "javaBrowse": "переглядати"
+      "javaBrowse": "переглядати",
+      "javaGraal": "GraalVM",
+      "javaGraalSub": "Експериментальна збірка Java для невеликого підвищення продуктивності.",
+      "javaGraalInstall": "Встановіть GraalVM",
+      "autoRepair": "Авторемонтні пакети",
+      "autoRepairSub": "Перевірте та завантажте відсутні моди перед запуском."
     },
     "errors": {
       "experimentalOff": "Спочатку ввімкніть експериментальні версії в налаштуваннях."
     },
     "toast": {
       "importEmpty": "У цій папці не знайдено пакета запуску",
-      "optionsSaved": "Налаштування екземпляра збережено"
+      "optionsSaved": "Налаштування екземпляра збережено",
+      "javaInstalled": "GraalVM встановлено та вибрано"
     },
     "opt": {
       "title": "Налаштування примірника",
@@ -68,6 +81,9 @@ export const EXTRA = {
       "midnight": "опівночі",
       "daylight": "Денне світло"
     },
+    "pack": {
+      "status": "Статус"
+    },
     "project": {
       "overview": "Огляд",
       "content": "Зміст",
@@ -97,8 +113,12 @@ export const EXTRA = {
     }
   },
   "kk": {
+    "common": {
+      "back": "Артқа"
+    },
     "discover": {
       "both": "Екеуі де",
+      "activeProfile": "Белсенді бума",
       "needsLoader": "Бұл мод жүктеушісін қажет етеді",
       "needsLoaderSub": "Таңдалған жүктеуші орнатылып, бөлек данасы жасалады.",
       "installLoader": "Жүктегішті орнату"
@@ -106,6 +126,9 @@ export const EXTRA = {
     "set": {
       "autoUpdate": "Автоматты жаңарту",
       "autoUpdateSub": "Жаңа қосқыш нұсқаларын фондық режимде жүктеп алыңыз",
+      "theme": {
+        "oled": "OLED"
+      },
       "themes": "Дайын тақырыптар",
       "themesSub": "Фон мен екпінді бір рет басу арқылы өзгертіңіз.",
       "bg": {
@@ -117,14 +140,20 @@ export const EXTRA = {
       "snapshotsSub": "Сынақ нұсқалар тізімдерінде құрастырылады.",
       "old": "Бұрынғы нұсқаларды көрсету",
       "oldSub": "Альфа, бета және мұрағатталған шығарылымдар.",
-      "javaBrowse": "Шолу"
+      "javaBrowse": "Шолу",
+      "javaGraal": "GraalVM",
+      "javaGraalSub": "Аз ғана өнімділікті арттыру үшін тәжірибелік Java құрастыру.",
+      "javaGraalInstall": "GraalVM орнатыңыз",
+      "autoRepair": "Автоматты жөндеу пакеттері",
+      "autoRepairSub": "Іске қосу алдында жетіспейтін режимдерді тексеріңіз және жүктеңіз."
     },
     "errors": {
       "experimentalOff": "Алдымен параметрлерде эксперименттік нұсқаларды қосыңыз."
     },
     "toast": {
       "importEmpty": "Бұл қалтада ешбір іске қосу пакеті табылмады",
-      "optionsSaved": "Дана параметрлері сақталды"
+      "optionsSaved": "Дана параметрлері сақталды",
+      "javaInstalled": "GraalVM орнатылған және таңдалған"
     },
     "opt": {
       "title": "Дана параметрлері",
@@ -164,6 +193,9 @@ export const EXTRA = {
       "midnight": "Түн ортасы",
       "daylight": "Күндізгі жарық"
     },
+    "pack": {
+      "status": "Күй"
+    },
     "project": {
       "overview": "Шолу",
       "content": "Мазмұны",
@@ -193,8 +225,12 @@ export const EXTRA = {
     }
   },
   "pl": {
+    "common": {
+      "back": "Powrót"
+    },
     "discover": {
       "both": "Obydwa",
+      "activeProfile": "Pakiet aktywny",
       "needsLoader": "To wymaga modułu ładującego mody",
       "needsLoaderSub": "Wybrany moduł ładujący zostanie zainstalowany i utworzona osobna instancja.",
       "installLoader": "Zainstaluj moduł ładujący"
@@ -202,6 +238,9 @@ export const EXTRA = {
     "set": {
       "autoUpdate": "Automatyczna aktualizacja",
       "autoUpdateSub": "Pobierz nowe wersje programu uruchamiającego w tle",
+      "theme": {
+        "oled": "OLED-owe"
+      },
       "themes": "Gotowe motywy",
       "themesSub": "Zmień tło i akcent jednym kliknięciem.",
       "bg": {
@@ -213,14 +252,20 @@ export const EXTRA = {
       "snapshotsSub": "Testuj kompilacje na listach wersji.",
       "old": "Pokaż starsze wersje",
       "oldSub": "Wersje alfa, beta i archiwalne.",
-      "javaBrowse": "Przeglądaj"
+      "javaBrowse": "Przeglądaj",
+      "javaGraal": "GraalVM",
+      "javaGraalSub": "Eksperymentalna kompilacja Java zapewniająca niewielki wzrost wydajności.",
+      "javaGraalInstall": "Zainstaluj GraalVM",
+      "autoRepair": "Pakiety automatycznej naprawy",
+      "autoRepairSub": "Sprawdź i pobierz brakujące mody przed uruchomieniem."
     },
     "errors": {
       "experimentalOff": "Najpierw włącz wersje eksperymentalne w ustawieniach."
     },
     "toast": {
       "importEmpty": "W tym folderze nie znaleziono pakietu uruchamiającego",
-      "optionsSaved": "Ustawienia instancji zostały zapisane"
+      "optionsSaved": "Ustawienia instancji zostały zapisane",
+      "javaInstalled": "GraalVM zainstalowany i wybrany"
     },
     "opt": {
       "title": "Ustawienia instancji",
@@ -260,6 +305,9 @@ export const EXTRA = {
       "midnight": "Północ",
       "daylight": "Światło dzienne"
     },
+    "pack": {
+      "status": "Stan"
+    },
     "project": {
       "overview": "Przegląd",
       "content": "Treść",
@@ -289,8 +337,12 @@ export const EXTRA = {
     }
   },
   "cs": {
+    "common": {
+      "back": "Zpět"
+    },
     "discover": {
       "both": "Obojí",
+      "activeProfile": "Aktivní balení",
       "needsLoader": "To vyžaduje nakladač modů",
       "needsLoaderSub": "Vybraný zavaděč se nainstaluje a vytvoří se samostatná instance.",
       "installLoader": "Nainstalujte nakladač"
@@ -298,6 +350,9 @@ export const EXTRA = {
     "set": {
       "autoUpdate": "Automatická aktualizace",
       "autoUpdateSub": "Stáhněte si nové verze launcheru na pozadí",
+      "theme": {
+        "oled": "OLED"
+      },
       "themes": "Hotová témata",
       "themesSub": "Změňte pozadí a akcent jedním kliknutím.",
       "bg": {
@@ -309,14 +364,20 @@ export const EXTRA = {
       "snapshotsSub": "Otestujte sestavení v seznamech verzí.",
       "old": "Zobrazit starší verze",
       "oldSub": "Alfa, beta a archivovaná vydání.",
-      "javaBrowse": "Procházet"
+      "javaBrowse": "Procházet",
+      "javaGraal": "GraalVM",
+      "javaGraalSub": "Experimentální Java sestavení pro malé zvýšení výkonu.",
+      "javaGraalInstall": "Nainstalujte GraalVM",
+      "autoRepair": "Balíčky pro automatické opravy",
+      "autoRepairSub": "Před spuštěním zkontrolujte a stáhněte chybějící mody."
     },
     "errors": {
       "experimentalOff": "Nejprve povolte experimentální verze v nastavení."
     },
     "toast": {
       "importEmpty": "V této složce nebyl nalezen žádný spouštěcí balíček",
-      "optionsSaved": "Nastavení instance byla uložena"
+      "optionsSaved": "Nastavení instance byla uložena",
+      "javaInstalled": "GraalVM nainstalován a vybrán"
     },
     "opt": {
       "title": "Nastavení instance",
@@ -356,6 +417,9 @@ export const EXTRA = {
       "midnight": "Půlnoc",
       "daylight": "Denní světlo"
     },
+    "pack": {
+      "status": "Stav"
+    },
     "project": {
       "overview": "Přehled",
       "content": "Obsah",
@@ -385,8 +449,12 @@ export const EXTRA = {
     }
   },
   "sk": {
+    "common": {
+      "back": "Späť"
+    },
     "discover": {
       "both": "Obaja",
+      "activeProfile": "Aktívny balík",
       "needsLoader": "Vyžaduje si to zavádzač modov",
       "needsLoaderSub": "Vybraný zavádzač sa nainštaluje a vytvorí sa samostatná inštancia.",
       "installLoader": "Nainštalujte nakladač"
@@ -394,6 +462,9 @@ export const EXTRA = {
     "set": {
       "autoUpdate": "Automatická aktualizácia",
       "autoUpdateSub": "Stiahnite si nové verzie spúšťača na pozadí",
+      "theme": {
+        "oled": "OLED"
+      },
       "themes": "Pripravené témy",
       "themesSub": "Zmeňte pozadie a akcent jediným kliknutím.",
       "bg": {
@@ -405,14 +476,20 @@ export const EXTRA = {
       "snapshotsSub": "Testovacie zostavy v zoznamoch verzií.",
       "old": "Zobraziť staršie verzie",
       "oldSub": "Alfa, beta a archivované vydania.",
-      "javaBrowse": "Prehľadávať"
+      "javaBrowse": "Prehľadávať",
+      "javaGraal": "GraalVM",
+      "javaGraalSub": "Experimentálna zostava Java pre malé zvýšenie výkonu.",
+      "javaGraalInstall": "Nainštalujte GraalVM",
+      "autoRepair": "Balíky na automatické opravy",
+      "autoRepairSub": "Pred spustením skontrolujte a stiahnite chýbajúce mody."
     },
     "errors": {
       "experimentalOff": "Najprv povoľte experimentálne verzie v nastaveniach."
     },
     "toast": {
       "importEmpty": "V tomto priečinku sa nenašiel žiadny spúšťací balík",
-      "optionsSaved": "Nastavenia inštancie boli uložené"
+      "optionsSaved": "Nastavenia inštancie boli uložené",
+      "javaInstalled": "GraalVM nainštalovaný a vybraný"
     },
     "opt": {
       "title": "Nastavenia inštancie",
@@ -452,6 +529,9 @@ export const EXTRA = {
       "midnight": "Polnoc",
       "daylight": "Denné svetlo"
     },
+    "pack": {
+      "status": "Stav"
+    },
     "project": {
       "overview": "Prehľad",
       "content": "Obsah",
@@ -481,8 +561,12 @@ export const EXTRA = {
     }
   },
   "fr": {
+    "common": {
+      "back": "Retour"
+    },
     "discover": {
       "both": "Les deux",
+      "activeProfile": "Pack actif",
       "needsLoader": "Cela nécessite un chargeur de mod",
       "needsLoaderSub": "Le chargeur sélectionné sera installé et une instance distincte créée.",
       "installLoader": "Installer le chargeur"
@@ -490,6 +574,9 @@ export const EXTRA = {
     "set": {
       "autoUpdate": "Mise à jour automatique",
       "autoUpdateSub": "Téléchargez les nouvelles versions du lanceur en arrière-plan",
+      "theme": {
+        "oled": "OLED"
+      },
       "themes": "Thèmes prêts à l'emploi",
       "themesSub": "Changez la toile de fond et l'accent en un clic.",
       "bg": {
@@ -501,14 +588,20 @@ export const EXTRA = {
       "snapshotsSub": "Testez les builds dans les listes de versions.",
       "old": "Afficher les anciennes versions",
       "oldSub": "Versions alpha, bêta et archivées.",
-      "javaBrowse": "Parcourir"
+      "javaBrowse": "Parcourir",
+      "javaGraal": "GraalVM",
+      "javaGraalSub": "Construction Java expérimentale pour une petite amélioration des performances.",
+      "javaGraalInstall": "Installer GraalVM",
+      "autoRepair": "Packs de réparation automatique",
+      "autoRepairSub": "Vérifiez et téléchargez les mods manquants avant le lancement."
     },
     "errors": {
       "experimentalOff": "Activez d'abord les versions expérimentales dans les paramètres."
     },
     "toast": {
       "importEmpty": "Aucun pack de lancement trouvé dans ce dossier",
-      "optionsSaved": "Paramètres d'instance enregistrés"
+      "optionsSaved": "Paramètres d'instance enregistrés",
+      "javaInstalled": "GraalVM installé et sélectionné"
     },
     "opt": {
       "title": "Paramètres des instances",
@@ -531,7 +624,7 @@ export const EXTRA = {
       "particlesAll": "Tout",
       "particlesDecreased": "Diminué",
       "particlesMinimal": "Minime",
-      "gpuHigh": "High performance (discrete)",
+      "gpuHigh": "Haute performance (discret)",
       "gpuDefault": "Valeur par défaut du système"
     },
     "theme": {
@@ -548,27 +641,30 @@ export const EXTRA = {
       "midnight": "Minuit",
       "daylight": "Lumière du jour"
     },
+    "pack": {
+      "status": "Statut"
+    },
     "project": {
       "overview": "Aperçu",
       "content": "Contenu",
       "mods": "Mods",
-      "resourcepacks": "Resource packs",
+      "resourcepacks": "Packs de ressources",
       "shaders": "Shaders",
-      "datapacks": "Data packs",
+      "datapacks": "Packs de données",
       "other": "Autre",
-      "search": "Search content",
+      "search": "Rechercher du contenu",
       "client": "Client",
       "server": "Serveur",
       "required": "requis",
       "optional": "facultatif",
-      "unsupported": "unsupported"
+      "unsupported": "non pris en charge"
     },
     "update": {
       "title": "Mise à jour disponible",
       "check": "Vérifier",
       "download": "Télécharger",
-      "latest": "You are up to date",
-      "failed": "Could not check",
+      "latest": "Vous êtes à jour",
+      "failed": "Impossible de vérifier",
       "available": "La version {version} est disponible",
       "notes": "Quoi de neuf",
       "downloading": "Téléchargement…",
@@ -577,8 +673,12 @@ export const EXTRA = {
     }
   },
   "de": {
+    "common": {
+      "back": "Zurück"
+    },
     "discover": {
       "both": "Beides",
+      "activeProfile": "Aktives Paket",
       "needsLoader": "Dies erfordert einen Mod-Loader",
       "needsLoaderSub": "Der ausgewählte Loader wird installiert und eine separate Instanz erstellt.",
       "installLoader": "Lader installieren"
@@ -586,6 +686,9 @@ export const EXTRA = {
     "set": {
       "autoUpdate": "Automatische Aktualisierung",
       "autoUpdateSub": "Laden Sie im Hintergrund neue Launcher-Versionen herunter",
+      "theme": {
+        "oled": "OLED"
+      },
       "themes": "Vorgefertigte Themen",
       "themesSub": "Ändern Sie den Hintergrund und den Akzent mit einem Klick.",
       "bg": {
@@ -597,14 +700,20 @@ export const EXTRA = {
       "snapshotsSub": "Test-Builds in Versionslisten.",
       "old": "Ältere Versionen anzeigen",
       "oldSub": "Alpha-, Beta- und archivierte Veröffentlichungen.",
-      "javaBrowse": "Durchsuchen"
+      "javaBrowse": "Durchsuchen",
+      "javaGraal": "GraalVM",
+      "javaGraalSub": "Experimenteller Java-Build für eine kleine Leistungssteigerung.",
+      "javaGraalInstall": "Installieren Sie GraalVM",
+      "autoRepair": "Autoreparaturpakete",
+      "autoRepairSub": "Überprüfen Sie fehlende Mods und laden Sie sie vor dem Start herunter."
     },
     "errors": {
       "experimentalOff": "Aktivieren Sie zunächst experimentelle Versionen in den Einstellungen."
     },
     "toast": {
       "importEmpty": "In diesem Ordner wurde kein Launcher-Paket gefunden",
-      "optionsSaved": "Instanzeinstellungen gespeichert"
+      "optionsSaved": "Instanzeinstellungen gespeichert",
+      "javaInstalled": "GraalVM installiert und ausgewählt"
     },
     "opt": {
       "title": "Instanzeinstellungen",
@@ -644,6 +753,9 @@ export const EXTRA = {
       "midnight": "Mitternacht",
       "daylight": "Tageslicht"
     },
+    "pack": {
+      "status": "Status"
+    },
     "project": {
       "overview": "Übersicht",
       "content": "Inhalt",
@@ -673,8 +785,12 @@ export const EXTRA = {
     }
   },
   "it": {
+    "common": {
+      "back": "Indietro"
+    },
     "discover": {
       "both": "Entrambi",
+      "activeProfile": "Pacchetto attivo",
       "needsLoader": "Ciò richiede un caricatore di mod",
       "needsLoaderSub": "Il caricatore selezionato verrà installato e verrà creata un'istanza separata.",
       "installLoader": "Installa il caricatore"
@@ -682,6 +798,9 @@ export const EXTRA = {
     "set": {
       "autoUpdate": "Aggiornamento automatico",
       "autoUpdateSub": "Scarica nuove versioni del launcher in background",
+      "theme": {
+        "oled": "OLED"
+      },
       "themes": "Temi già pronti",
       "themesSub": "Cambia lo sfondo e l'accento con un clic.",
       "bg": {
@@ -693,14 +812,20 @@ export const EXTRA = {
       "snapshotsSub": "Test delle build negli elenchi delle versioni.",
       "old": "Mostra versioni precedenti",
       "oldSub": "Versioni alfa, beta e archiviate.",
-      "javaBrowse": "Sfoglia"
+      "javaBrowse": "Sfoglia",
+      "javaGraal": "GraalVM",
+      "javaGraalSub": "Build Java sperimentale per un piccolo incremento delle prestazioni.",
+      "javaGraalInstall": "Installa GraalVM",
+      "autoRepair": "Pacchetti di riparazione automatica",
+      "autoRepairSub": "Controlla e scarica le mod mancanti prima del lancio."
     },
     "errors": {
       "experimentalOff": "Abilita prima le versioni sperimentali nelle impostazioni."
     },
     "toast": {
       "importEmpty": "Nessun pacchetto di avvio trovato in questa cartella",
-      "optionsSaved": "Impostazioni dell'istanza salvate"
+      "optionsSaved": "Impostazioni dell'istanza salvate",
+      "javaInstalled": "GraalVM installato e selezionato"
     },
     "opt": {
       "title": "Impostazioni dell'istanza",
@@ -740,6 +865,9 @@ export const EXTRA = {
       "midnight": "Mezzanotte",
       "daylight": "Luce del giorno"
     },
+    "pack": {
+      "status": "Stato"
+    },
     "project": {
       "overview": "Panoramica",
       "content": "Contenuto",
@@ -769,8 +897,12 @@ export const EXTRA = {
     }
   },
   "es": {
+    "common": {
+      "back": "Atrás"
+    },
     "discover": {
       "both": "ambos",
+      "activeProfile": "Paquete activo",
       "needsLoader": "Esto necesita un cargador de mods.",
       "needsLoaderSub": "Se instalará el cargador seleccionado y se creará una instancia independiente.",
       "installLoader": "Instalar cargador"
@@ -778,6 +910,9 @@ export const EXTRA = {
     "set": {
       "autoUpdate": "Actualización automática",
       "autoUpdateSub": "Descargue nuevas versiones del iniciador en segundo plano",
+      "theme": {
+        "oled": "OLED"
+      },
       "themes": "Temas listos para usar",
       "themesSub": "Cambie el fondo y el acento con un solo clic.",
       "bg": {
@@ -789,14 +924,20 @@ export const EXTRA = {
       "snapshotsSub": "Probar compilaciones en listas de versiones.",
       "old": "Mostrar versiones heredadas",
       "oldSub": "Versiones alfa, beta y archivadas.",
-      "javaBrowse": "Navegar"
+      "javaBrowse": "Navegar",
+      "javaGraal": "GraalVM",
+      "javaGraalSub": "Construcción experimental de Java para un pequeño aumento del rendimiento.",
+      "javaGraalInstall": "Instalar GraalVM",
+      "autoRepair": "Paquetes de reparación automática",
+      "autoRepairSub": "Verifique y descargue las modificaciones que faltan antes del lanzamiento."
     },
     "errors": {
       "experimentalOff": "Primero habilite las versiones experimentales en la configuración."
     },
     "toast": {
       "importEmpty": "No se encontró ningún paquete de inicio en esta carpeta",
-      "optionsSaved": "Configuración de instancia guardada"
+      "optionsSaved": "Configuración de instancia guardada",
+      "javaInstalled": "GraalVM instalado y seleccionado"
     },
     "opt": {
       "title": "Configuración de instancia",
@@ -836,6 +977,9 @@ export const EXTRA = {
       "midnight": "medianoche",
       "daylight": "luz del día"
     },
+    "pack": {
+      "status": "Estado"
+    },
     "project": {
       "overview": "Descripción general",
       "content": "Contenido",
@@ -865,8 +1009,12 @@ export const EXTRA = {
     }
   },
   "pt": {
+    "common": {
+      "back": "Voltar"
+    },
     "discover": {
       "both": "Ambos",
+      "activeProfile": "Pacote ativo",
       "needsLoader": "Isso precisa de um carregador de mod",
       "needsLoaderSub": "O carregador selecionado será instalado e uma instância separada será criada.",
       "installLoader": "Instalar carregador"
@@ -874,6 +1022,9 @@ export const EXTRA = {
     "set": {
       "autoUpdate": "Atualização automática",
       "autoUpdateSub": "Baixe novas versões do iniciador em segundo plano",
+      "theme": {
+        "oled": "OLED"
+      },
       "themes": "Temas prontos",
       "themesSub": "Mude o pano de fundo e o destaque com um clique.",
       "bg": {
@@ -885,14 +1036,20 @@ export const EXTRA = {
       "snapshotsSub": "Teste compilações em listas de versões.",
       "old": "Mostrar versões legadas",
       "oldSub": "Versões alfa, beta e arquivadas.",
-      "javaBrowse": "Navegar"
+      "javaBrowse": "Navegar",
+      "javaGraal": "GraalVM",
+      "javaGraalSub": "Construção Java experimental para um pequeno aumento de desempenho.",
+      "javaGraalInstall": "Instale o GraalVM",
+      "autoRepair": "Pacotes de reparo automático",
+      "autoRepairSub": "Verifique e baixe os mods ausentes antes do lançamento."
     },
     "errors": {
       "experimentalOff": "Ative primeiro as versões experimentais nas configurações."
     },
     "toast": {
       "importEmpty": "Nenhum pacote de inicialização encontrado nesta pasta",
-      "optionsSaved": "Configurações de instância salvas"
+      "optionsSaved": "Configurações de instância salvas",
+      "javaInstalled": "GraalVM instalado e selecionado"
     },
     "opt": {
       "title": "Configurações de instância",
@@ -931,6 +1088,9 @@ export const EXTRA = {
       "ice": "Gelo",
       "midnight": "Meia-noite",
       "daylight": "Luz do dia"
+    },
+    "pack": {
+      "status": "Estado"
     },
     "project": {
       "overview": "Visão geral",

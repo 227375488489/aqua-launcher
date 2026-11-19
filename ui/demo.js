@@ -135,6 +135,7 @@ let settings = {
   uiGlass: 62,
   uiPlayPosition: pick("playpos", "left"),
   strictMods: true,
+  autoRepair: true,
   autoUpdate: true,
   discordRpc: false,
   discordClientId: "",
@@ -248,7 +249,7 @@ const handlers = {
       gameDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher\\minecraft" : "/home/sviat/.local/share/AquaLauncher/minecraft",
       activeDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher\\minecraft\\profiles\\instance-vanilla" : "/home/sviat/.local/share/AquaLauncher/minecraft/profiles/instance-vanilla",
       dataDir: platform === "windows" ? "C:\\Users\\sviat\\AppData\\Roaming\\AquaLauncher" : "/home/sviat/.local/share/AquaLauncher",
-      appVersion: "0.0.3-beta",
+      appVersion: "0.0.4-beta",
       running,
       lastVersion,
       profiles,
@@ -398,6 +399,14 @@ const handlers = {
     return "C:\\Program Files\\GraalVM\\graalvm-jdk-21\\bin\\java.exe";
   },
 
+  async java_install_graalvm() {
+    for (let i = 1; i <= 10; i++) {
+      emit("install://progress", { stage: "java", label: "GraalVM", current: i, total: 10, bytes: i * 12_400_000, totalBytes: 124_000_000 });
+      await sleep(120);
+    }
+    return "C:\\Users\\demo\\AppData\\Roaming\\AquaLauncher\\java\\graalvm-21.0.2\\bin\\java.exe";
+  },
+
   async check_java({ path }) {
     await sleep(400);
     return /java/i.test(path ?? "") ? 21 : null;
@@ -489,14 +498,14 @@ const handlers = {
   check_update() {
     const demo = new URLSearchParams(location.search).has("update");
     return {
-      current: "0.0.3-beta",
-      latest: demo ? "0.0.4-beta" : "0.0.3-beta",
+      current: "0.0.4-beta",
+      latest: demo ? "0.0.5-beta" : "0.0.4-beta",
       url: "https://github.com/227375488489/aqua-launcher/releases",
-      notes: demo ? "## Beta 0.0.4\n\n- Catalog from Modrinth and CurseForge\n- Pack page with content and add-content\n- Pack import and global game defaults" : "",
+      notes: demo ? "## Beta 0.0.5\n\n- Catalog from Modrinth and CurseForge\n- Pack page with content and add-content\n- Pack import and global game defaults" : "",
       published: date(Date.now() - 3 * day),
       available: demo,
-      asset: demo ? "https://github.com/227375488489/aqua-launcher/releases/download/v0.0.4-beta/Aqua.Launcher_0.0.4-beta_x64-setup.exe" : "",
-      assetName: demo ? "Aqua.Launcher_0.0.4-beta_x64-setup.exe" : "",
+      asset: demo ? "https://github.com/227375488489/aqua-launcher/releases/download/v0.0.5-beta/Aqua.Launcher_0.0.5-beta_x64-setup.exe" : "",
+      assetName: demo ? "Aqua.Launcher_0.0.5-beta_x64-setup.exe" : "",
     };
   },
 

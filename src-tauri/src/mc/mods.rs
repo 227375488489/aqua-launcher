@@ -15,7 +15,7 @@ const UA: &str = "AquaLauncher/3.0.0 (github.com/227375488489/aqua-launcher)";
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Hit {
-    #[serde(rename = "project_id")]
+    #[serde(default, rename(deserialize = "project_id", serialize = "id"))]
     pub id: String,
     #[serde(default)]
     pub slug: String,
@@ -25,7 +25,7 @@ pub struct Hit {
     pub description: String,
     #[serde(default)]
     pub author: String,
-    #[serde(default, rename = "icon_url")]
+    #[serde(default, rename(deserialize = "icon_url", serialize = "icon"))]
     pub icon: Option<String>,
     #[serde(default)]
     pub downloads: u64,

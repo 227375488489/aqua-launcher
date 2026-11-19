@@ -72,6 +72,7 @@ fn main() {
             commands::profile_import,
             commands::pick_java,
             commands::check_java,
+            commands::java_install_graalvm,
             commands::win_minimize,
             commands::win_toggle_maximize,
             commands::win_close,

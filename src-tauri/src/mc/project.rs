@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 const API: &str = "https://api.modrinth.com/v2";
-const UA: &str = "AquaLauncher/3.1.0 (github.com/227375488489/aqua-launcher)";
+const UA: &str = "AquaLauncher/0.0.4 (github.com/227375488489/aqua-launcher)";
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -143,24 +143,32 @@ struct RawFile {
     primary: bool,
 }
 
+async fn get_json<T: for<'de> Deserialize<'de>>(client: &reqwest::Client, url: &str) -> Result<T> {
+    let mut last = None;
+    for attempt in 0..3 {
+        let result = client
+            .get(url)
+            .header("User-Agent", UA)
+            .send()
+            .await
+            .and_then(|r| r.error_for_status());
+        match result {
+            Ok(response) => match response.json::<T>().await {
+                Ok(value) => return Ok(value),
+                Err(err) => last = Some(anyhow::anyhow!("Modrinth: ответ не разобран ({err})")),
+            },
+            Err(err) => last = Some(anyhow::anyhow!("Modrinth недоступен: {err}")),
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(300 * (attempt + 1))).await;
+    }
+    Err(last.unwrap_or_else(|| anyhow::anyhow!("Modrinth недоступен")))
+}
+
 pub async fn fetch(client: &reqwest::Client, id: &str) -> Result<ProjectDetail> {
-    let project: RawProject = client
-        .get(format!("{API}/project/{id}"))
-        .header("User-Agent", UA)
-        .send()
-        .await?
-        .error_for_status()
-        .context("Modrinth: проект не найден")?
-        .json()
-        .await?;
-    let versions: Vec<RawVersion> = client
-        .get(format!("{API}/project/{id}/version"))
-        .header("User-Agent", UA)
-        .send()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?;
+    let project: RawProject = get_json(client, &format!("{API}/project/{id}"))
+        .await
+        .context("Modrinth: проект не найден")?;
+    let versions: Vec<RawVersion> = get_json(client, &format!("{API}/project/{id}/version")).await?;
 
     let mut categories = project.categories;
     for extra in project.additional_categories {

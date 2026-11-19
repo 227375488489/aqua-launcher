@@ -69,6 +69,7 @@ pub struct Settings {
     pub discord_client_id: String,
     // --- безопасность ---
     pub strict_mods: bool,
+    pub auto_repair: bool,
     /// Базовые игровые настройки, наследуемые новыми сборками.
     pub game_defaults: InstanceOptions,
 }
@@ -118,6 +119,7 @@ impl Default for Settings {
             discord_rpc: false,
             discord_client_id: String::new(),
             strict_mods: true,
+            auto_repair: true,
             game_defaults: InstanceOptions::default(),
         }
     }

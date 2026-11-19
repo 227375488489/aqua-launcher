@@ -62,7 +62,7 @@
         <img class="brand-mark" src="assets/logo-64.png" alt="" />
         <span class="brand-word">aqua</span>
         <span class="brand-tag" data-i18n="brand.tag">launcher</span>
-        <span class="chip chip-soft chip-mono" id="version-chip">v0.0.3 Beta</span>
+        <span class="chip chip-soft chip-mono" id="version-chip">v0.0.4 Beta</span>
       </div>
       <div class="window-controls" id="window-controls">
         <button class="win-btn" id="win-min" data-i18n-title="window.minimize" aria-label="Minimize"><svg class="ico"><use href="#i-minus"></use></svg></button>
@@ -88,7 +88,7 @@
             <span data-i18n="nav.settings">Настройки</span>
           </button>
           <div class="rail-version">
-            <span id="rail-version">0.0.3 Beta</span><span class="dot"></span><span id="rail-platform">Windows</span>
+            <span id="rail-version">0.0.4 Beta</span><span class="dot"></span><span id="rail-platform">Windows</span>
           </div>
         </div>
       </aside>
@@ -96,7 +96,7 @@
       <main class="view" id="view">
         <div class="update-banner" id="update-banner" hidden>
           <span class="update-dot"></span>
-          <div class="update-text"><b data-i18n="update.title">Доступно обновление</b><span id="update-version">0.0.3 Beta</span><em id="update-detail"></em></div>
+          <div class="update-text"><b data-i18n="update.title">Доступно обновление</b><span id="update-version">0.0.4 Beta</span><em id="update-detail"></em></div>
           <button class="btn btn-quiet btn-sm" id="update-notes" data-i18n="update.notes">Что нового</button>
           <button class="btn btn-soft btn-sm" id="update-open"><svg class="ico"><use href="#i-download"></use></svg><span id="update-label" data-i18n="update.download">Скачать</span></button>
           <button class="win-btn" id="update-hide" aria-label="Hide"><svg class="ico"><use href="#i-close"></use></svg></button>
@@ -215,6 +215,10 @@
               </select>
               <svg class="ico"><use href="#i-chevron"></use></svg>
             </label>
+            <label class="select-inline" id="discover-profile-wrap">
+              <select id="discover-profile"></select>
+              <svg class="ico"><use href="#i-chevron"></use></svg>
+            </label>
           </div>
           <div class="notice" id="fabric-notice" hidden>
             <svg class="ico"><use href="#i-alert"></use></svg>
@@ -255,6 +259,10 @@
             <p data-i18n="instances.emptySub">Создай сборку или установи модпак из каталога.</p>
             <button class="btn btn-primary" id="instances-empty-create" data-i18n="instances.create">Создать сборку</button>
           </div>
+        </section>
+
+        <section class="page pack-page" id="page-pack" data-page="pack" hidden>
+          <div id="pack-page-body"></div>
         </section>
 
         <section class="page" id="page-accounts" data-page="accounts" hidden>
@@ -309,16 +317,24 @@
               <div class="settings-panel is-on" data-panel="appearance">
                 <div class="panel">
                   <h2 data-i18n="set.appearance">Внешний вид</h2>
+                  <div class="appearance-preview" aria-hidden="true">
+                    <div class="ap-bar"><i></i><i></i><i></i><span></span></div>
+                    <div class="ap-body">
+                      <div class="ap-side"><b></b><span></span><span></span><span></span><span></span></div>
+                      <div class="ap-main"><b class="ap-title"></b><span class="ap-line wide"></span><span class="ap-line"></span><div class="ap-cards"><i></i><i></i><i></i></div></div>
+                    </div>
+                  </div>
                   <div class="field">
                     <div class="field-label"><b data-i18n="set.language">Язык</b><span class="hint" data-i18n="set.languageSub">Интерфейс и форматы дат</span></div>
                     <div class="field-control"><label class="select-inline wide"><select id="language-select"></select><svg class="ico"><use href="#i-chevron"></use></svg></label></div>
                   </div>
                   <div class="field">
                     <div class="field-label"><b data-i18n="set.theme">Тема</b><span class="hint" data-i18n="set.themeSub">Тёмная или светлая основа</span></div>
-                    <div class="field-control"><div class="segmented" id="theme-choice">
-                      <button class="seg is-on" data-theme-choice="dark" data-i18n="set.theme.dark">Тёмная</button>
-                      <button class="seg" data-theme-choice="light" data-i18n="set.theme.light">Светлая</button>
-                      <button class="seg" data-theme-choice="system" data-i18n="set.theme.system">Система</button>
+                    <div class="field-control"><div class="theme-cards" id="theme-choice">
+                      <button class="theme-card-opt" data-theme-choice="system"><span class="tc-preview tc-system"></span><span data-i18n="set.theme.system">Система</span></button>
+                      <button class="theme-card-opt" data-theme-choice="light"><span class="tc-preview tc-light"></span><span data-i18n="set.theme.light">Светлая</span></button>
+                      <button class="theme-card-opt is-on" data-theme-choice="dark"><span class="tc-preview tc-dark"></span><span data-i18n="set.theme.dark">Тёмная</span></button>
+                      <button class="theme-card-opt" data-theme-choice="oled"><span class="tc-preview tc-oled"></span><span data-i18n="set.theme.oled">OLED</span></button>
                     </div></div>
                   </div>
                   <div class="field">
@@ -533,7 +549,11 @@
                       <button class="btn btn-soft btn-sm" id="java-browse" data-i18n="set.javaBrowse">Обзор</button>
                       <button class="btn btn-soft btn-sm" id="java-check" data-i18n="set.javaCheck">Проверить</button>
                     </div>
-                    <span class="hint" id="java-result">—</span>
+                    <span class="hint" id="java-result">-</span>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.javaGraal">GraalVM</b><span class="hint" data-i18n="set.javaGraalSub">Экспериментальная Java для прироста производительности</span></div>
+                    <div class="field-control"><button class="btn btn-soft btn-sm" id="java-graal"><svg class="ico"><use href="#i-download"></use></svg><span data-i18n="set.javaGraalInstall">Установить GraalVM</span></button></div>
                   </div>
                 </div>
               </div>
@@ -544,6 +564,10 @@
                   <div class="field">
                     <div class="field-label"><b data-i18n="set.strict">Строгий режим</b><span class="hint" data-i18n="set.strictSub">Блокировать моды с доступом к системе</span></div>
                     <div class="field-control"><button class="switch is-on" id="strict-switch" role="switch"><i></i></button></div>
+                  </div>
+                  <div class="field">
+                    <div class="field-label"><b data-i18n="set.autoRepair">Авто-починка сборок</b><span class="hint" data-i18n="set.autoRepairSub">Перед запуском проверять и докачивать недостающие моды</span></div>
+                    <div class="field-control"><button class="switch is-on" id="auto-repair-switch" role="switch"><i></i></button></div>
                   </div>
                   <div class="field">
                     <div class="field-label"><b data-i18n="set.modsHealth">Здоровье сборки</b><span class="hint" id="mods-health">—</span></div>
@@ -594,7 +618,7 @@
                   <div class="hr"></div>
                   <div class="about-row">
                     <img class="brand-mark" src="assets/logo-64.png" alt="" />
-                    <div><b>Aqua Launcher <span id="about-version">0.0.3 Beta</span></b><p data-i18n="set.aboutText">Открытый лаунчер на Rust + Tauri. Без рекламы и слежки.</p></div>
+                    <div><b>Aqua Launcher <span id="about-version">0.0.4 Beta</span></b><p data-i18n="set.aboutText">Открытый лаунчер на Rust + Tauri. Без рекламы и слежки.</p></div>
                     <button class="btn btn-soft btn-sm" id="about-github"><svg class="ico"><use href="#i-external"></use></svg><span>GitHub</span></button>
                   </div>
                 </div>

@@ -201,6 +201,65 @@ pub async fn ensure(
     download_runtime(app, client, root, major).await
 }
 
+pub async fn install_graalvm(
+    app: &AppHandle,
+    client: &reqwest::Client,
+    root: &Path,
+) -> Result<PathBuf> {
+    let version = "21.0.2";
+    let (os, arch, ext) = if cfg!(windows) {
+        ("windows", "x64", "zip")
+    } else if cfg!(target_os = "macos") {
+        ("macos", if cfg!(target_arch = "aarch64") { "aarch64" } else { "x64" }, "tar.gz")
+    } else {
+        ("linux", if cfg!(target_arch = "aarch64") { "aarch64" } else { "x64" }, "tar.gz")
+    };
+    let name = format!("graalvm-community-jdk-{version}_{os}-{arch}_bin.{ext}");
+    let url = format!("https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-{version}/{name}");
+    let dir = root.join("java");
+    std::fs::create_dir_all(&dir)?;
+    let archive = dir.join(&name);
+    let _ = app.emit(
+        "install://progress",
+        Progress {
+            stage: "java",
+            label: "GraalVM".to_string(),
+            current: 0,
+            total: 1,
+            bytes: 0,
+            total_bytes: 0,
+        },
+    );
+    crate::net::download_to(client, &url, archive.clone(), None)
+        .await
+        .map_err(|e| anyhow!("GraalVM: {e}"))?;
+    let target = dir.join(format!("graalvm-{version}"));
+    if target.exists() {
+        let _ = std::fs::remove_dir_all(&target);
+    }
+    std::fs::create_dir_all(&target)?;
+    if ext == "zip" {
+        extract_zip(&archive, &target)?;
+    } else {
+        extract_tar_gz(&archive, &target)?;
+    }
+    let java = find_java_in(&target)
+        .or_else(|| walk_for_java(&target, 6))
+        .ok_or_else(|| anyhow!("graalvm_java_not_found"))?;
+    let _ = app.emit(
+        "install://progress",
+        Progress {
+            stage: "java",
+            label: "GraalVM".to_string(),
+            current: 1,
+            total: 1,
+            bytes: 1,
+            total_bytes: 1,
+        },
+    );
+    Ok(java)
+}
+
 fn platform() -> (&'static str, &'static str) {
     let os = if cfg!(windows) {
         "windows"

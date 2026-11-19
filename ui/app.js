@@ -11,8 +11,8 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const APP_VERSION = "0.0.3-beta";
-const APP_LABEL = "0.0.3 Beta";
+const APP_VERSION = "0.0.4-beta";
+const APP_LABEL = "0.0.4 Beta";
 const NAV_DEFAULT = ["home", "library", "instances", "discover", "accounts"];
 const WIDGET_DEFAULT = ["stats", "pc", "latest", "instances", "console"];
 const LINKS = {
@@ -100,6 +100,7 @@ const S = {
   discoverKind: "modpack",
   discoverQuery: "",
   discoverProvider: "modrinth",
+  discoverProfile: "",
   discoverVersion: "",
   discoverLoader: "fabric",
   discoverResults: [],
@@ -355,7 +356,7 @@ function applyAppearance(s) {
     root.dataset.accent = ACCENT_NAMES.includes(s.uiAccent) && s.uiAccent !== "custom" ? s.uiAccent : "aqua";
   }
   if (rgb) root.style.setProperty("--logo-rotate", `${rgbHsl(rgb)[0] - 186}deg`);
-  root.dataset.theme = theme;
+  root.dataset.theme = s.uiTheme === "oled" ? "oled" : theme;
   root.dataset.radius = s.uiRadius || "soft";
   root.dataset.density = s.uiDensity || "normal";
   root.dataset.font = s.uiFont === "system" ? "system" : "manrope";
@@ -566,12 +567,16 @@ function renderVersionMenu() {
   S.profiles.forEach((p) => {
     if (!known.has(p.versionId)) known.set(p.versionId, { id: p.versionId, kind: "release", releaseTime: "" });
   });
-  const versions = sortVersions([...known.values()], "new").slice(0, 40);
-  const item = (id, kind, sub, loader, profile) => `<button class="menu-item ${S.selected === id ? "is-on" : ""}" data-pick="${esc(id)}" ${profile ? `data-profile-pick="${esc(profile.id)}"` : ""}>
-    <span class="mi-main"><b>${esc(profile ? profile.name : id)}</b><small>${esc(profile ? `${id} · ${sub}` : sub)}</small></span>
-    ${loader ? `<span class="chip">${esc(loader)}</span>` : ""}
-    ${S.selected === id ? `<svg class="ico" style="width:14px;height:14px;color:var(--accent)"><use href="#i-check"></use></svg>` : ""}
+  const versions = sortVersions([...known.values()], "new");
+  const item = (id, kind, sub, loader, profile) => {
+    const current = profile ? S.boot?.activeProfile === profile.id : S.selected === id;
+    const packSub = profile ? `${id} · ${profile.loader || "vanilla"}${profile.loaderVersion ? ` ${profile.loaderVersion}` : ""}` : sub;
+    return `<button class="menu-item ${current ? "is-on" : ""}" data-pick="${esc(id)}" ${profile ? `data-profile-pick="${esc(profile.id)}"` : ""}>
+    <span class="mi-main"><b>${esc(profile ? profile.name : id)}</b><small>${esc(packSub)}</small></span>
+    ${profile ? `<span class="chip ${S.boot?.activeProfile === profile.id ? "chip-soft" : ""}">${esc(S.boot?.activeProfile === profile.id ? t("common.active") : t("common.installed"))}</span>` : loader ? `<span class="chip">${esc(loader)}</span>` : ""}
+    ${current ? `<svg class="ico" style="width:14px;height:14px;color:var(--accent)"><use href="#i-check"></use></svg>` : ""}
   </button>`;
+  };
   const parts = [];
   for (const v of versions) {
     const packs = S.profiles.filter((p) => p.versionId === v.id);
@@ -1027,6 +1032,7 @@ function planDiscoverVisibility() {
   const kind = S.discoverKind;
   $("#discover-version-wrap").hidden = kind === "modpack" || kind === "shader";
   $("#discover-loader-wrap").hidden = kind !== "mod";
+  if ($("#discover-profile-wrap")) $("#discover-profile-wrap").hidden = kind === "modpack";
   $("#discover-provider").hidden = kind === "modpack";
   $("#fabric-notice").hidden = !(kind === "mod" && !hasLoaderProfile());
 }
@@ -1111,6 +1117,7 @@ async function installProject(hit) {
       loader: S.discoverLoader,
       kind,
       provider: String(hit.id).startsWith("cf:") ? "curseforge" : (hit.provider || S.discoverProvider),
+      profile: S.discoverProfile || S.boot?.activeProfile || null,
     });
     toast(t("toast.modInstalled", { count: (outcome?.installed || []).length }));
     loadMods();
@@ -1400,9 +1407,7 @@ function renderInstances() {
         <span>${esc(t("instances.created"))}: <b>${esc(i18n.date(new Date((p.createdAt || 0) * 1000)))}</b></span>
       </div>
       <div class="icard-actions">
-        ${active
-          ? `<button class="btn btn-primary" data-profile-play="${esc(p.id)}"><svg class="ico"><use href="#i-play"></use></svg><span>${esc(t("common.play"))}</span></button>`
-          : `<button class="btn btn-soft" data-profile-activate="${esc(p.id)}"><svg class="ico"><use href="#i-check"></use></svg><span>${esc(t("instances.activate"))}</span></button>`}
+        <button class="btn btn-primary" data-profile-play="${esc(p.id)}"><svg class="ico"><use href="#i-play"></use></svg><span>${esc(t("common.play"))}</span></button>
         <button class="btn btn-quiet icon-only" data-profile-options="${esc(p.id)}" title="${esc(t("opt.title"))}"><svg class="ico"><use href="#i-settings"></use></svg></button>
         <button class="btn btn-quiet icon-only" data-profile-open="${esc(p.id)}" title="${esc(t("instances.openFolder"))}"><svg class="ico"><use href="#i-folder"></use></svg></button>
         <button class="btn btn-quiet icon-only" data-profile-delete="${esc(p.id)}" title="${esc(t("common.delete"))}"><svg class="ico"><use href="#i-trash"></use></svg></button>
@@ -1587,7 +1592,7 @@ async function openPack(id) {
     const list = contents.filter((item) => (filter === "all" || kindOf(item) === filter) && (!query || item.name.toLowerCase().includes(query)));
     if (!list.length) return `<div class="empty"><p>${esc(t("instances.emptySub"))}</p></div>`;
     return list.map((item) => `<div class="pd-row">
-      <div class="pd-row-icon">${ico(kindOf(item) === "shader" ? "i-sparkles" : kindOf(item) === "resourcepack" ? "i-palette" : "i-box")}</div>
+      <div class="pd-row-icon"><img src="${artFor(item.name)}" alt=""></div>
       <div class="pd-row-main"><b>${esc(item.name)}</b><span>${esc(item.file)}</span></div>
       <span class="chip">${esc(i18n.bytes(item.size || 0))}</span>
       <button class="btn btn-quiet icon-only" data-pack-remove="${esc(item.file)}" data-kind="${esc(kindOf(item))}" title="${esc(t("common.delete"))}">${ico("i-trash")}</button>
@@ -1595,10 +1600,13 @@ async function openPack(id) {
   };
   const count = (kind) => contents.filter((item) => kindOf(item) === kind).length;
   const html = `
-    <button class="modal-close" data-close aria-label="${esc(t("window.close"))}">${ico("i-close")}</button>
+    <div class="pack-page-top">
+      <button class="btn btn-quiet btn-sm" id="pack-back">${ico("i-chevron")}<span>${esc(t("common.back"))}</span></button>
+    </div>
     <div class="pack-head">
       ${profile.icon ? `<img class="pack-cover" src="${esc(profile.icon)}" alt="">` : `<span class="pack-cover">${ico("i-layers")}</span>`}
       <div class="pack-title">
+        <div class="pack-eyebrow"><span class="chip">${esc(profile.loader || "vanilla")}</span><span class="chip">${esc(profile.versionId)}</span>${profile.loaderVersion ? `<span class="chip chip-soft">${esc(profile.loaderVersion)}</span>` : ""}</div>
         <h2>${esc(profile.name)}</h2>
         <p>${esc(profile.versionId)} · ${esc(profile.loader || "vanilla")}${profile.loaderVersion ? ` ${esc(profile.loaderVersion)}` : ""}</p>
         <div class="pack-actions">
@@ -1607,6 +1615,11 @@ async function openPack(id) {
           <button class="btn btn-quiet" id="pack-repair">${ico("i-shield")}<span>${esc(t("discover.repair"))}</span></button>
         </div>
       </div>
+    </div>
+    <div class="pack-stats">
+      <div><span>${esc(t("pack.status"))}</span><b>${esc(t("status.ready"))}</b></div>
+      <div><span>${esc(t("stats.last"))}</span><b>${esc(S.stats.lastPlayed ? i18n.date(new Date(S.stats.lastPlayed * 1000)) : t("stats.never"))}</b></div>
+      <div><span>${esc(t("stats.playtime"))}</span><b>${esc(duration(S.stats.playtimeSecs?.[profile.versionId] || 0))}</b></div>
     </div>
     <div class="pd-subtabs" id="pack-kinds">
       <button class="pd-subtab is-on" data-packkind="all">${esc(t("project.overview"))} ${contents.length}</button>
@@ -1621,7 +1634,11 @@ async function openPack(id) {
       <div class="pd-search"><input class="input" id="pack-add-search" placeholder="${esc(t("discover.search"))}"></div>
       <div class="pack-results" id="pack-add-results"></div>
     </div>`;
-  openModal(html, () => {
+  const page = $("#pack-page-body");
+  page.innerHTML = html;
+  go("pack");
+  (() => {
+    $("#pack-back").addEventListener("click", () => go("instances"));
     const host = $("#pack-rows");
     const paint = () => {
       host.innerHTML = rows();
@@ -1651,7 +1668,6 @@ async function openPack(id) {
       }
     });
     $("#pack-play").addEventListener("click", () => {
-      closeModal();
       activateProfile(id, true);
     });
     $("#pack-add").addEventListener("click", () => {
@@ -1725,8 +1741,8 @@ async function openPack(id) {
         btn.disabled = false;
       }
     });
-  }, true);
-  applyImgFallback($("#modal-root"), "img", artFor);
+  })();
+  applyImgFallback(page, "img", artFor);
 }
 
 async function openGameDefaults() {
@@ -2003,6 +2019,7 @@ function fillSettings() {
   setSwitch("#flags-switch", s.optimizedFlags !== false);
   setSwitch("#auto-java-switch", s.autoJava !== false);
   setSwitch("#strict-switch", s.strictMods !== false);
+  setSwitch("#auto-repair-switch", s.autoRepair !== false);
 
   $("#res-width").value = Number(s.width) || 925;
   $("#res-height").value = Number(s.height) || 530;
@@ -2291,6 +2308,7 @@ function bindSettings() {
   bindSwitch("#flags-switch", "optimizedFlags");
   bindSwitch("#auto-java-switch", "autoJava");
   bindSwitch("#strict-switch", "strictMods");
+  bindSwitch("#auto-repair-switch", "autoRepair");
 
   $("#res-width").addEventListener("change", (e) => { S.settings.width = Number(e.target.value) || 925; markDirty(); });
   $("#res-height").addEventListener("change", (e) => { S.settings.height = Number(e.target.value) || 530; markDirty(); });
@@ -2327,6 +2345,25 @@ function bindSettings() {
       result.textContent = major ? t("set.javaFound", { version: major }) : t("set.javaMissing");
     } catch {
       result.textContent = t("set.javaMissing");
+    }
+  });
+  $("#java-graal")?.addEventListener("click", async () => {
+    const button = $("#java-graal");
+    button.disabled = true;
+    try {
+      const path = await invoke("java_install_graalvm");
+      if (path) {
+        $("#java-path").value = path;
+        S.settings.javaPath = path;
+        S.settings.autoJava = false;
+        $("#java-result").textContent = t("set.javaFound", { version: 21 });
+        toast(t("toast.javaInstalled"));
+        markDirty();
+      }
+    } catch (err) {
+      toast(friendly(err), "err");
+    } finally {
+      button.disabled = false;
     }
   });
   $("#system-apply").addEventListener("click", applyRecommendation);
@@ -2490,10 +2527,24 @@ function renderSystem() {
   shadersHost.innerHTML = (rec.shaders || []).map((s) => `<div class="shader"><b>${esc(t(`shader.${s.id}`))}</b><span>${i18n.number(s.fpsLow)}–${i18n.number(s.fpsHigh)} FPS · ${esc(t(`verdict.${s.verdict}`))}</span></div>`).join("");
 }
 
+function fillDiscoverProfiles() {
+  const select = $("#discover-profile");
+  if (!select) return;
+  if (!S.discoverProfile) S.discoverProfile = S.boot?.activeProfile || S.profiles[0]?.id || "";
+  select.innerHTML = S.profiles.length
+    ? S.profiles.map((p) => `<option value="${esc(p.id)}" ${p.id === S.discoverProfile ? "selected" : ""}>${esc(p.name)} · ${esc(p.versionId)}</option>`).join("")
+    : `<option value="">${esc(t("discover.activeProfile"))}</option>`;
+  if (!S.profiles.some((p) => p.id === S.discoverProfile)) {
+    S.discoverProfile = S.profiles[0]?.id || "";
+    select.value = S.discoverProfile;
+  }
+}
+
 function fillDiscoverVersions() {
   const select = $("#discover-version");
   if (!select) return;
-  const releases = sortVersions(S.remote.filter((v) => v.kind === "release"), "new").slice(0, 24);
+  fillDiscoverProfiles();
+  const releases = sortVersions(S.remote.filter((v) => v.kind === "release"), "new");
   const installed = S.local.map((v) => baseOf(v.id)).filter(Boolean);
   const all = [...new Set([...installed, ...releases.map((v) => v.id)])];
   if (!S.discoverVersion) {
@@ -2529,6 +2580,19 @@ function bindDiscover() {
   });
   $("#discover-loader").addEventListener("change", (e) => {
     S.discoverLoader = e.target.value;
+    searchDiscover();
+  });
+  $("#discover-profile")?.addEventListener("change", (e) => {
+    S.discoverProfile = e.target.value;
+    const profile = profileById(S.discoverProfile);
+    if (profile) {
+      S.discoverVersion = baseOf(profile.versionId) || profile.versionId;
+      if (/forge|neoforge|fabric/i.test(profile.loader || "")) S.discoverLoader = /neoforge/i.test(profile.loader) ? "neoforge" : /forge/i.test(profile.loader) ? "forge" : "fabric";
+      const versionSelect = $("#discover-version");
+      if (versionSelect) versionSelect.value = S.discoverVersion;
+      const loaderSelect = $("#discover-loader");
+      if (loaderSelect) loaderSelect.value = S.discoverLoader;
+    }
     searchDiscover();
   });
   $("#discover-provider").addEventListener("click", (e) => {

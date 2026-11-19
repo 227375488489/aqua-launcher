@@ -350,6 +350,22 @@ pub async fn launch(app: AppHandle, state: State<'_, AppState>, id: String) -> R
         .unwrap_or_else(|| root.clone());
     let _ = crate::paths::ensure_dir(&game_dir);
 
+    if cfg.settings.auto_repair && !mods::health(&game_dir).missing.is_empty() {
+        let loader = profile
+            .map(|p| p.loader.clone())
+            .unwrap_or_else(|| if id.to_lowercase().contains("forge") { "forge".into() } else if id.to_lowercase().contains("fabric") { "fabric".into() } else { "vanilla".into() });
+        let progress = std::sync::Arc::new(|_: usize, _: u64| {});
+        let _ = mods::repair(
+            &state.http,
+            &game_dir,
+            profile.map(|p| p.version_id.as_str()).unwrap_or(&id),
+            &loader,
+            cfg.settings.download_workers as usize,
+            progress,
+        )
+        .await;
+    }
+
     let instance_options = profile
         .map(|p| p.options.with_defaults(&cfg.settings.game_defaults))
         .unwrap_or_else(|| cfg.settings.game_defaults.clone());
@@ -857,6 +873,28 @@ pub fn check_java(path: String) -> Option<u32> {
         return None;
     }
     java::probe(&path)
+}
+
+#[tauri::command]
+pub async fn java_install_graalvm(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let cfg = state.snapshot();
+    let root = cfg.game_root();
+    crate::paths::ensure_dir(&root).map_err(|e| e.to_string())?;
+    let path = java::install_graalvm(&app, &state.http, &root)
+        .await
+        .map_err(|e| e.to_string())?;
+    let raw = path.display().to_string();
+    let value = raw.clone();
+    state
+        .update(|cfg| {
+            cfg.settings.java_path = Some(value);
+            cfg.settings.auto_java = false;
+        })
+        .map_err(|e| e.to_string())?;
+    Ok(raw)
 }
 
 #[tauri::command]

@@ -10,7 +10,7 @@ use super::mods::{Hit, InstallOutcome};
 use crate::net::{self, Job};
 
 const API: &str = "https://api.curse.tools/v1/cf";
-const UA: &str = "AquaLauncher/0.0.2 (github.com/227375488489/aqua-launcher)";
+const UA: &str = "AquaLauncher/0.0.4 (github.com/227375488489/aqua-launcher)";
 
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
