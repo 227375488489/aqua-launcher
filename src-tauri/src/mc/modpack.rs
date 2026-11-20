@@ -80,20 +80,43 @@ struct Env {
     client: Option<String>,
 }
 
-pub async fn search(client: &reqwest::Client, query: &str) -> Result<Vec<mods::Hit>> {
-    #[derive(Deserialize)]
-    struct Res {
-        #[serde(default)]
-        hits: Vec<mods::Hit>,
+#[derive(Deserialize, Serialize)]
+pub struct SearchPage {
+    #[serde(default)]
+    pub hits: Vec<mods::Hit>,
+    #[serde(default)]
+    pub total_hits: u32,
+}
+
+pub async fn search(
+    client: &reqwest::Client,
+    query: &str,
+    offset: u32,
+    limit: u32,
+    category: Option<&str>,
+    sort: &str,
+) -> Result<SearchPage> {
+    let mut facets = String::from(r#"[["project_type:modpack"]]"#);
+    if let Some(cat) = category.filter(|c| !c.is_empty()) {
+        facets = format!(r#"[["project_type:modpack"],["categories:{cat}"]]"#);
     }
-    let facets = r#"[["project_type:modpack"]]"#;
-    let response: Res = client
+    let index = match sort {
+        "downloads" => "downloads",
+        "updated" => "updated",
+        "newest" => "newest",
+        "follows" => "follows",
+        _ => "relevance",
+    };
+    let limit = limit.clamp(1, 50).to_string();
+    let offset = offset.to_string();
+    let response: SearchPage = client
         .get(format!("{API}/search"))
         .query(&[
             ("query", query),
-            ("facets", facets),
-            ("limit", "24"),
-            ("index", "relevance"),
+            ("facets", facets.as_str()),
+            ("limit", limit.as_str()),
+            ("offset", offset.as_str()),
+            ("index", index),
         ])
         .header("User-Agent", UA)
         .send()
@@ -101,7 +124,7 @@ pub async fn search(client: &reqwest::Client, query: &str) -> Result<Vec<mods::H
         .error_for_status()?
         .json()
         .await?;
-    Ok(response.hits)
+    Ok(response)
 }
 
 async fn versions(client: &reqwest::Client, project: &str) -> Result<Vec<PackVersion>> {

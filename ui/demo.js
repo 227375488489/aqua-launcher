@@ -604,9 +604,20 @@ const handlers = {
     return null;
   },
 
-  modpack_search({ query }) {
+  modpack_search({ query, offset = 0, limit = 20, category = null, sort = "relevance" }) {
     const term = (query ?? "").toLowerCase();
-    return MODS.filter((m) => m.kind === "modpack" && (!term || m.title.toLowerCase().includes(term) || m.description.toLowerCase().includes(term)));
+    const base = MODS.filter((m) => m.kind === "modpack");
+    const pool = [];
+    for (let i = 0; i < 60; i++) {
+      const source = base[i % Math.max(1, base.length)] || MODS[0];
+      pool.push({ ...source, id: `${source.id}-${i}`, slug: `${source.slug}-${i}`, title: `${source.title} ${i + 1}` });
+    }
+    let hits = pool.filter((m) => !term || m.title.toLowerCase().includes(term) || m.description.toLowerCase().includes(term));
+    if (category && category !== "all") hits = hits.filter((m) => (m.categories || []).includes(category));
+    if (sort === "downloads") hits.sort((a, b) => (b.downloads || 0) - (a.downloads || 0));
+    if (sort === "newest" || sort === "updated") hits.reverse();
+    const totalHits = hits.length;
+    return { hits: hits.slice(offset, offset + limit), totalHits };
   },
 
   modrinth_project({ project }) {

@@ -54,18 +54,15 @@ jobs:
           tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
           releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('Aqua Launcher {0}', github.ref_name) || '' }}
           releaseBody: |
-            Aqua Launcher 0.0.8 Beta — a fast, open Minecraft launcher built with Rust and Tauri.
+            Aqua Launcher 0.0.9 Beta — a fast, open Minecraft launcher built with Rust and Tauri.
 
-            - Catalog marks installed mods, resource packs, shaders and data packs, with an optional "hide installed" filter
-            - Resource pack and shader installs no longer ask for a mod loader; "Both" providers keep working when one source is down
-            - Pack cards reveal an "Open content" action on hover; sidebar starts collapsed to icons and expands on hover
-            - Per-mod version switching, "Update all mods", bulk enable/disable/delete and inline toggles
-            - Pack cleanup removes logs, crash reports and minimap/chunk caches for Voxy, Bobby, Distant Horizons, Xaero and JourneyMap
-            - Achievements for playtime, packs, streaks, night launches and loyalty, computed from real stats
-            - Themes reach every toast and surface, presets no longer move the background, scale slider no longer jumps
-            - Larger icon targets, cleaner settings alignment, Microsoft button moved below the text, selected pack label fixed
-            - Discord presence is enabled by default; the Fabric download button is gone from version selection
-            - Everything from 0.0.7: version tree, live hero, in-pack catalog, Modrinth-style filters, Quilt/Forge/NeoForge, fast auto-update
+            - The sidebar no longer pushes the layout: in Auto mode it stays 76px and expands over the page on hover
+            - "Add content" opens the regular catalog with the pack, version and loader preselected and locked; a chip takes you back
+            - Modpack catalog uses real Modrinth pagination, so 20/30/50 per page and page counts are accurate
+            - Installed list and the hover caption were removed from the catalog; hover stays as a subtle highlight
+            - Settings keep their title and tabs fixed while only the right panel scrolls
+            - Fixed GitHub issues: the whole filter row is clickable, and the color picker no longer repaints the whole window
+            - Everything from 0.0.8: installed marks, resource pack/shader fixes, achievements, pack cleanup, per-mod versions, themed toasts
             - 12 languages; Windows, macOS (universal) and Linux builds
           releaseDraft: false
           prerelease: ${{ startsWith(github.ref_name, 'v0.') }}

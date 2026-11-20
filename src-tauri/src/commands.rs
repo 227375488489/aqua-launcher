@@ -990,10 +990,21 @@ pub async fn loader_versions(
 pub async fn modpack_search(
     state: State<'_, AppState>,
     query: String,
-) -> Result<Vec<mods::Hit>, String> {
-    modpack::search(&state.http, &query)
-        .await
-        .map_err(|e| e.to_string())
+    offset: Option<u32>,
+    limit: Option<u32>,
+    category: Option<String>,
+    sort: Option<String>,
+) -> Result<modpack::SearchPage, String> {
+    modpack::search(
+        &state.http,
+        &query,
+        offset.unwrap_or(0),
+        limit.unwrap_or(20),
+        category.as_deref(),
+        sort.as_deref().unwrap_or("relevance"),
+    )
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

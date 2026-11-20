@@ -1610,6 +1610,8 @@ html[data-theme="light"][data-rail="auto"] .rail:hover{box-shadow:18px 0 40px -3
 .result-row.is-installed{opacity:.92;border-color:color-mix(in srgb,var(--ok) 24%,var(--line))}
 .result-row.is-installed .rr-icon{box-shadow:0 0 0 1px color-mix(in srgb,var(--ok) 40%,transparent)}
 .tag.ok,.chip.ok{background:var(--ok-soft);color:var(--ok);border:1px solid color-mix(in srgb,var(--ok) 30%,transparent)}
+.filter-chip.is-back{border-color:color-mix(in srgb,var(--accent) 40%,transparent);color:var(--text);background:var(--accent-soft);gap:6px}
+.filter-chip.is-back .ico{width:14px;height:14px;color:var(--accent)}
 
 /* neutral toasts that follow the theme, above bottom bars */
 .toast{background:var(--panel-solid)!important;border:1px solid var(--line-strong)!important;color:var(--text)!important;box-shadow:var(--shadow-sm)!important}
@@ -1638,6 +1640,32 @@ body:has(#download-bar:not([hidden])) .toasts,body:has(#dirty-bar:not([hidden]))
 html[data-theme="light"] .icard:hover{box-shadow:0 18px 34px -26px rgba(12,40,52,.3)}
 html[data-theme="light"] .toast{background:#fff!important;color:var(--text)!important;border-color:rgba(12,40,52,.14)!important}
 html[data-theme="light"] .rail{background:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,.3))}
+
+/* v0.0.9 — rail overlay, fixed settings shell, no hover captions */
+html[data-rail="auto"] .shell{position:relative}
+html[data-rail="auto"] .rail{position:absolute;left:0;top:0;bottom:0;z-index:30;height:auto;width:76px;padding:20px 10px 14px;background:color-mix(in srgb,var(--bg) 86%,transparent);backdrop-filter:blur(22px) saturate(1.15);transition:width 200ms var(--ease),padding 200ms var(--ease),box-shadow 200ms var(--ease)}
+html[data-rail="auto"] .rail:hover{width:238px;padding:20px 14px 14px;box-shadow:22px 0 56px -34px rgba(0,0,0,.8)}
+html[data-rail="auto"] .view{margin-left:76px}
+html[data-theme="light"][data-rail="auto"] .rail{background:rgba(255,255,255,.9)}
+.icard-open{display:none}
+.catalog-filter{cursor:pointer}
+.catalog-filter .select-inline{width:100%;cursor:pointer}
+.catalog-filter .select-inline select{width:100%}
+.catalog-filter > span:first-child{user-select:none}
+
+/* settings: title and tabs stay put, only the right panel scrolls */
+#view:has(#page-settings:not([hidden])){overflow:hidden}
+#page-settings{display:flex;flex-direction:column;height:100%;padding-bottom:18px}
+#page-settings .settings-head{flex:none}
+#page-settings .settings-shell{flex:1;min-height:0;align-items:stretch}
+#page-settings .settings-tabs{overflow-y:auto;overscroll-behavior:contain}
+#page-settings .settings-body{overflow-y:auto;overscroll-behavior:contain;min-height:0;padding-right:4px;scrollbar-gutter:stable}
+#page-settings .settings-body::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--text) 16%,transparent);background-clip:padding-box}
+@media (max-width:900px){
+  #page-settings{height:auto;padding-bottom:0}
+  #view:has(#page-settings:not([hidden])){overflow-y:auto}
+  #page-settings .settings-body{overflow:visible}
+}
 .catalog-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 2px;font-size:12px;font-weight:600;color:var(--text-dim);cursor:pointer}
 .catalog-toggle:hover{color:var(--text)}
 .catalog-toggle .switch{flex:none}

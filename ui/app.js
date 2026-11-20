@@ -12,8 +12,8 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const APP_VERSION = "0.0.8-beta";
-const APP_LABEL = "0.0.8 Beta";
+const APP_VERSION = "0.0.9-beta";
+const APP_LABEL = "0.0.9 Beta";
 const NAV_DEFAULT = ["home", "library", "instances", "discover", "accounts"];
 const WIDGET_DEFAULT = ["stats", "achievements", "pc", "latest", "instances", "console"];
 const LINKS = {
@@ -70,6 +70,18 @@ const ACCENT_HEX = {
   rose: "#ff9db5", amber: "#ffd27a", lime: "#c8f57b", ice: "#bfe9ff",
   crimson: "#ff8a9a", sky: "#8fd6ff", sand: "#ffe0a3", plum: "#d8a5ff",
 };
+function previewAccent(hex) {
+  const vars = accentVars(hex);
+  const rgb = hexRgb(hex);
+  if (!vars || !rgb) return;
+  const root = document.documentElement;
+  root.style.setProperty("--accent", vars.accent);
+  root.style.setProperty("--accent-2", vars.accent2);
+  root.style.setProperty("--accent-soft", vars.soft);
+  root.style.setProperty("--accent-ink", vars.ink);
+  root.style.setProperty("--logo-rotate", `${rgbHsl(rgb)[0] - 186}deg`);
+}
+
 function accentVars(hex) {
   const rgb = hexRgb(hex);
   if (!rgb) return null;
@@ -1303,11 +1315,16 @@ function catLabel(id) {
 
 function planDiscoverVisibility() {
   const kind = S.discoverKind;
+  const pinned = Boolean(S.catalogFromPack);
   $("#discover-version-filter").hidden = kind === "modpack" || kind === "shader";
   $("#discover-loader-filter").hidden = kind !== "mod";
-  $("#discover-profile-filter").hidden = kind === "modpack";
+  $("#discover-profile-filter").hidden = kind === "modpack" || pinned;
   $("#discover-provider-wrap").hidden = kind === "modpack";
-  $("#fabric-notice").hidden = !(kind === "mod" && !hasLoaderProfile());
+  const version = $("#discover-version");
+  const loader = $("#discover-loader");
+  if (version) version.disabled = pinned;
+  if (loader) loader.disabled = pinned;
+  $("#fabric-notice").hidden = pinned || !(kind === "mod" && !hasLoaderProfile());
   updateCatalogChrome();
 }
 
@@ -1353,6 +1370,14 @@ function renderDiscoverActive() {
   const host = $("#discover-active");
   if (!host) return;
   const chips = [];
+  if (S.catalogFromPack) {
+    const source = profileById(S.catalogFromPack);
+    if (source) chips.push(`<button class="filter-chip is-back" data-back-pack>${ico("i-arrow")}${esc(source.name)} · ${esc(t("discover.addContent"))}</button>`);
+  }
+  if (S.discoverProfile && !S.catalogFromPack) {
+    const p = profileById(S.discoverProfile);
+    if (p) chips.unshift(`<button class="filter-chip" data-clear="profile">${esc(t("catalog.installTo"))}: ${esc(p.name)}<svg class="ico"><use href="#i-close"></use></svg></button>`);
+  }
   if (S.discoverKind !== "modpack" && S.discoverProvider !== "modrinth") {
     chips.push(`<button class="filter-chip" data-clear="provider">${esc(providerName())}<svg class="ico"><use href="#i-close"></use></svg></button>`);
   }
@@ -1439,17 +1464,20 @@ async function searchDiscover(reset = true) {
   try {
     let results;
     if (S.discoverKind === "modpack") {
-      const all = await invoke("modpack_search", { query: S.discoverQuery });
-      const norm = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-      const filtered = (all || []).filter((hit) => {
-        const cats = (hit.categories || []).map(norm);
-        if (S.discoverCat !== "all" && !cats.includes(norm(S.discoverCat))) return false;
-        if (S.discoverExclude.some((slug) => cats.includes(norm(slug)))) return false;
-        return true;
+      const page = await invoke("modpack_search", {
+        query: S.discoverQuery,
+        offset,
+        limit: S.discoverPer,
+        category: S.discoverCatMode === "include" && S.discoverCat !== "all" ? S.discoverCat : null,
+        sort: S.discoverSort,
       });
-      S.discoverTotal = filtered.length;
-      results = filtered.slice(offset, offset + S.discoverPer);
-      S.discoverHasMore = offset + results.length < S.discoverTotal;
+      const norm = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      results = (page?.hits || []).filter((hit) => {
+        const cats = (hit.categories || []).map(norm);
+        return !S.discoverExclude.some((slug) => cats.includes(norm(slug)));
+      });
+      S.discoverTotal = Number(page?.totalHits ?? page?.total_hits ?? results.length);
+      S.discoverHasMore = offset + (page?.hits || []).length < S.discoverTotal;
     } else {
       results = await invoke("catalog_search", {
         query: S.discoverQuery,
@@ -2034,7 +2062,6 @@ function renderInstances() {
         <button class="btn btn-quiet icon-only" data-profile-open="${esc(p.id)}" title="${esc(t("instances.openFolder"))}"><svg class="ico"><use href="#i-folder"></use></svg></button>
         <button class="btn btn-quiet icon-only" data-profile-delete="${esc(p.id)}" title="${esc(t("common.delete"))}"><svg class="ico"><use href="#i-trash"></use></svg></button>
       </div>
-      <div class="icard-open"><svg class="ico"><use href="#i-layers"></use></svg><span>${esc(t("pack.openContent"))}</span></div>
     </article>`;
   }).join("");
   applyImgFallback(host, "img", artFor);
@@ -2553,7 +2580,7 @@ async function openPack(id) {
       $("#page-pack").classList.remove("is-catalog");
       $("#pack-add-panel").hidden = true;
     };
-    $("#pack-add").addEventListener("click", openCatalog);
+    $("#pack-add").addEventListener("click", () => openPackCatalog(profile));
     $("#pack-add-close").addEventListener("click", closeCatalog);
     $("#pack-add-back").addEventListener("click", closeCatalog);
     $("#pack-repair").addEventListener("click", async () => {
@@ -3489,6 +3516,10 @@ function bindSettings() {
     S.settings.uiAccentCustom = e.target.value;
     setSegmented("#accent-choice", "data-accent", "custom");
     $$("#theme-presets .theme-card").forEach((card) => card.classList.remove("is-on"));
+    previewAccent(e.target.value);
+    markDirty();
+  });
+  $("#accent-custom").addEventListener("change", () => {
     applyAppearance(S.settings);
     markDirty();
   });
@@ -3522,9 +3553,10 @@ function bindSettings() {
     S.settings.uiBackground = "custom";
     S.settings.uiBgCustom = e.target.value;
     setSegmented("#bg-choice", "data-bg-choice", "custom");
-    applyAppearance(S.settings);
+    document.documentElement.style.setProperty("--bg-custom", e.target.value);
     markDirty();
   });
+  $("#bg-custom")?.addEventListener("change", () => applyAppearance(S.settings));
   bindSegChoice("#wall-choice", "data-wall", "uiWallpaper", () => applyAppearance(S.settings));
   bindSegChoice("#side-choice", "data-side-choice", "uiSidebar", () => applyAppearance(S.settings));
   bindSegChoice("#rail-choice", "data-rail-choice", "uiSidebarMode", () => applyAppearance(S.settings));
@@ -3859,6 +3891,46 @@ function fillDiscoverVersions() {
   }
 }
 
+function openPackCatalog(profile) {
+  S.discoverKind = "mod";
+  S.discoverQuery = "";
+  S.discoverProvider = "modrinth";
+  S.discoverProfile = profile.id;
+  S.discoverVersion = baseOf(profile.versionId) || profile.versionId;
+  S.discoverLoader = profile.loader || "fabric";
+  S.discoverCat = "all";
+  S.discoverCatMode = "include";
+  S.discoverExclude = [];
+  S.catalogFromPack = profile.id;
+  S.discoverPage = 1;
+  S.discoverResults = [];
+  S.discoverTotal = null;
+  S.discoverBusy = true;
+  $$(".page").forEach((el) => { el.hidden = el.dataset.page !== "discover"; });
+  S.page = "discover";
+  $$("[data-nav]").forEach((el) => el.classList.toggle("is-on", el.dataset.nav === "discover"));
+  $("#view").scrollTop = 0;
+  closeVersionMenu();
+  $$("#discover-tabs [data-kind]").forEach((el) => el.classList.toggle("is-on", el.dataset.kind === "mod"));
+  fillDiscoverVersions();
+  fillDiscoverProfiles();
+  const version = $("#discover-version");
+  if (version) version.value = S.discoverVersion;
+  const loader = $("#discover-loader");
+  if (loader) loader.value = S.discoverLoader;
+  const target = $("#discover-profile");
+  if (target) target.value = S.discoverProfile;
+  const search = $("#discover-search");
+  if (search) search.value = "";
+  $$("#discover-provider [data-provider]").forEach((el) => el.classList.toggle("is-on", el.dataset.provider === "modrinth"));
+  S.discoverBusy = false;
+  planDiscoverVisibility();
+  updateCatalogChrome();
+  renderDiscoverCats();
+  loadMods();
+  searchDiscover(true);
+}
+
 function closeCatalogPanel() {
   const panel = $("#discover-panel");
   const btn = $("#discover-filters");
@@ -3978,7 +4050,22 @@ function bindDiscover() {
     renderDiscoverCats();
     searchDiscover(true);
   });
+  $("#discover-panel")?.addEventListener("click", (e) => {
+    if (e.target.closest("button,input,select,.segmented,.cat-row,.select-inline")) return;
+    const filter = e.target.closest(".catalog-filter");
+    const select = filter?.querySelector("select");
+    if (!select) return;
+    select.focus();
+    try { select.showPicker(); } catch {}
+  });
   $("#discover-active").addEventListener("click", (e) => {
+    const back = e.target.closest("[data-back-pack]");
+    if (back) {
+      const target = S.catalogFromPack;
+      S.catalogFromPack = "";
+      if (target) openPack(target);
+      return;
+    }
     const chip = e.target.closest("[data-clear]");
     if (!chip) return;
     const field = chip.dataset.clear;
@@ -3992,6 +4079,10 @@ function bindDiscover() {
       const slug = field.slice(8);
       S.discoverExclude = S.discoverExclude.filter((value) => value !== slug);
       renderDiscoverCats();
+    } else if (field === "profile") {
+      S.discoverProfile = "";
+      const el = $("#discover-profile");
+      if (el) el.value = "";
     } else if (field === "loader") {
       S.discoverLoader = "fabric";
       const el = $("#discover-loader");
@@ -4028,12 +4119,12 @@ function bindDiscover() {
     const card = e.target.closest("[data-project]");
     if (card) openProject(card.dataset.project);
   });
-  $("#mods-search").addEventListener("input", (e) => {
+  $("#mods-search")?.addEventListener("input", (e) => {
     S.modsQuery = e.target.value;
     renderMods();
   });
   $("#fabric-create").addEventListener("click", installDiscoverLoader);
-  $("#mods-repair").addEventListener("click", repairMods);
+  $("#mods-repair")?.addEventListener("click", repairMods);
   $("#settings-mods-repair").addEventListener("click", repairMods);
 }
 
