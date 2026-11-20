@@ -100,6 +100,7 @@ pub struct InstalledMod {
     pub depends: Vec<String>,
     pub risk: String,
     pub notes: Vec<String>,
+    pub enabled: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -263,15 +264,20 @@ pub fn list(root: &Path) -> Vec<InstalledMod> {
     let mut out = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("jar") {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let lower = name.to_ascii_lowercase();
+        let enabled = if lower.ends_with(".jar") {
+            true
+        } else if lower.ends_with(".jar.off") {
+            false
+        } else {
             continue;
-        }
-        let file = entry.file_name().to_string_lossy().to_string();
+        };
         let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
         let meta = read_meta(&path);
         let (risk, notes) = scan(&path);
         out.push(InstalledMod {
-            file,
+            file: name,
             name: meta.0,
             id: meta.1,
             version: meta.2,
@@ -280,6 +286,7 @@ pub fn list(root: &Path) -> Vec<InstalledMod> {
             depends: meta.4,
             risk,
             notes,
+            enabled,
         });
     }
     out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));

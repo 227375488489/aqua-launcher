@@ -231,3 +231,27 @@ pub async fn install(
     );
     Ok(id)
 }
+
+/// Доступные версии Forge/NeoForge для игры (новые сверху).
+pub async fn versions(client: &reqwest::Client, game: &str, flavor: Flavor) -> Result<Vec<String>> {
+    let xml = text(client, &format!("{}/maven-metadata.xml", if flavor == Flavor::Forge { FORGE_MAVEN } else { NEO_MAVEN })).await?;
+    let mut out: Vec<String> = match flavor {
+        Flavor::Forge => {
+            let prefix = format!("{game}-");
+            tags(&xml)
+                .into_iter()
+                .filter_map(|value| value.strip_prefix(&prefix).map(str::to_string))
+                .collect()
+        }
+        Flavor::NeoForge => {
+            let prefix = format!("{}.", game.trim_start_matches("1."));
+            tags(&xml)
+                .into_iter()
+                .filter(|value| value.starts_with(&prefix))
+                .collect()
+        }
+    };
+    out.reverse();
+    out.truncate(80);
+    Ok(out)
+}

@@ -11,8 +11,8 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const APP_VERSION = "0.0.6-beta";
-const APP_LABEL = "0.0.6 Beta";
+const APP_VERSION = "0.0.7-beta";
+const APP_LABEL = "0.0.7 Beta";
 const NAV_DEFAULT = ["home", "library", "instances", "discover", "accounts"];
 const WIDGET_DEFAULT = ["stats", "pc", "latest", "instances", "console"];
 const LINKS = {
@@ -20,6 +20,11 @@ const LINKS = {
   modrinth: "https://modrinth.com",
 };
 const ACCENT_NAMES = ["aqua", "mint", "azure", "violet", "rose", "amber", "lime", "ice", "crimson", "sky", "sand", "plum", "custom"];
+const THEME_TONES = {
+  ocean: "#0a2430", aurora: "#071f22", nebula: "#1a1030", sunset: "#2a160c",
+  sakura: "#2a1520", forest: "#0d2115", cyber: "#07202a", ember: "#260d10",
+  candy: "#24112a", ice: "#0a2028", midnight: "#0b1424", daylight: "#eaf2f6",
+};
 const THEMES = [
   { id: "ocean", bg: "ocean", accent: "aqua", light: false },
   { id: "aurora", bg: "aurora", accent: "mint", light: false },
@@ -77,6 +82,16 @@ function accentVars(hex) {
   };
 }
 
+function currentAccent() {
+  const key = S.settings?.uiAccent || "aqua";
+  const custom = S.settings?.uiAccentCustom || "#5ce8dc";
+  return ACCENT_HEX[key] || (hexRgb(custom) ? custom : "#5ce8dc");
+}
+function accentHue() {
+  const rgb = hexRgb(currentAccent());
+  return rgb ? rgbHsl(rgb)[0] : 186;
+}
+
 /* Recolor the taskbar icon to the current accent (hue-rotate the source mark). */
 let iconSource = null;
 function syncWindowIcon(deg) {
@@ -127,7 +142,7 @@ const S = {
   modHealth: null,
   selected: null,
   page: "home",
-  libFilter: "release",
+  libFilter: "all",
   libQuery: "",
   libSort: "new",
   libShown: 36,
@@ -140,6 +155,8 @@ const S = {
   discoverResults: [],
   discoverBusy: false,
   discoverCat: "all",
+  discoverCatMode: "include",
+  discoverExclude: [],
   discoverPage: 1,
   discoverPer: 20,
   discoverSort: "featured",
@@ -265,37 +282,54 @@ function fallbackAvatar(seed) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 function artFor(seed) {
-  const hue = [...String(seed || "aqua")].reduce((a, c) => a + c.charCodeAt(0) * 7, 0) % 360;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="hsl(${hue},55%,42%)"/><stop offset="1" stop-color="hsl(${(hue + 70) % 360},60%,24%)"/></linearGradient></defs><rect width="96" height="96" fill="url(#g)"/><circle cx="30" cy="28" r="26" fill="#ffffff" fill-opacity=".1"/><circle cx="76" cy="72" r="34" fill="#ffffff" fill-opacity=".06"/></svg>`;
+  const hue = (accentHue() + ([...String(seed || "aqua")].reduce((a, c) => a + c.charCodeAt(0) * 7, 0) % 50) - 25 + 360) % 360;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="hsl(${hue},52%,42%)"/><stop offset="1" stop-color="hsl(${(hue + 24) % 360},48%,22%)"/></linearGradient></defs><rect width="96" height="96" fill="url(#g)"/><circle cx="30" cy="28" r="26" fill="#ffffff" fill-opacity=".1"/><circle cx="76" cy="72" r="34" fill="#ffffff" fill-opacity=".06"/></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+function packArt(name) {
+  const label = String(name || "?").trim();
+  const letter = label.charAt(0).toUpperCase() || "?";
+  const hue = (accentHue() + ([...label].reduce((a, c) => a + c.charCodeAt(0) * 11, 0) % 44) - 22 + 360) % 360;
+  const blocks = Array.from({ length: 9 }, (_, i) => {
+    const x = ((i * 37 + label.length * 13) % 86) / 100 * 96;
+    const y = ((i * 29 + 17) % 82) / 100 * 96;
+    const size = 10 + (i % 4) * 9;
+    return `<rect x="${x.toFixed(0)}" y="${y.toFixed(0)}" width="${size}" height="${size}" rx="2" fill="#fff" opacity="${(0.04 + (i % 4) * 0.03).toFixed(2)}"/>`;
+  }).join("");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="hsl(${hue},58%,38%)"/><stop offset="1" stop-color="hsl(${(hue + 32) % 360},52%,16%)"/></linearGradient></defs><rect width="96" height="96" fill="url(#g)"/>${blocks}<circle cx="48" cy="48" r="27" fill="#000" fill-opacity=".18"/><text x="48" y="60" font-family="Manrope,Segoe UI,Arial" font-size="32" font-weight="800" fill="#fff" fill-opacity=".92" text-anchor="middle">${esc(letter)}</text></svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 function versionArt(id) {
   const seed = String(id || "minecraft");
   let hash = 0;
   for (const ch of seed) hash = (hash * 31 + ch.charCodeAt(0)) % 360;
-  const hue = hash;
+  const hue = (accentHue() + (hash % 36) - 18 + 360) % 360;
   const blocks = Array.from({ length: 26 }, (_, i) => {
     const x = ((i * 53 + seed.length * 7) % 92) / 100 * 640;
     const y = ((i * 37 + 11) % 80) / 100 * 320;
     const size = 26 + (i % 5) * 18;
     const o = 0.05 + ((i * 13) % 7) / 70;
-    return `<rect x="${x.toFixed(0)}" y="${y.toFixed(0)}" width="${size}" height="${size}" rx="4" fill="#d9fbff" opacity="${o.toFixed(2)}"/>`;
+    return `<rect x="${x.toFixed(0)}" y="${y.toFixed(0)}" width="${size}" height="${size}" rx="4" fill="hsl(${hue},70%,86%)" opacity="${o.toFixed(2)}"/>`;
   }).join("");
   const safe = seed.replace(/[<>&"']/g, "");
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="320" viewBox="0 0 640 320">
     <defs>
       <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-        <stop stop-color="hsl(${hue},52%,25%)"/><stop offset=".55" stop-color="hsl(${(hue + 26) % 360},48%,15%)"/><stop offset="1" stop-color="hsl(${(hue + 60) % 360},40%,9%)"/>
+        <stop stop-color="hsl(${hue},46%,23%)"/><stop offset=".55" stop-color="hsl(${(hue + 18) % 360},42%,14%)"/><stop offset="1" stop-color="hsl(${(hue + 32) % 360},36%,8%)"/>
       </linearGradient>
       <radialGradient id="glow" cx="78%" cy="8%" r="70%">
-        <stop stop-color="hsl(${(hue + 30) % 360},80%,60%)" stop-opacity=".45"/><stop offset="1" stop-color="hsl(${(hue + 30) % 360},80%,60%)" stop-opacity="0"/>
+        <stop stop-color="hsl(${hue},78%,58%)" stop-opacity=".4"/><stop offset="1" stop-color="hsl(${hue},78%,58%)" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="smoke" cx="58%" cy="52%" r="60%">
+        <stop stop-color="hsl(${(hue + 8) % 360},60%,50%)" stop-opacity=".16"/><stop offset="1" stop-color="hsl(${(hue + 8) % 360},60%,50%)" stop-opacity="0"/>
       </radialGradient>
     </defs>
     <rect width="640" height="320" fill="url(#bg)"/>
     ${blocks}
+    <rect width="640" height="320" fill="url(#smoke)"/>
     <rect width="640" height="320" fill="url(#glow)"/>
-    <text x="34" y="252" font-family="Manrope,Segoe UI,Arial,sans-serif" font-size="96" font-weight="800" letter-spacing="-4" fill="#effdff" opacity=".94">${safe}</text>
-    <text x="37" y="286" font-family="Manrope,Segoe UI,Arial,sans-serif" font-size="12" font-weight="700" letter-spacing="6" fill="#bfe6ee" opacity=".72">MINECRAFT</text>
+    <text x="34" y="252" font-family="Manrope,Segoe UI,Arial,sans-serif" font-size="96" font-weight="800" letter-spacing="-4" fill="#f4fffe" opacity=".94">${safe}</text>
+    <text x="37" y="286" font-family="Manrope,Segoe UI,Arial,sans-serif" font-size="12" font-weight="700" letter-spacing="6" fill="hsl(${hue},60%,82%)" opacity=".72">MINECRAFT</text>
   </svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
@@ -407,13 +441,6 @@ function applyAppearance(s) {
     syncWindowIcon(rgbHsl(rgb)[0] - 186);
   }
   root.dataset.theme = s.uiTheme === "oled" ? "oled" : theme;
-  const themeBtn = $("#theme-btn");
-  if (themeBtn) {
-    const light = theme === "light";
-    themeBtn.querySelector("use")?.setAttribute("href", light ? "#i-moon" : "#i-sun");
-    themeBtn.title = t(light ? "theme.toDark" : "theme.toLight");
-    themeBtn.setAttribute("aria-label", themeBtn.title);
-  }
   root.dataset.radius = s.uiRadius || "soft";
   root.dataset.density = s.uiDensity || "normal";
   root.dataset.font = s.uiFont === "system" ? "system" : "manrope";
@@ -444,6 +471,15 @@ function applyAppearance(s) {
     preview.hidden = !s.uiWallpaperPath;
     $("#wall-clear").hidden = !s.uiWallpaperPath;
     if (s.uiWallpaperPath) $("#wall-preview-img").src = fileUrl(s.uiWallpaperPath);
+  }
+  if (S.boot) {
+    const hue = Math.round(accentHue());
+    if (S.artHue !== hue) {
+      S.artHue = hue;
+      renderHero();
+      renderWidgets();
+      if (S.page === "library") renderLibrary();
+    }
   }
 }
 
@@ -486,6 +522,12 @@ function applyBoot(boot, resetSelected = false) {
   fillSettings();
   renderAll();
   syncPlay();
+  const bootScreen = $("#boot-screen");
+  if (bootScreen && !bootScreen.classList.contains("is-off")) {
+    document.body.classList.remove("is-booting");
+    setTimeout(() => bootScreen.classList.add("is-off"), 480);
+    setTimeout(() => bootScreen.remove(), 700);
+  }
 }
 
 function platformLabel(platform) {
@@ -570,6 +612,27 @@ function buildRail() {
   $("#nav-settings").classList.toggle("is-on", S.page === "settings");
 }
 
+function heroMood() {
+  const hour = new Date().getHours();
+  const played = totalPlaytime();
+  if (S.running) return t("mood.running");
+  if (!S.stats.launches) return t("mood.first");
+  if (played > 100 * 3600) return t("mood.rest");
+  if (hour >= 23 || hour < 5) return t("mood.night");
+  if (hour < 11) return t("mood.morning");
+  if (hour < 17) return t("mood.day");
+  if (hour < 23) return t("mood.evening");
+  return t("mood.ready");
+}
+function heroSubline() {
+  const id = S.selected;
+  if (!id) return t("hero.subPick");
+  const profile = S.profiles.find((p) => p.versionId === id);
+  if (profile) return t("hero.subPack", { name: profile.name, version: baseOf(profile.versionId) });
+  if (isInstalled(id)) return t("hero.subInstalled", { version: id });
+  return t("hero.subInstall", { version: id });
+}
+
 function renderHero() {
   const id = S.selected;
   const local = localOf(id);
@@ -580,11 +643,17 @@ function renderHero() {
     img.src = banner.image;
     img.style.display = "";
     media.style.background = "";
+    media.dataset.kind = "banner";
   } else {
     img.src = id ? versionArt(id) : "";
     img.style.display = id ? "" : "none";
     media.style.background = "";
+    media.dataset.kind = "art";
   }
+  const titleEl = $("[data-edit-key='home.title']");
+  const subEl = $("[data-edit-key='home.sub']");
+  if (titleEl && !S.uiText["home.title"]) titleEl.textContent = heroMood();
+  if (subEl && !S.uiText["home.sub"]) subEl.textContent = heroSubline();
   const profile = S.profiles.find((p) => p.versionId === id) || null;
   $("#version-current").textContent = id || t("common.none");
   $("#version-current-kind").textContent = id ? `${kindLabel(local?.kind || "release")} · ${loaderLabel(id)}` : t("hero.select");
@@ -612,7 +681,6 @@ function renderHero() {
 
 function visibleBySettings(v) {
   const kind = String(v.kind || "");
-  if (kind !== "release" && S.settings.allowExperimental !== true) return false;
   if (kind === "snapshot" && S.settings.showSnapshots === false) return false;
   if (kind.startsWith("old") && S.settings.showOld === false) return false;
   return true;
@@ -648,7 +716,7 @@ function renderVersionList() {
   const q = String(S.versionQuery || "").trim().toLowerCase();
   const known = new Map();
   [...S.remote, ...S.local].forEach((v) => {
-    if (visibleBySettings(v) || isInstalled(v.id)) known.set(v.id, v);
+    if (!known.has(v.id)) known.set(v.id, v);
   });
   S.profiles.forEach((p) => {
     if (!known.has(p.versionId)) known.set(p.versionId, { id: p.versionId, kind: "release", releaseTime: "" });
@@ -662,8 +730,9 @@ function renderVersionList() {
   };
   const item = (id, kind, sub, loader, profile, child = false) => {
     const current = profile ? S.boot?.activeProfile === profile.id : S.selected === id;
-    const packSub = profile ? `${id} · ${profile.loader || "vanilla"}${profile.loaderVersion ? ` ${profile.loaderVersion}` : ""}` : sub;
+    const packSub = profile ? `${baseOf(id)} · ${profile.loader || "vanilla"}${profile.loaderVersion ? ` ${profile.loaderVersion}` : ""}` : sub;
     return `<button class="menu-item ${current ? "is-on" : ""} ${child ? "is-child" : ""}" data-pick="${esc(id)}" ${profile ? `data-profile-pick="${esc(profile.id)}"` : ""}>
+    <img class="mi-icon" src="${profile ? (profile.icon ? esc(fileUrl(profile.icon)) : packArt(profile.name)) : versionArt(id)}" alt="" loading="lazy">
     <span class="mi-main"><b>${mark(profile ? profile.name : id)}</b><small>${esc(packSub)}</small></span>
     ${profile ? `<span class="chip ${S.boot?.activeProfile === profile.id ? "chip-soft" : ""}">${esc(S.boot?.activeProfile === profile.id ? t("common.active") : t("common.installed"))}</span>` : loader ? `<span class="chip">${esc(loader)}</span>` : ""}
     ${current ? `<svg class="ico" style="width:14px;height:14px;color:var(--accent)"><use href="#i-check"></use></svg>` : ""}
@@ -684,7 +753,9 @@ function renderVersionList() {
     const baseVersion = group.base || { id: baseId, kind: "release" };
     const baseHit = hit(baseVersion);
     if (group.base && baseHit) {
-      rows.push(item(baseVersion.id, baseVersion.kind, isInstalled(baseVersion.id) ? `${kindLabel(baseVersion.kind)} · ${t("common.installed")}` : kindLabel(baseVersion.kind), loaderLabel(baseVersion.id)));
+      rows.push(item(baseVersion.id, baseVersion.kind, `${t("pack.vanilla")} · ${kindLabel(baseVersion.kind)}${isInstalled(baseVersion.id) ? ` · ${t("common.installed")}` : ""}`, loaderLabel(baseVersion.id)));
+    } else if (!group.base) {
+      rows.push(`<div class="menu-group">${mark(baseId)}</div>`);
     }
     for (const child of group.children) {
       if (!baseHit && !hit(child)) continue;
@@ -876,8 +947,8 @@ function widgetInstances() {
   const rows = S.profiles.slice(0, 4);
   const body = rows.length
     ? `<div>${rows.map((p) => `<button class="instance-mini" data-instance="${esc(p.id)}">
-        <img src="${p.icon ? esc(p.icon) : artFor(p.name)}" alt="">
-        <span class="im"><b>${esc(p.name)}</b><small>${esc(p.versionId)}</small></span>
+        <img src="${p.icon ? esc(fileUrl(p.icon)) : packArt(p.name)}" alt="">
+        <span class="im"><b>${esc(p.name)}</b><small>${esc(baseOf(p.versionId))} · ${esc(p.loader || "vanilla")}</small></span>
         ${S.boot?.activeProfile === p.id ? `<span class="chip chip-soft">${esc(t("common.active"))}</span>` : `<span class="chip">${esc(p.loader)}</span>`}
       </button>`).join("")}</div>`
     : `<p class="widget-empty">${esc(t("instances.empty"))}</p>`;
@@ -1220,6 +1291,7 @@ function activeFilterCount() {
   let n = 0;
   if (S.discoverKind !== "modpack" && S.discoverProvider !== "modrinth") n++;
   if (S.discoverCat !== "all") n++;
+  n += S.discoverExclude.length;
   if (S.discoverKind !== "modpack" && S.discoverKind !== "shader" && S.discoverVersion) n++;
   if (S.discoverKind === "mod" && S.discoverLoader) n++;
   return n;
@@ -1234,6 +1306,9 @@ function renderDiscoverActive() {
   }
   if (S.discoverCat !== "all") {
     chips.push(`<button class="filter-chip" data-clear="cat">${esc(catLabel(S.discoverCat))}<svg class="ico"><use href="#i-close"></use></svg></button>`);
+  }
+  for (const slug of S.discoverExclude) {
+    chips.push(`<button class="filter-chip is-off" data-clear="exclude:${esc(slug)}">− ${esc(catLabel(slug))}<svg class="ico"><use href="#i-close"></use></svg></button>`);
   }
   if (S.discoverKind !== "modpack" && S.discoverKind !== "shader" && S.discoverVersion) {
     chips.push(`<button class="filter-chip" data-clear="version">${esc(S.discoverVersion)}<svg class="ico"><use href="#i-close"></use></svg></button>`);
@@ -1258,8 +1333,13 @@ function renderDiscoverCats() {
   host.hidden = false;
   host.innerHTML = [{ id: "all", label: t("discover.all") }]
     .concat(cats.map((id) => ({ id, label: catLabel(id) })))
-    .map((c) => `<button class="cat-chip ${S.discoverCat === c.id ? "is-on" : ""}" data-cat="${esc(c.id)}" aria-pressed="${S.discoverCat === c.id}">${esc(c.label)}</button>`)
+    .map((c) => {
+      const excluded = S.discoverExclude.includes(c.id);
+      const active = (c.id === "all" && S.discoverCat === "all" && !S.discoverExclude.length) || S.discoverCat === c.id;
+      return `<button class="cat-chip ${active ? "is-on" : ""} ${excluded ? "is-off" : ""}" data-cat="${esc(c.id)}" aria-pressed="${active}">${excluded ? "− " : ""}${esc(c.label)}</button>`;
+    })
     .join("");
+  setSegmented("#discover-cat-mode", "data-cat-mode", S.discoverCatMode);
 }
 
 function renderDiscoverPager() {
@@ -1305,8 +1385,15 @@ async function searchDiscover(reset = true) {
     let results;
     if (S.discoverKind === "modpack") {
       const all = await invoke("modpack_search", { query: S.discoverQuery });
-      S.discoverTotal = (all || []).length;
-      results = (all || []).slice(offset, offset + S.discoverPer);
+      const norm = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const filtered = (all || []).filter((hit) => {
+        const cats = (hit.categories || []).map(norm);
+        if (S.discoverCat !== "all" && !cats.includes(norm(S.discoverCat))) return false;
+        if (S.discoverExclude.some((slug) => cats.includes(norm(slug)))) return false;
+        return true;
+      });
+      S.discoverTotal = filtered.length;
+      results = filtered.slice(offset, offset + S.discoverPer);
       S.discoverHasMore = offset + results.length < S.discoverTotal;
     } else {
       results = await invoke("catalog_search", {
@@ -1315,7 +1402,8 @@ async function searchDiscover(reset = true) {
         version: S.discoverKind === "shader" ? null : S.discoverVersion || null,
         loader: S.discoverKind === "mod" ? S.discoverLoader : null,
         provider: S.discoverProvider,
-        category: S.discoverCat === "all" ? null : S.discoverCat,
+        category: S.discoverCatMode === "include" && S.discoverCat !== "all" ? S.discoverCat : null,
+        exclude: S.discoverExclude,
         sort: S.discoverSort,
         limit: S.discoverPer,
         offset,
@@ -1418,13 +1506,57 @@ async function installModpack(hit) {
   }
 }
 
+function sanitizeHtml(html) {
+  const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+  const allowed = new Set([
+    "P", "BR", "HR", "H1", "H2", "H3", "H4", "H5", "H6", "UL", "OL", "LI",
+    "STRONG", "EM", "B", "I", "U", "S", "CODE", "PRE", "BLOCKQUOTE", "A", "IMG",
+    "TABLE", "THEAD", "TBODY", "TR", "TD", "TH", "DIV", "SPAN", "DETAILS", "SUMMARY",
+  ]);
+  const clean = (node) => {
+    [...node.childNodes].forEach((child) => {
+      if (child.nodeType === 3) return;
+      if (child.nodeType !== 1) return child.remove();
+      const tag = child.tagName;
+      if (!allowed.has(tag)) {
+        const text = document.createTextNode(child.textContent || "");
+        child.replaceWith(text);
+        return;
+      }
+      [...child.attributes].forEach((attr) => {
+        const name = attr.name.toLowerCase();
+        const keep = name === "href" || name === "src" || name === "alt" || name === "title";
+        if (!keep || name.startsWith("on")) child.removeAttribute(attr.name);
+      });
+      if (tag === "A") {
+        const href = child.getAttribute("href") || "";
+        if (!/^https?:\/\//i.test(href)) child.removeAttribute("href");
+        else child.setAttribute("data-ext", href);
+      }
+      if (tag === "IMG") {
+        const src = child.getAttribute("src") || "";
+        if (!/^(https?:|data:image\/)/i.test(src)) child.remove();
+        else {
+          child.setAttribute("loading", "lazy");
+          child.setAttribute("data-seed", child.getAttribute("alt") || "project");
+        }
+      }
+      clean(child);
+    });
+  };
+  clean(doc.body);
+  return doc.body.innerHTML;
+}
+
 function mdToHtml(markdown) {
-  const lines = String(markdown || "").split(/\r?\n/);
+  const source = String(markdown || "");
+  if (/<(p|div|h[1-6]|ul|ol|li|img|table|br|blockquote)\b/i.test(source)) return sanitizeHtml(source);
+  const lines = source.split(/\r?\n/);
   const out = [];
   let list = false;
   const closeList = () => { if (list) { out.push("</ul>"); list = false; } };
   const inline = (text) => esc(text)
-    .replace(/!\[[^\]]*\]\(([^)]+)\)/g, "")
+    .replace(/!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, '<img src="$2" alt="$1" loading="lazy" data-seed="$1">')
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" data-ext="$2">$1</a>')
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
@@ -1446,6 +1578,67 @@ function mdToHtml(markdown) {
   closeList();
   return out.join("");
 }
+
+function openLightbox(urls, index = 0) {
+  const list = (urls || []).filter(Boolean);
+  if (!list.length) return;
+  let at = Math.max(0, Math.min(index, list.length - 1));
+  let host = $("#lightbox");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "lightbox";
+    host.className = "lightbox";
+    host.innerHTML = `<button class="lb-close" aria-label="Close"><svg class="ico"><use href="#i-close"></use></svg></button>
+      <button class="lb-nav lb-prev" aria-label="Previous"><svg class="ico"><use href="#i-chevron"></use></svg></button>
+      <img class="lb-img" alt="">
+      <button class="lb-nav lb-next" aria-label="Next"><svg class="ico"><use href="#i-chevron"></use></svg></button>
+      <span class="lb-count"></span>`;
+    document.body.appendChild(host);
+    host.addEventListener("click", (e) => {
+      if (e.target === host || e.target.closest(".lb-close")) return closeLightbox();
+      if (e.target.closest(".lb-prev")) return stepLightbox(-1);
+      if (e.target.closest(".lb-next")) return stepLightbox(1);
+    });
+  }
+  host._urls = list;
+  host._at = at;
+  paintLightbox();
+  host.hidden = false;
+  requestAnimationFrame(() => host.classList.add("is-on"));
+}
+function paintLightbox() {
+  const host = $("#lightbox");
+  if (!host) return;
+  const list = host._urls || [];
+  const at = host._at || 0;
+  const img = $(".lb-img", host);
+  if (img) img.src = list[at];
+  const counter = $(".lb-count", host);
+  if (counter) counter.textContent = `${at + 1} / ${list.length}`;
+  $(".lb-prev", host).hidden = list.length < 2;
+  $(".lb-next", host).hidden = list.length < 2;
+}
+function stepLightbox(delta) {
+  const host = $("#lightbox");
+  if (!host) return;
+  const list = host._urls || [];
+  if (list.length < 2) return;
+  host._at = ((host._at || 0) + delta + list.length) % list.length;
+  paintLightbox();
+}
+function closeLightbox() {
+  const host = $("#lightbox");
+  if (!host) return;
+  host.classList.remove("is-on");
+  setTimeout(() => { if (host && !host.classList.contains("is-on")) host.hidden = true; }, 160);
+}
+document.addEventListener("keydown", (e) => {
+  const host = $("#lightbox");
+  if (!host || host.hidden) return;
+  if (e.key === "Escape") closeLightbox();
+  if (e.key === "ArrowLeft") stepLightbox(-1);
+  if (e.key === "ArrowRight") stepLightbox(1);
+});
 
 async function openProject(id, kindHint) {
   const hit = S.discoverResults.find((r) => r.id === id || r.slug === id);
@@ -1546,9 +1739,16 @@ async function openProject(id, kindHint) {
       </div>
     `, () => {
       const coverImg = $("#pd-cover");
-      $$(".pd-shot").forEach((btn) => btn.addEventListener("click", () => {
+      const galleryUrls = (gallery.length ? gallery.map((shot) => shot.url) : [cover]).filter(Boolean);
+      coverImg?.addEventListener("click", () => openLightbox(galleryUrls, 0));
+      $$(".pd-shot").forEach((btn, index) => btn.addEventListener("click", () => {
         $$(".pd-shot").forEach((b) => b.classList.toggle("is-on", b === btn));
         if (coverImg) coverImg.src = btn.dataset.shot;
+        openLightbox(galleryUrls, index);
+      }));
+      $$(".pd-markdown img", $("#modal-root")).forEach((img) => img.addEventListener("click", () => {
+        const urls = $$(".pd-markdown img", $("#modal-root")).map((node) => node.src);
+        openLightbox(urls, urls.indexOf(img.src));
       }));
       $("[data-project-install]")?.addEventListener("click", async () => {
         closeModal();
@@ -1631,9 +1831,9 @@ function renderMods() {
   const riskKey = (risk) => (risk === "high" ? "discover.risk.high" : risk === "medium" ? "discover.risk.medium" : "discover.risk.safe");
   const pid = activeProfile()?.id;
   host.innerHTML = list.map((m) => {
-    const icon = pid ? S.icons.get(`${pid}:${m.file}`) : null;
+    const icon = pid ? (S.icons.get(`${pid}:${m.file}`) || S.icons.get(`${pid}:${m.file.replace(/\.(off|disabled)$/i, "")}`)) : null;
     return `<div class="mod-row" data-mod="${esc(m.file)}">
-    ${icon ? `<img class="micon" src="${esc(icon)}" alt="" loading="lazy">` : `<span class="micon">${ico("i-layers")}</span>`}
+    ${icon ? `<img class="micon" src="${esc(icon)}" alt="" loading="lazy">` : `<img class="micon" src="${packArt(m.name)}" alt="">`}
     <div class="mname"><b title="${esc(m.name)}">${esc(m.name)}</b><small>${esc([m.version, m.loader, i18n.bytes(m.size)].filter(Boolean).join(" · "))}</small></div>
     <span class="chip ${m.risk === "high" ? "danger" : m.risk === "medium" ? "warn" : "ok"}">${esc(t(riskKey(m.risk)))}</span>
     <button class="btn btn-quiet icon-only" data-mod-remove="${esc(m.file)}" title="${esc(t("common.remove"))}"><svg class="ico"><use href="#i-trash"></use></svg></button>
@@ -1689,10 +1889,10 @@ function renderInstances() {
     const secs = S.stats.playtimeSecs?.[p.versionId] || 0;
     return `<article class="icard ${active ? "is-active" : ""}" data-profile="${esc(p.id)}">
       <div class="icard-top">
-        ${p.icon ? `<img class="icard-icon" src="${esc(p.icon)}" alt="">` : `<span class="icard-icon"><svg class="ico"><use href="#i-layers"></use></svg></span>`}
+        ${p.icon ? `<img class="icard-icon" src="${esc(fileUrl(p.icon))}" alt="" data-seed="${esc(p.name)}">` : `<img class="icard-icon" src="${packArt(p.name)}" alt="">`}
         <div style="min-width:0;flex:1">
           <h3>${esc(p.name)}</h3>
-          <div class="sub"><span>${esc(p.versionId)}</span><span class="dot" style="width:2px;height:2px;border-radius:50%;background:currentColor"></span><span>${esc(p.loader || "vanilla")}</span></div>
+          <div class="sub"><span>${esc(baseOf(p.versionId))}</span><span class="dot" style="width:2px;height:2px;border-radius:50%;background:currentColor"></span><span>${esc(p.loader || "vanilla")}</span></div>
         </div>
         ${active ? `<span class="chip chip-soft">${esc(t("instances.active"))}</span>` : ""}
       </div>
@@ -1745,6 +1945,17 @@ function bindInstances() {
   });
 }
 
+async function ensureLoader(versionId, loader, loaderVersion) {
+  if (!loader || loader === "vanilla") return versionId;
+  showBar("download", `${loader.charAt(0).toUpperCase()}${loader.slice(1)} · ${versionId}`, 0);
+  const id = await invoke("loader_install", {
+    id: versionId,
+    loader,
+    version: loaderVersion || null,
+  });
+  return id || versionId;
+}
+
 async function activateProfile(id, thenPlay = false) {
   try {
     await invoke("profile_activate", { id });
@@ -1767,38 +1978,61 @@ function createInstance() {
   const seen = new Set();
   const versions = [...S.local, ...S.remote]
     .filter((v) => visibleBySettings(v) || installed.has(v.id))
-    .filter((v) => v.kind === "release" || installed.has(v.id))
+    .filter((v) => !/fabric|quilt|forge|neoforge/i.test(String(v.id)))
     .filter((v) => (seen.has(v.id) ? false : seen.add(v.id)))
     .sort((a, b) => String(b.id).localeCompare(String(a.id), undefined, { numeric: true }))
-    .slice(0, 200);
+    .slice(0, 400);
   if (!versions.length) {
     toast(t("errors.generic"), "err");
     return;
   }
-  const first = S.selected || versions[0].id;
+  const first = (S.selected && !/fabric|quilt|forge|neoforge/i.test(S.selected) ? S.selected : versions[0].id);
   const loaders = [
     ["vanilla", "Vanilla"],
     ["fabric", "Fabric"],
+    ["quilt", "Quilt"],
     ["forge", "Forge"],
     ["neoforge", "NeoForge"],
   ];
   openModal(`<h3>${esc(t("instances.createTitle"))}</h3><p>${esc(t("instances.createText"))}</p>
     <div class="cp-layout">
       <button class="cp-cover" id="instance-cover" type="button" title="${esc(t("set.wall.pick"))}">
-        <img src="${versionArt(first)}" alt="">
+        <img src="${packArt(t("instances.createTitle"))}" alt="">
         <span class="cp-pencil"><svg class="ico"><use href="#i-palette"></use></svg></span>
       </button>
       <div class="cp-fields">
         <label class="input"><input id="instance-name" maxlength="40" placeholder="${esc(t("instances.name"))}" autocomplete="off"></label>
         <label class="select-inline wide"><select id="instance-version">${versions.map((v) => `<option value="${esc(v.id)}" ${v.id === first ? "selected" : ""}>${esc(v.id)}${installed.has(v.id) ? " · ✓" : ""}</option>`).join("")}</select><svg class="ico"><use href="#i-chevron"></use></svg></label>
         <div class="cp-loaders" id="instance-loaders">${loaders.map(([value, label], i) => `<button class="cp-loader ${i === 0 ? "is-on" : ""}" data-loader="${value}" type="button">${label}</button>`).join("")}</div>
-        <label class="input"><input id="instance-loader-version" placeholder="Loader version (auto)" autocomplete="off"></label>
+        <label class="select-inline wide"><select id="instance-loader-version"><option value="">Loader version · auto</option></select><svg class="ico"><use href="#i-chevron"></use></svg></label>
         <input id="instance-icon" type="hidden" value="">
       </div>
     </div>
     <div class="modal-actions"><button class="btn btn-quiet" data-close>${esc(t("common.cancel"))}</button><button class="btn btn-primary" id="instance-create-ok">${esc(t("common.create"))}</button></div>`, () => {
     $("#instance-name").focus();
     let loader = "vanilla";
+    let loaderToken = 0;
+    const fillLoaderVersions = async () => {
+      const select = $("#instance-loader-version");
+      if (!select) return;
+      const token = ++loaderToken;
+      select.innerHTML = `<option value="">Loader version · auto</option>`;
+      select.disabled = loader === "vanilla";
+      if (loader === "vanilla") return;
+      try {
+        const list = await invoke("loader_versions", { id: $("#instance-version").value, loader });
+        if (token !== loaderToken) return;
+        select.innerHTML = `<option value="">Loader version · auto</option>` + (list || []).map((value) => `<option value="${esc(value)}">${esc(value)}</option>`).join("");
+      } catch {
+        if (token === loaderToken) select.innerHTML = `<option value="">Loader version · auto</option>`;
+      }
+    };
+    const paintCover = () => {
+      if ($("#instance-icon").value) return;
+      const img = $("#instance-cover img");
+      if (img) img.src = packArt($("#instance-name").value.trim() || $("#instance-version").value);
+    };
+    $("#instance-name").addEventListener("input", paintCover);
     $("#instance-cover").addEventListener("click", async () => {
       try {
         const path = await invoke("pick_wallpaper");
@@ -1810,22 +2044,26 @@ function createInstance() {
       }
     });
     $("#instance-version").addEventListener("change", (e) => {
-      $("#instance-cover img").src = versionArt(e.target.value);
+      paintCover();
+      fillLoaderVersions();
     });
     $$("#instance-loaders .cp-loader").forEach((btn) => btn.addEventListener("click", () => {
       loader = btn.dataset.loader;
       $$("#instance-loaders .cp-loader").forEach((b) => b.classList.toggle("is-on", b === btn));
+      fillLoaderVersions();
     }));
     $("#instance-create-ok").addEventListener("click", async () => {
       const name = $("#instance-name").value.trim();
       const versionId = $("#instance-version").value;
+      const loaderVersion = $("#instance-loader-version").value.trim() || null;
       if (!name) return toast(t("errors.badName"), "err");
       try {
+        const target = await ensureLoader(versionId, loader, loaderVersion);
         await invoke("profile_create", {
           name,
-          versionId,
+          versionId: target,
           loader,
-          loaderVersion: $("#instance-loader-version").value.trim() || null,
+          loaderVersion,
           icon: $("#instance-icon").value || null,
         });
         closeModal();
@@ -1835,6 +2073,8 @@ function createInstance() {
         loadMods();
       } catch (err) {
         toast(friendly(err), "err");
+      } finally {
+        hideBar(400);
       }
     });
   });
@@ -1873,7 +2113,6 @@ const PACK_CATS = {
   datapack: ["adventure", "utility", "worldgen", "mobs", "recipes", "structures"],
 };
 const PACK_ICONS = { mod: "i-layers", resourcepack: "i-palette", shader: "i-sparkles", datapack: "i-folder" };
-
 async function openPack(id) {
   const profile = profileById(id);
   if (!profile) return;
@@ -1885,6 +2124,8 @@ async function openPack(id) {
   let query = "";
   let addKind = "mod";
   let addCat = "all";
+  let addCatMode = "include";
+  let addExclude = [];
   let addResults = [];
   let addBusy = false;
   let addLoaded = false;
@@ -1894,6 +2135,7 @@ async function openPack(id) {
   let addPage = 1;
   let addPer = 20;
   let addHasMore = false;
+  const selected = new Set();
   const kinds = [
     ["mod", t("project.mods")],
     ["resourcepack", t("project.resourcepacks")],
@@ -1901,17 +2143,21 @@ async function openPack(id) {
     ["datapack", t("project.datapacks")],
   ];
   const kindOf = (item) => item.kind || "mod";
-  const iconFor = (item) => S.icons.get(`${id}:${item.file}`) || "";
+  const iconFor = (item) => S.icons.get(`${id}:${item.file}`) || S.icons.get(`${id}:${item.file.replace(/\.(off|disabled)$/i, "")}`) || "";
+  const visibleItems = () => contents.filter((item) => (filter === "all" || kindOf(item) === filter) && (!query || `${item.name} ${item.file}`.toLowerCase().includes(query)));
   const rows = () => {
-    const list = contents.filter((item) => (filter === "all" || kindOf(item) === filter) && (!query || item.name.toLowerCase().includes(query)));
+    const list = visibleItems();
     if (!list.length) return `<div class="empty" style="padding:28px"><p>${esc(t("instances.emptySub"))}</p></div>`;
     return list.map((item) => {
       const icon = iconFor(item);
       const kind = kindOf(item);
-      return `<div class="pd-row ${kind === "pending" ? "is-pending" : ""}">
-      <div class="pd-row-icon">${icon ? `<img src="${esc(icon)}" alt="" loading="lazy">` : ico(PACK_ICONS[kind] || "i-layers")}</div>
+      const off = item.enabled === false;
+      return `<div class="pd-row ${kind === "pending" ? "is-pending" : ""} ${off ? "is-off" : ""}">
+      <input class="pd-check" type="checkbox" data-select="${esc(item.file)}" ${selected.has(item.file) ? "checked" : ""} aria-label="${esc(item.name)}">
+      <div class="pd-row-icon">${icon ? `<img src="${esc(icon)}" alt="" loading="lazy">` : `<img src="${packArt(item.name)}" alt="">`}</div>
       <div class="pd-row-main"><b>${esc(item.name)}</b><span>${esc(item.file)}</span></div>
-      ${kind === "pending" ? `<span class="chip warn">${esc(t("pack.pendingChip"))}</span>` : `<span class="chip">${esc(i18n.bytes(item.size || 0))}</span>`}
+      ${kind === "pending" ? `<span class="chip warn">${esc(t("pack.pendingChip"))}</span>` : off ? `<span class="chip">${esc(t("pack.disabled"))}</span>` : `<span class="chip">${esc(i18n.bytes(item.size || 0))}</span>`}
+      ${kind === "mod" ? `<button class="btn btn-quiet icon-only" data-pack-toggle="${esc(item.file)}" data-enabled="${off ? "0" : "1"}" title="${esc(off ? t("pack.enable") : t("pack.disable"))}">${ico(off ? "i-close" : "i-check")}</button>` : ""}
       <button class="btn btn-quiet icon-only" data-pack-remove="${esc(item.file)}" data-kind="${esc(kind)}" title="${esc(t("common.delete"))}">${ico("i-trash")}</button>
     </div>`;
     }).join("");
@@ -1925,7 +2171,7 @@ async function openPack(id) {
     return addResults.map((hit) => {
       const cats = (hit.categories || []).slice(0, 3).map((c) => `<span class="tag">${esc(catLabel(c))}</span>`).join("");
       return `<div class="result-row add-row">
-        <div class="pd-row-icon">${hit.icon ? `<img src="${esc(hit.icon)}" alt="" loading="lazy">` : ico(PACK_ICONS[addKind] || "i-layers")}</div>
+        <div class="pd-row-icon"><img src="${esc(hit.icon || artFor(hit.title))}" alt="" loading="lazy" data-seed="${esc(hit.title)}"></div>
         <div class="rr-main">
           <div class="rr-head"><h3>${esc(hit.title)}</h3><span class="rr-author">${esc(t("catalog.by", { name: hit.author || "—" }))}</span></div>
           <p class="rr-desc">${esc(hit.description || "")}</p>
@@ -1944,11 +2190,11 @@ async function openPack(id) {
     </div>
     <div class="pack-head">
       <button class="pack-cover-btn" id="pack-cover-btn" title="${esc(t("pack.changeCover"))}">
-        ${profile.icon ? `<img class="pack-cover" src="${esc(profile.icon)}" alt="">` : `<span class="pack-cover">${ico("i-layers")}</span>`}
+        ${profile.icon ? `<img class="pack-cover" src="${esc(fileUrl(profile.icon))}" alt="">` : `<img class="pack-cover" src="${packArt(profile.name)}" alt="">`}
         <span class="pack-cover-edit">${ico("i-palette")}</span>
       </button>
       <div class="pack-title">
-        <div class="pack-eyebrow"><span class="chip">${esc(profile.loader || "vanilla")}</span><span class="chip">${esc(profile.versionId)}</span>${profile.loaderVersion ? `<span class="chip chip-soft">${esc(profile.loaderVersion)}</span>` : ""}${pendingCount() ? `<span class="chip warn">${esc(t("pack.pendingCount", { n: pendingCount() }))}</span>` : ""}</div>
+        <div class="pack-eyebrow"><span class="chip">${esc(profile.loader || "vanilla")}</span><span class="chip">${esc(baseOf(profile.versionId))}</span>${profile.loaderVersion ? `<span class="chip chip-soft">${esc(profile.loaderVersion)}</span>` : ""}${pendingCount() ? `<span class="chip warn">${esc(t("pack.pendingCount", { n: pendingCount() }))}</span>` : ""}</div>
         <h2>${esc(profile.name)}</h2>
         <p>${esc(t("pack.contentsCount", { n: contents.length }))}</p>
         <div class="pack-actions">
@@ -1972,16 +2218,32 @@ async function openPack(id) {
       ${kinds.map(([k, label]) => `<button class="pd-subtab" data-packkind="${k}">${esc(label)} ${count(k)}</button>`).join("")}
       ${pendingCount() ? `<button class="pd-subtab" data-packkind="pending">${esc(t("pack.pendingChip"))} ${pendingCount()}</button>` : ""}
     </div>
-    <div class="pd-search"><input class="input" id="pack-search" placeholder="${esc(t("project.search"))}"></div>
+    <div class="pack-toolbar">
+      <div class="pd-search"><svg class="ico"><use href="#i-search"></use></svg><input class="input" id="pack-search" placeholder="${esc(t("project.search"))}"></div>
+      <label class="pack-selectall"><input type="checkbox" id="pack-select-all"><span>${esc(t("pack.selectAll"))}</span></label>
+    </div>
+    <div class="pack-bulk" id="pack-bulk" hidden>
+      <span id="pack-selected"></span>
+      <div class="pack-bulk-actions">
+        <button class="btn btn-quiet btn-sm" data-bulk="enable">${ico("i-check")}${esc(t("pack.enable"))}</button>
+        <button class="btn btn-quiet btn-sm" data-bulk="disable">${ico("i-close")}${esc(t("pack.disable"))}</button>
+        <button class="btn btn-danger btn-sm" data-bulk="remove">${ico("i-trash")}${esc(t("common.delete"))}</button>
+        <button class="btn btn-quiet icon-only" data-bulk="clear" title="${esc(t("common.cancel"))}">${ico("i-close")}</button>
+      </div>
+    </div>
     <div class="pd-rows" id="pack-rows">${rows()}</div>
     <div id="pack-add-panel" hidden>
+      <div class="pack-crumb">
+        <button class="btn btn-quiet btn-sm" id="pack-add-back">${ico("i-chevron")}<span>${esc(profile.name)}</span></button>
+        <span>/</span><b>${esc(t("discover.addContent"))}</b>
+      </div>
       <div class="pack-add-head">
         <div><b>${esc(t("pack.addTitle"))}</b><small>${esc(t("pack.addSub"))}</small></div>
         <button class="btn btn-quiet icon-only" id="pack-add-close" title="${esc(t("common.cancel"))}">${ico("i-close")}</button>
       </div>
       <div class="pack-lockchips">
         <span class="lock-chip">${ico("i-layers")}${esc(profile.loader || "vanilla")}</span>
-        <span class="lock-chip">${ico("i-gamepad")}${esc(profile.versionId)}</span>
+        <span class="lock-chip">${ico("i-gamepad")}${esc(baseOf(profile.versionId))}</span>
         <span class="lock-chip lock-chip-hint">${esc(t("pack.filteredHint"))}</span>
       </div>
       <div class="pd-subtabs" id="pack-add-kinds">
@@ -2001,6 +2263,12 @@ async function openPack(id) {
           <option value="curseforge">CurseForge</option>
         </select><svg class="ico"><use href="#i-chevron"></use></svg></label>
       </div>
+      <div class="cat-filter-head">
+        <div class="segmented seg-sm" id="pack-add-mode">
+          <button class="seg is-on" data-addmode="include">${esc(t("catalog.include"))}</button>
+          <button class="seg" data-addmode="exclude">${esc(t("catalog.exclude"))}</button>
+        </div>
+      </div>
       <div class="cat-row" id="pack-add-cats"></div>
       <div class="pack-results" id="pack-add-results">${addRows()}</div>
       <div class="pager pack-pager" id="pack-add-pager" hidden>
@@ -2017,9 +2285,23 @@ async function openPack(id) {
   (() => {
     $("#pack-back").addEventListener("click", () => go("instances"));
     const host = $("#pack-rows");
+    const paintBulk = () => {
+      const list = visibleItems();
+      [...selected].forEach((file) => { if (!contents.some((item) => item.file === file)) selected.delete(file); });
+      const bulk = $("#pack-bulk");
+      if (bulk) bulk.hidden = !selected.size;
+      const label = $("#pack-selected");
+      if (label) label.textContent = t("pack.selectedN", { n: selected.size });
+      const all = $("#pack-select-all");
+      if (all) {
+        all.checked = list.length > 0 && list.every((item) => selected.has(item.file));
+        all.indeterminate = selected.size > 0 && !all.checked;
+      }
+    };
     const paint = () => {
       host.innerHTML = rows();
       applyImgFallback(host, "img", artFor);
+      paintBulk();
       const all = $("#pack-kinds [data-packkind='all']");
       if (all) all.textContent = `${t("project.overview")} ${contents.length}`;
       kinds.forEach(([k]) => {
@@ -2045,6 +2327,39 @@ async function openPack(id) {
         paint();
       } catch {}
     };
+    const refreshContents = async () => {
+      contents = await invoke("profile_contents", { id });
+      paint();
+      loadIcons();
+    };
+    const runAction = async (action, files) => {
+      if (!files.length) return;
+      try {
+        await invoke("profile_files_action", { id, action, files });
+        selected.clear();
+        await refreshContents();
+        toast(t("toast.saved"));
+      } catch (err) {
+        toast(friendly(err), "err");
+      }
+    };
+    $("#pack-select-all").addEventListener("change", (e) => {
+      const list = visibleItems();
+      if (e.target.checked) list.forEach((item) => selected.add(item.file));
+      else list.forEach((item) => selected.delete(item.file));
+      paint();
+    });
+    $("#pack-bulk").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-bulk]");
+      if (!btn) return;
+      const action = btn.dataset.bulk;
+      if (action === "clear") {
+        selected.clear();
+        paint();
+        return;
+      }
+      runAction(action, [...selected]);
+    });
     $("#pack-kinds").addEventListener("click", (e) => {
       const btn = e.target.closest("[data-packkind]");
       if (!btn) return;
@@ -2056,18 +2371,30 @@ async function openPack(id) {
       query = e.target.value.trim().toLowerCase();
       paint();
     });
+    host.addEventListener("change", (e) => {
+      const box = e.target.closest("[data-select]");
+      if (!box) return;
+      if (box.checked) selected.add(box.dataset.select);
+      else selected.delete(box.dataset.select);
+      paintBulk();
+    });
     host.addEventListener("click", async (e) => {
+      const toggle = e.target.closest("[data-pack-toggle]");
+      if (toggle) {
+        const enabled = toggle.dataset.enabled === "1";
+        await runAction(enabled ? "disable" : "enable", [toggle.dataset.packToggle]);
+        return;
+      }
       const remove = e.target.closest("[data-pack-remove]");
       if (!remove) return;
+      const kind = remove.dataset.kind === "pending" ? "mod" : remove.dataset.kind;
+      if (kind === "mod") {
+        await runAction("remove", [remove.dataset.packRemove]);
+        return;
+      }
       try {
-        const kind = remove.dataset.kind === "pending" ? "mod" : remove.dataset.kind;
         await invoke("profile_file_remove", { id, file: remove.dataset.packRemove, kind });
-        contents = await invoke("profile_contents", { id });
-        paint();
-        const status = $("#pack-status");
-        if (status) status.textContent = statusText();
-        const modsCount = $("#pack-mods-count");
-        if (modsCount) modsCount.textContent = String(count("mod") + count("pending"));
+        await refreshContents();
         toast(t("toast.removed"));
       } catch (err) {
         toast(friendly(err), "err");
@@ -2076,21 +2403,23 @@ async function openPack(id) {
     $("#pack-play").addEventListener("click", () => {
       activateProfile(id, true);
     });
-    $("#pack-add").addEventListener("click", () => {
+    const openCatalog = () => {
+      $("#page-pack").classList.add("is-catalog");
       const panel = $("#pack-add-panel");
-      const open = panel.hidden;
-      panel.hidden = !open;
-      if (!open) return;
-      if (!addLoaded) searchAdd("");
-      panel.scrollIntoView({ block: "start", behavior: "smooth" });
-      $("#pack-add-search")?.focus({ preventScroll: true });
-    });
-    $("#pack-add-close").addEventListener("click", () => {
+      panel.hidden = false;
+      if (!addLoaded) resetAdd("");
+      $("#view").scrollTo({ top: 0, behavior: "smooth" });
+    };
+    const closeCatalog = () => {
+      $("#page-pack").classList.remove("is-catalog");
       $("#pack-add-panel").hidden = true;
-    });
+    };
+    $("#pack-add").addEventListener("click", openCatalog);
+    $("#pack-add-close").addEventListener("click", closeCatalog);
+    $("#pack-add-back").addEventListener("click", closeCatalog);
     $("#pack-repair").addEventListener("click", async () => {
       try {
-        await invoke("mods_repair", { version: profile.versionId, loader: profile.loader || "fabric", profile: id });
+        await invoke("mods_repair", { version: baseOf(profile.versionId) || profile.versionId, loader: profile.loader || "fabric", profile: id });
         toast(t("toast.repaired"));
       } catch (err) {
         toast(friendly(err), "err");
@@ -2098,7 +2427,7 @@ async function openPack(id) {
     });
     $("#pack-rename").addEventListener("click", () => {
       openModal(`<h3>${esc(t("edit.renameInstance"))}</h3>
-        <p>${esc(profile.versionId)} · ${esc(profile.loader || "vanilla")}</p>
+        <p>${esc(baseOf(profile.versionId))} · ${esc(profile.loader || "vanilla")}</p>
         <label class="input" style="margin:14px 0"><input class="input" id="pack-name-input" maxlength="60" value="${esc(profile.name)}"></label>
         <div class="modal-actions"><button class="btn btn-quiet" data-close>${esc(t("common.cancel"))}</button><button class="btn btn-primary" id="pack-name-save">${esc(t("common.save"))}</button></div>`, () => {
         const input = $("#pack-name-input");
@@ -2161,7 +2490,7 @@ async function openPack(id) {
       const versions = [...new Set([
         ...S.remote.filter((v) => v.kind === "release").map((v) => v.id),
         ...S.local.map((v) => v.id),
-      ])];
+      ])].filter((value) => !/fabric|quilt|forge|neoforge/i.test(value));
       const current = baseOf(profile.versionId) || profile.versionId;
       openModal(`<h3>${esc(t("pack.updateTitle"))}</h3>
         <p>${esc(t("pack.updateSub"))}</p>
@@ -2170,7 +2499,7 @@ async function openPack(id) {
             <select class="input" id="pack-up-version">${versions.map((v) => `<option value="${esc(v)}" ${v === current ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>
           </label>
           <label class="field"><span>${esc(t("pack.loader"))}</span>
-            <select class="input" id="pack-up-loader">${["fabric", "forge", "neoforge", "vanilla"].map((l) => `<option value="${l}" ${(profile.loader || "vanilla") === l ? "selected" : ""}>${esc(l === "vanilla" ? t("pack.vanilla") : l.charAt(0).toUpperCase() + l.slice(1))}</option>`).join("")}</select>
+            <select class="input" id="pack-up-loader">${["fabric", "quilt", "forge", "neoforge", "vanilla"].map((l) => `<option value="${l}" ${(profile.loader || "vanilla") === l ? "selected" : ""}>${esc(l === "vanilla" ? t("pack.vanilla") : l.charAt(0).toUpperCase() + l.slice(1))}</option>`).join("")}</select>
           </label>
           <label class="field"><span>${esc(t("pack.loaderVersion"))}</span>
             <input class="input" id="pack-up-loader-version" placeholder="${esc(t("pack.loaderAuto"))}" value="${esc(profile.loaderVersion || "")}">
@@ -2200,12 +2529,13 @@ async function openPack(id) {
           const btn = $("#pack-up-apply");
           btn.disabled = true;
           try {
+            const targetVersion = await ensureLoader(version, loader, loaderVersion);
             let targetId = id;
             if (mode === "new") {
-              const cfg = await invoke("profile_clone", { id, name, versionId: version, loader, loaderVersion });
+              const cfg = await invoke("profile_clone", { id, name, versionId: targetVersion, loader, loaderVersion });
               targetId = cfg?.activeProfile || id;
             } else {
-              await invoke("profile_set_version", { id, versionId: version, loader, loaderVersion });
+              await invoke("profile_set_version", { id, versionId: targetVersion, loader, loaderVersion });
             }
             let disabled = [];
             try {
@@ -2218,6 +2548,8 @@ async function openPack(id) {
           } catch (err) {
             btn.disabled = false;
             toast(friendly(err), "err");
+          } finally {
+            hideBar(400);
           }
         });
       });
@@ -2225,9 +2557,13 @@ async function openPack(id) {
 
     const paintCats = () => {
       const box = $("#pack-add-cats");
-      box.innerHTML = [`<button class="cat-chip ${addCat === "all" ? "is-on" : ""}" data-addcat="all">${esc(t("discover.all"))}</button>`]
-        .concat(PACK_CATS[addKind].map((cat) => `<button class="cat-chip ${addCat === cat ? "is-on" : ""}" data-addcat="${cat}">${esc(catLabel(cat))}</button>`))
+      box.innerHTML = [`<button class="cat-chip ${addCat === "all" && !addExclude.length ? "is-on" : ""}" data-addcat="all">${esc(t("discover.all"))}</button>`]
+        .concat(PACK_CATS[addKind].map((cat) => {
+          const off = addExclude.includes(cat);
+          return `<button class="cat-chip ${addCat === cat ? "is-on" : ""} ${off ? "is-off" : ""}" data-addcat="${cat}">${off ? "− " : ""}${esc(catLabel(cat))}</button>`;
+        }))
         .join("");
+      $$("#pack-add-mode [data-addmode]").forEach((el) => el.classList.toggle("is-on", el.dataset.addmode === addCatMode));
     };
     const paintAdd = () => {
       const host = $("#pack-add-results");
@@ -2271,7 +2607,8 @@ async function openPack(id) {
           version: baseOf(profile.versionId) || profile.versionId,
           loader: addKind === "mod" ? profile.loader || "fabric" : null,
           provider: addProvider,
-          category: addCat === "all" ? null : addCat,
+          category: addCatMode === "include" && addCat !== "all" ? addCat : null,
+          exclude: addExclude,
           sort: addSort,
           limit: addPer,
           offset: (addPage - 1) * addPer,
@@ -2293,6 +2630,8 @@ async function openPack(id) {
     };
     const resetAdd = (q) => {
       addCat = "all";
+      addCatMode = "include";
+      addExclude = [];
       addPage = 1;
       const input = $("#pack-add-search");
       input.value = q;
@@ -2311,10 +2650,25 @@ async function openPack(id) {
     $("#pack-add-cats").addEventListener("click", (e) => {
       const chip = e.target.closest("[data-addcat]");
       if (!chip) return;
-      addCat = chip.dataset.addcat;
+      const cat = chip.dataset.addcat;
+      if (cat === "all") {
+        addCat = "all";
+        addExclude = [];
+      } else if (addCatMode === "exclude") {
+        if (addExclude.includes(cat)) addExclude = addExclude.filter((value) => value !== cat);
+        else addExclude.push(cat);
+      } else {
+        addCat = addCat === cat ? "all" : cat;
+      }
       addPage = 1;
       paintCats();
       searchAdd($("#pack-add-search").value, true);
+    });
+    $("#pack-add-mode").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-addmode]");
+      if (!btn) return;
+      addCatMode = btn.dataset.addmode;
+      paintCats();
     });
     $("#pack-add-sort").addEventListener("change", (e) => {
       addSort = e.target.value;
@@ -2625,12 +2979,12 @@ function fillSettings() {
   setSegmented("#accent-choice", "data-accent", s.uiAccent || "aqua");
   const customInput = $("#accent-custom");
   if (customInput) customInput.value = hexRgb(s.uiAccentCustom) ? s.uiAccentCustom : "#5ce8dc";
-  const themeHost = $("#theme-presets");
+    const themeHost = $("#theme-presets");
   if (themeHost) {
     themeHost.innerHTML = THEMES.map((theme) => {
       const on = (s.uiBackground === theme.bg && s.uiAccent === theme.accent) || (theme.id === "ocean" && s.uiBackground === "ocean" && !THEMES.some((x) => x.bg === s.uiBackground && x.accent === s.uiAccent));
-      return `<button class="theme-card ${on ? "is-on" : ""}" data-theme-preset="${theme.id}"><span class="theme-swatch" data-swatch="${theme.id}"></span><span>${esc(t(`theme.${theme.id}`))}</span></button>`;
-    }).join("");
+      return `<button class="theme-card ${on ? "is-on" : ""}" data-theme-preset="${theme.id}"><span class="theme-swatch" data-swatch="${theme.id}" style="--sw:${ACCENT_HEX[theme.accent] || ACCENT_HEX.aqua};--sw2:${THEME_TONES[theme.id] || "#0a151c"}"></span><span>${esc(t(`theme.${theme.id}`))}</span></button>`;
+    }).join("") + `<button class="theme-card ${s.uiAccent === "custom" ? "is-on" : ""}" data-theme-preset="custom"><span class="theme-swatch" data-swatch="custom"></span><span>${esc(t("theme.custom"))}</span></button>`;
   }
   setSegmented("#radius-choice", "data-radius-choice", s.uiRadius || "soft");
   setSegmented("#density-choice", "data-density-choice", s.uiDensity || "normal");
@@ -2902,7 +3256,11 @@ async function downloadUpdate(auto = false) {
     info.path = path;
     setUpdateButton("update.restart");
     if (detail) detail.textContent = "100%";
-    if (!auto) toast(t("update.ready"));
+    if (auto) {
+      setTimeout(() => installUpdate(), 900);
+    } else {
+      toast(t("update.ready"));
+    }
   } catch (err) {
     if (detail) detail.textContent = "";
     setUpdateButton("update.download");
@@ -2962,6 +3320,15 @@ function bindSettings() {
   $("#theme-presets").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-theme-preset]");
     if (!btn) return;
+    if (btn.dataset.themePreset === "custom") {
+      S.settings.uiAccent = "custom";
+      setSegmented("#accent-choice", "data-accent", "custom");
+      $$("#theme-presets .theme-card").forEach((el) => el.classList.toggle("is-on", el === btn));
+      applyAppearance(S.settings);
+      markDirty();
+      $("#accent-custom")?.click();
+      return;
+    }
     const theme = THEMES.find((x) => x.id === btn.dataset.themePreset);
     if (!theme) return;
     S.settings.uiBackground = theme.bg;
@@ -3290,7 +3657,7 @@ function fillDiscoverProfiles() {
   if (!select) return;
   if (!S.discoverProfile) S.discoverProfile = S.boot?.activeProfile || S.profiles[0]?.id || "";
   select.innerHTML = S.profiles.length
-    ? S.profiles.map((p) => `<option value="${esc(p.id)}" ${p.id === S.discoverProfile ? "selected" : ""}>${esc(p.name)} · ${esc(p.versionId)}</option>`).join("")
+    ? S.profiles.map((p) => `<option value="${esc(p.id)}" ${p.id === S.discoverProfile ? "selected" : ""}>${esc(p.name)} · ${esc(baseOf(p.versionId))}</option>`).join("")
     : `<option value="">${esc(t("discover.activeProfile"))}</option>`;
   if (!S.profiles.some((p) => p.id === S.discoverProfile)) {
     S.discoverProfile = S.profiles[0]?.id || "";
@@ -3330,6 +3697,8 @@ function bindDiscover() {
     if (!tab || tab.dataset.kind === S.discoverKind) return;
     S.discoverKind = tab.dataset.kind;
     S.discoverCat = "all";
+    S.discoverCatMode = "include";
+    S.discoverExclude = [];
     S.discoverQuery = "";
     S.discoverPage = 1;
     const input = $("#discover-search");
@@ -3342,10 +3711,25 @@ function bindDiscover() {
   $("#discover-cats").addEventListener("click", (e) => {
     const chip = e.target.closest("[data-cat]");
     if (!chip) return;
-    S.discoverCat = chip.dataset.cat;
+    const id = chip.dataset.cat;
+    if (id === "all") {
+      S.discoverCat = "all";
+      S.discoverExclude = [];
+    } else if (S.discoverCatMode === "exclude") {
+      if (S.discoverExclude.includes(id)) S.discoverExclude = S.discoverExclude.filter((slug) => slug !== id);
+      else S.discoverExclude.push(id);
+    } else {
+      S.discoverCat = S.discoverCat === id ? "all" : id;
+    }
     renderDiscoverCats();
     renderDiscoverActive();
     searchDiscover(true);
+  });
+  $("#discover-cat-mode").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-cat-mode]");
+    if (!btn) return;
+    S.discoverCatMode = btn.dataset.catMode;
+    renderDiscoverCats();
   });
   let timer = 0;
   $("#discover-search").addEventListener("input", (e) => {
@@ -3401,6 +3785,8 @@ function bindDiscover() {
   $("#discover-reset").addEventListener("click", () => {
     S.discoverProvider = "modrinth";
     S.discoverCat = "all";
+    S.discoverCatMode = "include";
+    S.discoverExclude = [];
     S.discoverQuery = "";
     S.discoverSort = "featured";
     S.discoverPage = 1;
@@ -3421,6 +3807,10 @@ function bindDiscover() {
       $$("#discover-provider [data-provider]").forEach((el) => el.classList.toggle("is-on", el.dataset.provider === "modrinth"));
     } else if (field === "cat") {
       S.discoverCat = "all";
+      renderDiscoverCats();
+    } else if (field.startsWith("exclude:")) {
+      const slug = field.slice(8);
+      S.discoverExclude = S.discoverExclude.filter((value) => value !== slug);
       renderDiscoverCats();
     } else if (field === "loader") {
       S.discoverLoader = "fabric";
@@ -3513,6 +3903,7 @@ function confirmAction(title, text, label) {
 
 function go(page, tab) {
   if (!page) return;
+  if (page !== "pack") $("#page-pack")?.classList.remove("is-catalog");
   if (S.dirty && S.page === "settings" && page !== "settings") {
     showDirtyBar(true);
     toast(t("settings.unsavedHint"), "warn");
@@ -3638,13 +4029,6 @@ function bindStatic() {
   $("#dirty-discard").addEventListener("click", discardSettings);
   $("#edit-btn")?.addEventListener("click", () => setEdit(!S.edit));
   $("#edit-mode-btn").addEventListener("click", () => setEdit(!S.edit));
-  $("#theme-btn").addEventListener("click", () => {
-    const next = resolveTheme(S.settings.uiTheme || "dark") === "light" ? "dark" : "light";
-    S.settings.uiTheme = next;
-    applyAppearance(S.settings);
-    setSegmented("#theme-choice", "data-theme-choice", next);
-    markDirty();
-  });
 
   document.addEventListener("input", (e) => {
     const el = e.target.closest?.("[data-edit-key]");
@@ -3761,6 +4145,12 @@ async function init() {
     console.error(err);
     setStatus(t("status.offline"), "error");
     toast(friendly(err), "err");
+    document.body.classList.remove("is-booting");
+    const screen = $("#boot-screen");
+    if (screen) {
+      screen.classList.add("is-off");
+      setTimeout(() => screen.remove(), 600);
+    }
   }
 }
 

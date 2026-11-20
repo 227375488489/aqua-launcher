@@ -57,6 +57,7 @@ let runTimer = null;
 const platform = /Mac/i.test(navigator.userAgent) ? "macos" : /Linux/i.test(navigator.userAgent) ? "linux" : "windows";
 
 const packExtras = new Map();
+const demoDisabled = new Set();
 let profiles = [
   {
     id: "instance-vanilla",
@@ -487,13 +488,29 @@ const handlers = {
     const profile = profiles.find((p) => p.id === id);
     if (!profile) throw new Error("profile_not_found");
     return [
-      { file: "sodium-0.6.9.jar", name: "Sodium", kind: "mod", size: 1_240_000 },
-      { file: "iris-1.8.1.jar", name: "Iris Shaders", kind: "mod", size: 2_980_000 },
-      { file: "fabric-api-0.110.0.jar", name: "Fabric API", kind: "mod", size: 2_100_000 },
-      { file: "Faithful-32x.zip", name: "Faithful 32x", kind: "resourcepack", size: 14_800_000 },
-      { file: "Complementary.zip", name: "Complementary Reimagined", kind: "shader", size: 4_300_000 },
-      { file: "Terralith.zip", name: "Terralith", kind: "datapack", size: 9_200_000 },
-    ].concat(packExtras.get(id) || []);
+      { file: "sodium-0.6.9.jar", name: "Sodium", kind: "mod", size: 1_240_000, enabled: !demoDisabled.has(`${id}:sodium-0.6.9.jar`) },
+      { file: "iris-1.8.1.jar", name: "Iris Shaders", kind: "mod", size: 2_980_000, enabled: !demoDisabled.has(`${id}:iris-1.8.1.jar`) },
+      { file: "fabric-api-0.110.0.jar", name: "Fabric API", kind: "mod", size: 2_100_000, enabled: !demoDisabled.has(`${id}:fabric-api-0.110.0.jar`) },
+      { file: "Faithful-32x.zip", name: "Faithful 32x", kind: "resourcepack", size: 14_800_000, enabled: true },
+      { file: "Complementary.zip", name: "Complementary Reimagined", kind: "shader", size: 4_300_000, enabled: true },
+      { file: "Terralith.zip", name: "Terralith", kind: "datapack", size: 9_200_000, enabled: true },
+    ].concat((packExtras.get(id) || []).map((item) => ({ ...item, enabled: !demoDisabled.has(`${id}:${item.file}`) })));
+  },
+
+  profile_files_action({ id, action, files }) {
+    for (const file of files) {
+      if (action === "remove") {
+        const extra = packExtras.get(id);
+        if (extra) packExtras.set(id, extra.filter((m) => m.file !== file));
+      } else if (action === "disable") demoDisabled.add(`${id}:${file}`);
+      else if (action === "enable") demoDisabled.delete(`${id}:${file}`);
+    }
+    return null;
+  },
+
+  async loader_versions({ id, loader }) {
+    if (loader === "vanilla") return [];
+    return ["latest", "0.16.9", "0.15.11", "0.15.10"].slice(0, 4);
   },
 
   profile_file_remove({ id, file }) {
@@ -646,7 +663,7 @@ const handlers = {
       .map((m) => ({ ...m, id: `cf:${m.slug || m.id}`, provider: "curseforge", sources: ["curseforge"] }));
   },
 
-  catalog_search({ query, kind, provider, category, sort, limit = 20, offset = 0 }) {
+  catalog_search({ query, kind, provider, category, exclude, sort, limit = 20, offset = 0 }) {
     const source = provider || "modrinth";
     const pick = (fn) => fn({ query, kind });
     let hits = [];
@@ -666,6 +683,9 @@ const handlers = {
     }
     if (category && category !== "all") {
       hits = hits.filter((hit) => (hit.categories || []).some((c) => String(c).toLowerCase().replace(/\s+/g, "-") === category));
+    }
+    if (Array.isArray(exclude) && exclude.length) {
+      hits = hits.filter((hit) => !(hit.categories || []).some((c) => exclude.includes(String(c).toLowerCase().replace(/\s+/g, "-"))));
     }
     if (sort === "downloads") hits.sort((a, b) => b.downloads - a.downloads);
     else if (sort === "newest") hits.reverse();

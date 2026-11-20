@@ -946,7 +946,33 @@ pub async fn loader_install(
         "fabric" | "" => fabric::install(&app, &state.http, &root, &id, version.as_deref(), &cfg.settings)
             .await
             .map_err(|e| e.to_string()),
+        "quilt" => fabric::install_quilt(&app, &state.http, &root, &id, version.as_deref(), &cfg.settings)
+            .await
+            .map_err(|e| e.to_string()),
         other => Err(format!("loader_unknown:{other}")),
+    }
+}
+
+#[tauri::command]
+pub async fn loader_versions(
+    state: State<'_, AppState>,
+    id: String,
+    loader: String,
+) -> Result<Vec<String>, String> {
+    match loader.trim().to_lowercase().as_str() {
+        "forge" => forge::versions(&state.http, &id, forge::Flavor::Forge)
+            .await
+            .map_err(|e| e.to_string()),
+        "neoforge" => forge::versions(&state.http, &id, forge::Flavor::NeoForge)
+            .await
+            .map_err(|e| e.to_string()),
+        "quilt" => fabric::versions(&state.http, &id, true)
+            .await
+            .map_err(|e| e.to_string()),
+        "fabric" => fabric::versions(&state.http, &id, false)
+            .await
+            .map_err(|e| e.to_string()),
+        _ => Ok(Vec::new()),
     }
 }
 
@@ -1003,6 +1029,7 @@ pub async fn catalog_search(
     limit: Option<u32>,
     offset: Option<u32>,
     category: Option<String>,
+    exclude: Option<Vec<String>>,
     sort: Option<String>,
 ) -> Result<Vec<mods::Hit>, String> {
     let provider = provider.unwrap_or_else(|| "modrinth".into());
@@ -1080,6 +1107,30 @@ pub async fn catalog_search(
         };
         let wanted = norm(&wanted);
         hits.retain(|hit| hit.categories.iter().any(|slug| norm(slug) == wanted));
+    }
+    let excluded: Vec<String> = exclude
+        .unwrap_or_default()
+        .into_iter()
+        .map(|value| {
+            value
+                .chars()
+                .filter(|c| c.is_alphanumeric())
+                .flat_map(|c| c.to_lowercase())
+                .collect::<String>()
+        })
+        .filter(|value| !value.is_empty())
+        .collect();
+    if !excluded.is_empty() {
+        hits.retain(|hit| {
+            !hit.categories.iter().any(|slug| {
+                let norm: String = slug
+                    .chars()
+                    .filter(|c| c.is_alphanumeric())
+                    .flat_map(|c| c.to_lowercase())
+                    .collect();
+                excluded.iter().any(|skip| *skip == norm)
+            })
+        });
     }
     if sort == "downloads" {
         hits.sort_by(|a, b| b.downloads.cmp(&a.downloads));
@@ -1403,6 +1454,7 @@ pub struct ProfileFile {
     pub name: String,
     pub kind: String,
     pub size: u64,
+    pub enabled: bool,
 }
 
 #[tauri::command]
@@ -1420,6 +1472,7 @@ pub fn profile_contents(
             name: m.name,
             kind: "mod".into(),
             size: m.size,
+            enabled: m.enabled,
         })
         .collect();
     if let Ok(entries) = std::fs::read_dir(root.join("mods")) {
@@ -1438,6 +1491,7 @@ pub fn profile_contents(
                 name,
                 kind: "pending".into(),
                 size,
+                enabled: false,
             });
         }
     }
@@ -1467,6 +1521,7 @@ pub fn profile_contents(
                     name,
                     kind: kind.into(),
                     size,
+                    enabled: true,
                 });
             }
         }
@@ -1497,6 +1552,45 @@ pub fn profile_file_remove(
     let path = root.join(folder).join(&file);
     if path.exists() {
         std::fs::remove_file(&path).map_err(|e| format!("Не удалось удалить: {e}"))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn profile_files_action(
+    state: State<'_, AppState>,
+    id: String,
+    action: String,
+    files: Vec<String>,
+) -> Result<(), String> {
+    let cfg = state.snapshot();
+    let profile = cfg.profile(&id).ok_or_else(|| "profile_not_found".to_string())?;
+    let dir = cfg.profile_root(profile).join("mods");
+    for file in files {
+        if file.contains('/') || file.contains('\\') || file.contains("..") {
+            return Err("bad_file_name".into());
+        }
+        let path = dir.join(&file);
+        match action.as_str() {
+            "remove" => {
+                if path.exists() {
+                    std::fs::remove_file(&path).map_err(|e| format!("Не удалось удалить: {e}"))?;
+                }
+            }
+            "disable" => {
+                if path.exists() && file.to_ascii_lowercase().ends_with(".jar") {
+                    let target = dir.join(format!("{file}.off"));
+                    std::fs::rename(&path, target).map_err(|e| e.to_string())?;
+                }
+            }
+            "enable" => {
+                if path.exists() && file.to_ascii_lowercase().ends_with(".jar.off") {
+                    let target = dir.join(file.trim_end_matches(".off"));
+                    std::fs::rename(&path, target).map_err(|e| e.to_string())?;
+                }
+            }
+            other => return Err(format!("bad_action:{other}")),
+        }
     }
     Ok(())
 }
@@ -1836,7 +1930,10 @@ pub async fn profile_icons(
                 .and_then(|value| value.to_str())
                 .unwrap_or_default()
                 .to_string();
-            if !name.to_ascii_lowercase().ends_with(".jar") || cache.contains_key(&name) {
+            if !name.to_ascii_lowercase().ends_with(".jar") && !name.to_ascii_lowercase().ends_with(".jar.off") {
+                continue;
+            }
+            if cache.contains_key(&name) {
                 continue;
             }
             if let Some(hash) = hash_file(&path) {

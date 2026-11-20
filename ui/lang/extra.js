@@ -98,7 +98,12 @@ export const EXTRA = {
       "retryPending": "Retry pending",
       "restored": "{n} mods restored",
       "nothingPending": "No compatible updates yet",
-      "vanilla": "Vanilla"
+      "vanilla": "Vanilla",
+      "selectAll": "Select all",
+      "selectedN": "{n} selected",
+      "enable": "Enable",
+      "disable": "Disable",
+      "disabled": "Disabled"
     },
     "catalog": {
       "sort": "Sort",
@@ -121,12 +126,34 @@ export const EXTRA = {
       "kindShaders": "shaders",
       "sub": "Search {kind} on {source} — with dependencies and safety checks.",
       "searchIn": "Search {source}…",
-      "noMatches": "No matches"
+      "noMatches": "No matches",
+      "include": "Include",
+      "exclude": "Exclude"
     },
     "theme": {
       "quick": "Toggle theme",
       "toDark": "Switch to dark theme",
-      "toLight": "Switch to light theme"
+      "toLight": "Switch to light theme",
+      "custom": "Custom"
+    },
+    "boot": {
+      "loading": "Starting launcher"
+    },
+    "mood": {
+      "running": "The game is already running",
+      "first": "Your world is ready to start",
+      "rest": "Do you ever rest?",
+      "night": "Isn't it time for bed?",
+      "morning": "Good morning, miner",
+      "day": "The world is waiting",
+      "evening": "Evening is adventure time",
+      "ready": "Ready to launch?"
+    },
+    "hero": {
+      "subPick": "Pick a version or a pack to begin",
+      "subPack": "Pack “{name}” · Minecraft {version}",
+      "subInstalled": "Minecraft {version} is installed and ready",
+      "subInstall": "Minecraft {version} will install on the first launch"
     },
     "mods": {
       "searchInstalled": "Search installed content…"
@@ -239,7 +266,12 @@ export const EXTRA = {
       "retryPending": "Повторить ожидание",
       "restored": "Восстановлено модов: {n}",
       "nothingPending": "Совместимых обновлений пока нет",
-      "vanilla": "Ваниль"
+      "vanilla": "Ваниль",
+      "selectAll": "Выбрать все",
+      "selectedN": "Выбрано: {n}",
+      "enable": "Включить",
+      "disable": "Отключить",
+      "disabled": "Отключён"
     },
     "catalog": {
       "sort": "Сортировка",
@@ -262,12 +294,34 @@ export const EXTRA = {
       "kindShaders": "шейдеры",
       "sub": "Поиск: {kind} на {source} — с зависимостями и проверкой безопасности.",
       "searchIn": "Поиск по {source}…",
-      "noMatches": "Совпадений нет"
+      "noMatches": "Совпадений нет",
+      "include": "Включить",
+      "exclude": "Исключить"
     },
     "theme": {
       "quick": "Переключить тему",
       "toDark": "Тёмная тема",
-      "toLight": "Светлая тема"
+      "toLight": "Светлая тема",
+      "custom": "Своя"
+    },
+    "boot": {
+      "loading": "Запускаем лаунчер"
+    },
+    "mood": {
+      "running": "Игра уже запущена",
+      "first": "Твой мир готов к запуску",
+      "rest": "Ты вообще отдыхаешь?",
+      "night": "Не пора ли спать?",
+      "morning": "Доброе утро, шахтёр",
+      "day": "Мир ждёт тебя",
+      "evening": "Вечер — время приключений",
+      "ready": "Готов к запуску?"
+    },
+    "hero": {
+      "subPick": "Выбери версию или сборку, чтобы начать",
+      "subPack": "Сборка «{name}» · Minecraft {version}",
+      "subInstalled": "Minecraft {version} установлен и готов",
+      "subInstall": "Minecraft {version} установится при первом запуске"
     },
     "mods": {
       "searchInstalled": "Поиск по установленному…"

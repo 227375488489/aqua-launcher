@@ -54,22 +54,20 @@ jobs:
           tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
           releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('Aqua Launcher {0}', github.ref_name) || '' }}
           releaseBody: |
-            Aqua Launcher 0.0.6 Beta — a fast, open Minecraft launcher built with Rust and Tauri.
+            Aqua Launcher 0.0.7 Beta — a fast, open Minecraft launcher built with Rust and Tauri.
 
-            - Full catalog filters: source, game version, modloader, categories, sorting and active filter chips
-            - Numbered pages with 20/30/50 results per page; provider-aware search labels for Modrinth, CurseForge and both
-            - Compact installed-content grid with its own search and count
-            - "Add content" opens a catalog inside the pack, pre-filtered to its exact version and loader
-            - Pack editing: change cover, rename, update the Minecraft version, or clone the pack to a new version
-            - Incompatible mods are disabled as "Awaiting version" and restored automatically when a compatible build appears
-            - Loader versions grouped under their base Minecraft version in the version menu
-            - Visual layout editor: drag navigation and widget cards, hide with one click
-            - Quick light/dark toggle in the titlebar; unsaved indicator now clears when a value is reverted
-            - Per-instance memory with a realistic recommendation (32 GB systems no longer get 10 GB)
-            - Everything from 0.0.5: rebuilt pack page, real project icons, taskbar icon theming, real restart on update, edit mode, Discord RPC 1573083334517723146
-            - Fabric, Forge and NeoForge loaders, installed automatically
-            - 12 fully translated languages: English, Russian, Ukrainian, Kazakh, Polish, Czech, Slovak, French, German, Italian, Spanish, Portuguese
-            - Windows, macOS (universal) and Linux builds
+            - Versions menu is a tree: vanilla base, loader sub-versions and packs underneath, with covers and search
+            - All Minecraft versions are visible, including snapshots and old builds, each with a banner or generated cover
+            - Hero greeting changes with time of day and playtime ("Isn't it time for bed?", "Do you ever rest?")
+            - Add content is a full catalog page inside the pack with breadcrumbs, back button, locked version and loader
+            - Select multiple mods to enable, disable or delete them at once; disabled files stay in the pack
+            - Modrinth-style category filters that can include or exclude categories, shown as removable chips
+            - Project pages render sanitized HTML correctly and open screenshots in a keyboard-friendly lightbox
+            - Theme colors reach every surface, notification and generated banner; custom theme preset added
+            - Fabric, Quilt, Forge and NeoForge with a pickable loader version when creating a pack
+            - Boot animation, smoother list transitions, themed toasts, and automatic update download + restart
+            - Everything from 0.0.6: catalog paging, pack version updates, visual layout editor, per-pack memory, Discord RPC 1573083334517723146
+            - 12 fully translated languages; Windows, macOS (universal) and Linux builds
           releaseDraft: false
           prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
           args: ${{ matrix.args }}
