@@ -101,7 +101,12 @@ fn loader_of(id: &str, meta: &VersionMeta) -> String {
 pub fn bootstrap(state: State<'_, AppState>) -> Result<Bootstrap, String> {
     let cfg = state.snapshot();
     let root = cfg.game_root();
-    let running = state.game.lock().unwrap().as_ref().map(|g| g.version.clone());
+    let running = state
+        .game
+        .lock()
+        .unwrap()
+        .first()
+        .map(|g| g.version.clone());
     Ok(Bootstrap {
         settings: cfg.settings.clone(),
         accounts: cfg.accounts.clone(),
@@ -321,12 +326,17 @@ fn reader<R: std::io::Read + Send + 'static>(app: AppHandle, stream: R) -> std::
 }
 
 #[tauri::command]
-pub async fn launch(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<(), String> {
+pub async fn launch(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    parallel: Option<bool>,
+) -> Result<(), String> {
     let cfg = state.snapshot();
     let root = cfg.game_root();
 
-    if state.game.lock().unwrap().is_some() {
-        return Err("Игра уже запущена".into());
+    if !state.game.lock().unwrap().is_empty() && parallel != Some(true) {
+        return Err("game_running".into());
     }
     if !install::is_installed(&root, &id) {
         return Err("Версия не установлена. Сначала нажмите «Установить».".into());
@@ -426,8 +436,16 @@ pub async fn launch(app: AppHandle, state: State<'_, AppState>, id: String) -> R
     let out = child.stdout.take().map(|s| reader(app.clone(), s));
     let err = child.stderr.take().map(|s| reader(app.clone(), s));
 
-    *state.game.lock().unwrap() = Some(GameHandle { version: id.clone(), pid });
-    *state.play_started.lock().unwrap() = Some((id.clone(), std::time::Instant::now()));
+    state
+        .game
+        .lock()
+        .unwrap()
+        .push(GameHandle { version: id.clone(), pid });
+    state
+        .play_started
+        .lock()
+        .unwrap()
+        .insert(pid, (id.clone(), std::time::Instant::now()));
     let _ = state.update(|c| {
         c.last_version = Some(id.clone());
         c.stats.launches += 1;
@@ -455,15 +473,13 @@ pub async fn launch(app: AppHandle, state: State<'_, AppState>, id: String) -> R
         let code = status.ok().and_then(|s| s.code()).unwrap_or(-1);
         let state = app_exit.state::<AppState>();
         let mut guard = state.game.lock().unwrap();
-        if guard.as_ref().map(|g| g.pid) == Some(pid) {
-            *guard = None;
-        }
+        guard.retain(|g| g.pid != pid);
         drop(guard);
         let secs = state
             .play_started
             .lock()
             .unwrap()
-            .take()
+            .remove(&pid)
             .filter(|(v, _)| v == &version)
             .map(|(_, at)| at.elapsed().as_secs())
             .unwrap_or(0);
@@ -476,19 +492,20 @@ pub async fn launch(app: AppHandle, state: State<'_, AppState>, id: String) -> R
 
 #[tauri::command]
 pub fn stop_game(state: State<'_, AppState>) -> Result<(), String> {
-    let pid = state.game.lock().unwrap().as_ref().map(|g| g.pid);
-    let Some(pid) = pid else { return Ok(()) };
-    #[cfg(windows)]
-    {
-        let mut cmd = std::process::Command::new("taskkill");
-        cmd.args(["/PID", &pid.to_string(), "/T", "/F"]);
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000);
-        let _ = cmd.status();
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = std::process::Command::new("kill").arg(pid.to_string()).status();
+    let pids: Vec<u32> = state.game.lock().unwrap().iter().map(|g| g.pid).collect();
+    for pid in pids {
+        #[cfg(windows)]
+        {
+            let mut cmd = std::process::Command::new("taskkill");
+            cmd.args(["/PID", &pid.to_string(), "/T", "/F"]);
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x0800_0000);
+            let _ = cmd.status();
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = std::process::Command::new("kill").arg(pid.to_string()).status();
+        }
     }
     Ok(())
 }

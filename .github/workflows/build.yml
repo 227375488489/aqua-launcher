@@ -54,20 +54,18 @@ jobs:
           tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
           releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('Aqua Launcher {0}', github.ref_name) || '' }}
           releaseBody: |
-            Aqua Launcher 0.0.10 Beta — a fast, open Minecraft launcher built with Rust and Tauri.
+            Aqua Launcher 0.0.11 Beta — a fast, open Minecraft launcher built with Rust and Tauri.
 
-            - Fixes every open GitHub issue (#3-#14): sidebar, pack rows, add-content context, home duplication, experimental versions
-            - Auto sidebar expands as a real column, never overlays content or intercepts clicks; keyboard and screen-reader friendly
-            - Pack content rows stay on one line with grouped actions; deletes require confirmation and turn red on hover
-            - Add content is an inline catalog inside the pack with locked version/loader and a back crumb to the same pack
-            - Home shows stats once; achievements span the row; library installs are calm and empty search offers reset/show-all
-            - Experimental toggle now hides snapshots and old versions in both library and version menu, with install blocked upfront
-            - Modals get role=dialog, focus trap, Escape/cancel completion and focus return; Microsoft login is cancelled on close
-            - Leaving dirty settings offers save-and-leave, discard or stay; window close is guarded too
-            - Accounts show inline nickname errors and a clear primary button; Microsoft button sits below the description
-            - Settings polish: no duplicate save button, consistent update copy, wrapped accent swatches, themed selects and scrollbars
-            - Custom checkboxes/switches everywhere, larger tags, centered segmented control, fixed version install buttons, brighter OLED
-            - Everything from 0.0.9: real catalog pagination, fixed settings header, fast accent picker, achievements, pack cleanup, Discord on by default
+            - Modrinth-style catalog: sticky filter sidebar, dense project rows, "Install to an instance" picker with compatible instances
+            - Add content is an in-pack catalog with a back crumb, pack block icon and locked Minecraft version/loader
+            - Pack page header rebuilt: block cover, install status, Play, and Content / Files / Worlds / Logs / Share tabs
+            - Create-pack dialog with generated isometric block art, Randomize and Upload, loader pills and loader version choice
+            - Achievements replace Accounts in the rail: 16 simple and hard goals, progress rings and a dedicated page
+            - Multi-launch: start another copy from a running pack with a save-conflict warning (issue #15)
+            - Built-in Discord application 1573083334517723146; the client ID field is gone and presence is on by default
+            - MCP bridge and agent skill in agent/ for Claude Code, Codex and other agents (issue #16)
+            - README rewritten as a description with links; release notes now live on GitHub Releases (issue #17)
+            - Fixes all issues from 0.0.10 (#3-#14): rail without overlay, one-line pack rows, modal focus trap, dirty-settings dialog, inline account errors
             - 12 languages; Windows, macOS (universal) and Linux builds
           releaseDraft: false
           prerelease: ${{ startsWith(github.ref_name, 'v0.') }}

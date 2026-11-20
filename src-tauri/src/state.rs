@@ -274,10 +274,9 @@ impl Config {
         match std::fs::read_to_string(Self::path()) {
             Ok(raw) => {
                 let mut cfg: Self = serde_json::from_str(&raw).unwrap_or_default();
-                // Раньше поле было пустым: подставляем фирменное приложение Discord.
-                if cfg.settings.discord_client_id.trim().is_empty() {
-                    cfg.settings.discord_client_id = Settings::default().discord_client_id;
-                }
+                // The Rich Presence application is built in; a saved custom id
+                // must never replace it.
+                cfg.settings.discord_client_id = Settings::default().discord_client_id;
                 cfg
             }
             Err(_) => Self::default(),
@@ -340,10 +339,10 @@ pub struct GameHandle {
 pub struct AppState {
     pub cfg: Mutex<Config>,
     pub http: reqwest::Client,
-    pub game: Mutex<Option<GameHandle>>,
+    pub game: Mutex<Vec<GameHandle>>,
     pub ms_cancel: Arc<AtomicBool>,
     /// Старт текущей игровой сессии для подсчёта статистики.
-    pub play_started: Mutex<Option<(String, Instant)>>,
+    pub play_started: Mutex<std::collections::HashMap<u32, (String, Instant)>>,
 }
 
 impl AppState {
@@ -357,9 +356,9 @@ impl AppState {
         Self {
             cfg: Mutex::new(Config::load()),
             http,
-            game: Mutex::new(None),
+            game: Mutex::new(Vec::new()),
             ms_cancel: Arc::new(AtomicBool::new(false)),
-            play_started: Mutex::new(None),
+            play_started: Mutex::new(std::collections::HashMap::new()),
         }
     }
 

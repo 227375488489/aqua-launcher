@@ -38,7 +38,7 @@ pub fn spawn(app: AppHandle) {
                     .game
                     .lock()
                     .ok()
-                    .and_then(|game| game.as_ref().map(|handle| handle.version.clone()));
+                    .and_then(|game| game.first().map(|handle| handle.version.clone()));
                 let details = match running.as_deref() {
                     Some(version) => format!("Играет в Minecraft {version}"),
                     None => "В лаунчере".to_string(),

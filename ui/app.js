@@ -12,8 +12,8 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const APP_VERSION = "0.0.10-beta";
-const APP_LABEL = "0.0.10 Beta";
+const APP_VERSION = "0.0.11-beta";
+const APP_LABEL = "0.0.11 Beta";
 const NAV_DEFAULT = ["home", "library", "instances", "discover", "accounts"];
 const WIDGET_DEFAULT = ["stats", "achievements", "pc", "latest", "instances", "console"];
 const LINKS = {
@@ -315,6 +315,39 @@ function packArt(name) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="hsl(${hue},58%,38%)"/><stop offset="1" stop-color="hsl(${(hue + 32) % 360},52%,16%)"/></linearGradient></defs><rect width="96" height="96" fill="url(#g)"/>${blocks}<circle cx="48" cy="48" r="27" fill="#000" fill-opacity=".18"/><text x="48" y="60" font-family="Manrope,Segoe UI,Arial" font-size="32" font-weight="800" fill="#fff" fill-opacity=".92" text-anchor="middle">${esc(letter)}</text></svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
+function blockArt(seed) {
+  const label = String(seed || "aqua");
+  let hash = 0;
+  for (const ch of label) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  const palettes = [
+    { bg: "#204a37", top: "#8ed061", left: "#5ea842", right: "#3f7c2c" },
+    { bg: "#3b2a55", top: "#b58cff", left: "#8b63e0", right: "#6742b8" },
+    { bg: "#4a2a2d", top: "#e08a7a", left: "#b46152", right: "#8c4136" },
+    { bg: "#1f3d50", top: "#7fc8ee", left: "#4a9fc8", right: "#357a9a" },
+    { bg: "#4a3a1f", top: "#e8c46a", left: "#bf9a3f", right: "#96742a" },
+    { bg: "#2e3f4a", top: "#a9c0cc", left: "#7f9aa8", right: "#5e7785" },
+    { bg: "#4a2436", top: "#f093b6", left: "#c4668b", right: "#9b496b" },
+    { bg: "#213f3f", top: "#69d6c9", left: "#42a99e", right: "#2f837b" },
+  ];
+  const p = palettes[hash % palettes.length];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">
+    <defs><radialGradient id="b" cx="50%" cy="38%" r="70%"><stop stop-color="${p.bg}"/><stop offset="1" stop-color="#0b141a"/></radialGradient></defs>
+    <rect width="160" height="160" rx="28" fill="url(#b)"/>
+    <ellipse cx="80" cy="126" rx="42" ry="10" fill="#000" opacity=".28"/>
+    <g transform="translate(80 78)">
+      <polygon points="0,-34 34,-16 34,20 0,38 -34,20 -34,-16" fill="${p.left}"/>
+      <polygon points="0,-34 34,-16 0,2 -34,-16" fill="${p.top}"/>
+      <polygon points="0,2 34,-16 34,20 0,38" fill="${p.right}"/>
+      <polygon points="0,-34 34,-16 0,2 -34,-16" fill="#fff" opacity=".08"/>
+      <polygon points="0,2 34,-16 34,20 0,38" fill="#000" opacity=".14"/>
+      <rect x="-10" y="-9" width="7" height="7" rx="1" fill="#000" opacity=".16"/>
+      <rect x="4" y="-13" width="6" height="6" rx="1" fill="#fff" opacity=".14"/>
+      <rect x="-4" y="12" width="8" height="6" rx="1" fill="#000" opacity=".14"/>
+    </g>
+  </svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
 function versionArt(id) {
   const seed = String(id || "minecraft");
   let hash = 0;
@@ -583,6 +616,7 @@ function renderAll() {
   renderLibrary();
   renderInstances();
   renderAccounts();
+  renderAchievements();
   renderMods();
   renderSystem();
   renderAccountChip();
@@ -608,12 +642,16 @@ function buildRail() {
     library: { icon: "i-library", label: t("nav.library") },
     discover: { icon: "i-compass", label: t("nav.discover") },
     instances: { icon: "i-layers", label: t("nav.instances") },
-    accounts: { icon: "i-user", label: t("nav.accounts") },
+    achievements: { icon: "i-star", label: t("nav.achievements") },
   };
   const groups = [
     { id: "play", label: t("nav.group.play"), items: ["home", "library", "instances"] },
-    { id: "explore", label: t("nav.group.explore"), items: ["discover", "accounts"] },
+    { id: "explore", label: t("nav.group.explore"), items: ["discover", "achievements"] },
   ];
+  if (!order.includes("achievements")) {
+    const at = order.indexOf("discover");
+    order.splice(at >= 0 ? at + 1 : order.length, 0, "achievements");
+  }
   nav.innerHTML = groups.map((group) => {
     const items = order.filter((id) => group.items.includes(id) && meta[id]);
     if (!items.length) return "";
@@ -755,7 +793,7 @@ function renderVersionList() {
     const current = profile ? S.boot?.activeProfile === profile.id : S.selected === id;
     const packSub = profile ? `${baseOf(id)} · ${profile.loader || "vanilla"}${profile.loaderVersion ? ` ${profile.loaderVersion}` : ""}` : sub;
     return `<button class="menu-item ${current ? "is-on" : ""} ${child ? "is-child" : ""}" data-pick="${esc(id)}" ${profile ? `data-profile-pick="${esc(profile.id)}"` : ""}>
-    <img class="mi-icon" src="${profile ? (profile.icon ? esc(fileUrl(profile.icon)) : packArt(profile.name)) : versionArt(id)}" alt="" loading="lazy">
+    <img class="mi-icon" src="${profile ? (profile.icon ? esc(fileUrl(profile.icon)) : blockArt(profile.id || profile.name)) : versionArt(id)}" alt="" loading="lazy">
     <span class="mi-main"><b>${mark(title || (profile ? profile.name : id))}</b><small>${esc(packSub)}</small></span>
     ${profile ? `<span class="chip ${S.boot?.activeProfile === profile.id ? "chip-soft" : ""}">${esc(S.boot?.activeProfile === profile.id ? t("common.active") : t("common.installed"))}</span>` : loader ? `<span class="chip">${esc(loader)}</span>` : ""}
     ${current ? `<svg class="ico" style="width:14px;height:14px;color:var(--accent)"><use href="#i-check"></use></svg>` : ""}
@@ -957,26 +995,59 @@ function achievementList() {
   const launches = Number(S.stats.launches || 0);
   const streak = playStreak();
   const packs = S.profiles.length;
+  const night = Number(S.stats.nightLaunches || 0);
   return [
-    { id: "first", on: launches > 0, value: "" },
-    { id: "hour", on: play >= 3600, value: duration(play) },
-    { id: "day", on: play >= 86400, value: duration(play) },
-    { id: "packs", on: packs >= 5, value: `${Math.min(packs, 5)}/5` },
-    { id: "week", on: streak >= 7, value: `${Math.min(streak, 7)}/7` },
-    { id: "month", on: streak >= 30, value: `${Math.min(streak, 30)}/30` },
-    { id: "night", on: Number(S.stats.nightLaunches || 0) > 0, value: "" },
-    { id: "loyal", on: launches >= 50, value: `${Math.min(launches, 50)}/50` },
+    { id: "first", on: launches > 0, value: "", tier: "simple" },
+    { id: "hour", on: play >= 3600, value: duration(play), tier: "simple" },
+    { id: "tenhours", on: play >= 10 * 3600, value: duration(play), tier: "simple" },
+    { id: "day", on: play >= 86400, value: duration(play), tier: "hard" },
+    { id: "hundredhours", on: play >= 100 * 3600, value: duration(play), tier: "hard" },
+    { id: "packs", on: packs >= 5, value: `${Math.min(packs, 5)}/5`, tier: "simple" },
+    { id: "packs10", on: packs >= 10, value: `${Math.min(packs, 10)}/10`, tier: "hard" },
+    { id: "streak3", on: streak >= 3, value: `${Math.min(streak, 3)}/3`, tier: "simple" },
+    { id: "week", on: streak >= 7, value: `${Math.min(streak, 7)}/7`, tier: "hard" },
+    { id: "biweek", on: streak >= 14, value: `${Math.min(streak, 14)}/14`, tier: "hard" },
+    { id: "month", on: streak >= 30, value: `${Math.min(streak, 30)}/30`, tier: "hard" },
+    { id: "night", on: night > 0, value: "", tier: "simple" },
+    { id: "night10", on: night >= 10, value: `${Math.min(night, 10)}/10`, tier: "hard" },
+    { id: "launch10", on: launches >= 10, value: `${Math.min(launches, 10)}/10`, tier: "simple" },
+    { id: "launch100", on: launches >= 100, value: `${Math.min(launches, 100)}/100`, tier: "hard" },
+    { id: "loyal", on: launches >= 50, value: `${Math.min(launches, 50)}/50`, tier: "hard" },
   ];
+}
+
+function achievementCard(a, large = false) {
+  return `<div class="ach ${a.on ? "is-on" : ""} ${large ? "ach-large" : ""}">
+    <span class="ach-icon">${ico(a.on ? "i-check" : "i-star")}</span>
+    <span class="ach-main"><b>${esc(t(`achievements.${a.id}`))}</b><small>${esc(t(`achievements.${a.id}Hint`))}</small></span>
+    <span class="ach-val">${esc(a.on ? t("achievements.done") : a.value || t("achievements.locked"))}</span>
+  </div>`;
+}
+
+function renderAchievements() {
+  const host = $("#achievements-body");
+  if (!host) return;
+  const list = achievementList();
+  const unlocked = list.filter((a) => a.on).length;
+  const pct = Math.round((unlocked / list.length) * 100);
+  const section = (title, items) => `<div class="panel ach-panel">
+    <div class="ach-panel-head"><h2>${esc(title)}</h2><span class="chip chip-soft">${items.filter((a) => a.on).length}/${items.length}</span></div>
+    <div class="ach-grid">${items.map((a) => achievementCard(a, true)).join("")}</div>
+  </div>`;
+  host.innerHTML = `<div class="ach-hero">
+      <div class="ach-ring" style="--pct:${pct}%"><b>${pct}%</b><span>${esc(t("achievements.progress", { a: unlocked, b: list.length }))}</span></div>
+      <div><h2>${esc(t("achievements.title"))}</h2><p>${esc(t("achievements.pageSub"))}</p>
+        <div class="ach-summary"><span>${esc(t("achievements.unlocked", { n: unlocked }))}</span><span>${esc(t("achievements.remaining", { n: list.length - unlocked }))}</span></div>
+      </div>
+    </div>
+    ${section(t("achievements.simple"), list.filter((a) => a.tier === "simple"))}
+    ${section(t("achievements.hard"), list.filter((a) => a.tier === "hard"))}`;
 }
 
 function widgetAchievements() {
   const list = achievementList();
   const unlocked = list.filter((a) => a.on).length;
-  const body = `<div class="ach-grid">${list.map((a) => `<div class="ach ${a.on ? "is-on" : ""}">
-      <span class="ach-icon">${ico(a.on ? "i-check" : "i-star")}</span>
-      <span class="ach-main"><b>${esc(t(`achievements.${a.id}`))}</b><small>${esc(t(`achievements.${a.id}Hint`))}</small></span>
-      <span class="ach-val">${esc(a.on ? t("achievements.done") : a.value || t("achievements.locked"))}</span>
-    </div>`).join("")}</div>`;
+  const body = `<div class="ach-grid">${list.slice(0, 8).map((a) => achievementCard(a)).join("")}</div>`;
   return widgetShell("achievements", body, `<span class="chip chip-soft">${esc(t("achievements.progress", { a: unlocked, b: list.length }))}</span>`);
 }
 
@@ -1254,7 +1325,23 @@ async function launchSelected() {
     await invoke("launch", { id: S.selected });
     toast(t("toast.launched"));
   } catch (err) {
-    toast(friendly(err), "err");
+    if (String(err).includes("game_running")) {
+      const proceed = await confirmAction(
+        t("launch.parallelTitle"),
+        t("launch.parallelText"),
+        t("launch.parallelRun")
+      );
+      if (proceed) {
+        try {
+          await invoke("launch", { id: S.selected, parallel: true });
+          toast(t("toast.launched"));
+        } catch (second) {
+          toast(friendly(second), "err");
+        }
+      }
+    } else {
+      toast(friendly(err), "err");
+    }
   } finally {
     S.launching = false;
     syncPlay();
@@ -1573,12 +1660,13 @@ function renderDiscoverResults() {
   renderDiscoverPager();
 }
 
-async function installProject(hit) {
+async function installProject(hit, profileId = "") {
   if (!hit?.id) return;
   const kind = hit.kind || S.discoverKind;
   if (kind === "modpack") return installModpack(hit);
-  const version = S.discoverVersion || baseOf(S.selected);
-  if (kind === "mod" && !hasLoaderProfile(version)) {
+  const target = profileId ? profileById(profileId) : null;
+  const version = target ? baseOf(target.versionId) : S.discoverVersion || baseOf(S.selected);
+  if (kind === "mod" && !target && !hasLoaderProfile(version)) {
     planDiscoverVisibility();
     toast(t("errors.needFabric"), "err");
     return;
@@ -1588,10 +1676,10 @@ async function installProject(hit) {
     const outcome = await invoke("mods_install", {
       project: hit.id,
       version,
-      loader: kind === "mod" ? S.discoverLoader : "",
+      loader: kind === "mod" ? (target?.loader || S.discoverLoader) : "",
       kind,
       provider: String(hit.id).startsWith("cf:") ? "curseforge" : (hit.provider || S.discoverProvider),
-      profile: S.discoverProfile || S.boot?.activeProfile || null,
+      profile: target?.id || S.discoverProfile || S.boot?.activeProfile || null,
     });
     toast(t("toast.modInstalled", { count: (outcome?.installed || []).length }));
     loadMods();
@@ -1604,6 +1692,50 @@ async function installProject(hit) {
   } finally {
     hideBar(400);
   }
+}
+
+function compatibleProfiles(kind) {
+  if (kind === "modpack") return [];
+  if (kind !== "mod") return S.profiles || [];
+  const version = S.discoverVersion || baseOf(S.selected);
+  return (S.profiles || []).filter((p) => p.loader && baseOf(p.versionId) === baseOf(version));
+}
+
+function openInstancePicker(hit) {
+  const kind = hit.kind || S.discoverKind;
+  if (kind === "modpack") return installModpack(hit);
+  const list = compatibleProfiles(kind);
+  const rows = list.length
+    ? list.map((p) => `<button class="iti-row" data-iti="${esc(p.id)}">
+        <img src="${blockArt(p.id || p.name)}" alt="">
+        <span class="iti-main"><b>${esc(p.name)}</b><small>${esc(baseOf(p.versionId))}${p.loader ? ` · ${esc(p.loader)}` : ""}</small></span>
+        <span class="btn btn-soft btn-sm">${ico("i-download")}<span>${esc(t("common.install"))}</span></span>
+      </button>`).join("")
+    : `<div class="iti-empty">${esc(t("catalog.noInstances"))}</div>`;
+  openModal(`
+    <div class="iti-head">
+      <img class="iti-icon" src="${esc(hit.icon || artFor(hit.title))}" alt="">
+      <div><h3>${esc(t("catalog.installTo"))}</h3><p>${esc(hit.title)}</p></div>
+    </div>
+    <div class="segmented iti-tabs">
+      <button class="seg is-on">${esc(t("catalog.existingInstance"))}</button>
+      <button class="seg" id="iti-new">${esc(t("catalog.newInstance"))}</button>
+    </div>
+    <div class="iti-list">${rows}</div>
+    <div class="iti-foot"><span>${esc(t("catalog.compatibleCount", { n: list.length }))}</span><button class="btn btn-quiet" data-close>${esc(t("common.cancel"))}</button></div>
+  `, (root) => {
+    root.querySelector("#iti-new")?.addEventListener("click", () => {
+      closeModal();
+      createInstance();
+    });
+    root.querySelectorAll("[data-iti]").forEach((btn) => btn.addEventListener("click", async () => {
+      const id = btn.dataset.iti;
+      closeModal();
+      await installProject(hit, id);
+      const profile = profileById(id);
+      if (profile) toast(t("catalog.installedInto", { name: profile.name }));
+    }));
+  });
 }
 
 async function installModpack(hit) {
@@ -2068,7 +2200,7 @@ function renderInstances() {
     const secs = S.stats.playtimeSecs?.[p.versionId] || 0;
     return `<article class="icard ${active ? "is-active" : ""}" data-profile="${esc(p.id)}">
       <div class="icard-top">
-        ${p.icon ? `<img class="icard-icon" src="${esc(fileUrl(p.icon))}" alt="" data-seed="${esc(p.name)}">` : `<img class="icard-icon" src="${packArt(p.name)}" alt="">`}
+        ${p.icon ? `<img class="icard-icon" src="${esc(fileUrl(p.icon))}" alt="" data-seed="${esc(p.name)}">` : `<img class="icard-icon" src="${blockArt(p.id || p.name)}" alt="">`}
         <div style="min-width:0;flex:1">
           <h3>${esc(p.name)}</h3>
           <div class="sub"><span>${esc(baseOf(p.versionId))}</span><span class="dot" style="width:2px;height:2px;border-radius:50%;background:currentColor"></span><span>${esc(p.loader || "vanilla")}</span></div>
@@ -2173,17 +2305,28 @@ function createInstance() {
     ["forge", "Forge"],
     ["neoforge", "NeoForge"],
   ];
-  openModal(`<h3>${esc(t("instances.createTitle"))}</h3><p>${esc(t("instances.createText"))}</p>
+  const seed = `pack-${Date.now()}`;
+  openModal(`<div class="cp-head"><h3>${esc(t("instances.createTitle"))}</h3><p>${esc(t("instances.createText"))}</p></div>
     <div class="cp-layout">
-      <button class="cp-cover" id="instance-cover" type="button" title="${esc(t("set.wall.pick"))}">
-        <img src="${packArt(t("instances.createTitle"))}" alt="">
-        <span class="cp-pencil"><svg class="ico"><use href="#i-palette"></use></svg></span>
-      </button>
+      <div class="cp-visual">
+        <button class="cp-cover" id="instance-cover" type="button" title="${esc(t("set.wall.pick"))}">
+          <img src="${blockArt(seed)}" alt="">
+          <span class="cp-pencil"><svg class="ico"><use href="#i-palette"></use></svg></span>
+        </button>
+        <div class="cp-cover-actions">
+          <button class="btn btn-soft btn-sm" id="instance-random" type="button"><svg class="ico"><use href="#i-refresh"></use></svg><span>${esc(t("instances.randomize"))}</span></button>
+          <button class="btn btn-quiet btn-sm" id="instance-upload" type="button"><svg class="ico"><use href="#i-folder"></use></svg><span>${esc(t("instances.upload"))}</span></button>
+        </div>
+      </div>
       <div class="cp-fields">
+        <label class="cp-label">${esc(t("instances.name"))}</label>
         <label class="input"><input id="instance-name" maxlength="40" placeholder="${esc(t("instances.name"))}" autocomplete="off"></label>
+        <label class="cp-label">${esc(t("instances.version")) || "Minecraft"}</label>
         <label class="select-inline wide"><select id="instance-version">${versions.map((v) => `<option value="${esc(v.id)}" ${v.id === first ? "selected" : ""}>${esc(v.id)}${installed.has(v.id) ? " · ✓" : ""}</option>`).join("")}</select><svg class="ico"><use href="#i-chevron"></use></svg></label>
+        <label class="cp-label">${esc(t("instances.loader")) || "Loader"}</label>
         <div class="cp-loaders" id="instance-loaders">${loaders.map(([value, label], i) => `<button class="cp-loader ${i === 0 ? "is-on" : ""}" data-loader="${value}" type="button">${label}</button>`).join("")}</div>
-        <label class="select-inline wide"><select id="instance-loader-version"><option value="">Loader version · auto</option></select><svg class="ico"><use href="#i-chevron"></use></svg></label>
+        <label class="cp-label">${esc(t("instances.loaderVersion")) || "Loader version"}</label>
+        <label class="select-inline wide"><select id="instance-loader-version"><option value="">${esc(t("instances.stable")) || "Stable"} · auto</option></select><svg class="ico"><use href="#i-chevron"></use></svg></label>
         <input id="instance-icon" type="hidden" value="">
       </div>
     </div>
@@ -2206,12 +2349,28 @@ function createInstance() {
         if (token === loaderToken) select.innerHTML = `<option value="">Loader version · auto</option>`;
       }
     };
+    let coverSeed = seed;
     const paintCover = () => {
       if ($("#instance-icon").value) return;
       const img = $("#instance-cover img");
-      if (img) img.src = packArt($("#instance-name").value.trim() || $("#instance-version").value);
+      if (img) img.src = blockArt(`${coverSeed}-${$("#instance-name").value.trim() || $("#instance-version").value}`);
     };
     $("#instance-name").addEventListener("input", paintCover);
+    $("#instance-random").addEventListener("click", () => {
+      coverSeed = `pack-${Date.now()}-${Math.random()}`;
+      $("#instance-icon").value = "";
+      paintCover();
+    });
+    $("#instance-upload").addEventListener("click", async () => {
+      try {
+        const path = await invoke("pick_wallpaper");
+        if (!path) return;
+        $("#instance-icon").value = path;
+        $("#instance-cover img").src = fileUrl(path);
+      } catch (err) {
+        toast(friendly(err), "err");
+      }
+    });
     $("#instance-cover").addEventListener("click", async () => {
       try {
         const path = await invoke("pick_wallpaper");
@@ -2373,24 +2532,36 @@ async function openPack(id) {
     </div>
     <div class="pack-head">
       <button class="pack-cover-btn" id="pack-cover-btn" title="${esc(t("pack.changeCover"))}">
-        ${profile.icon ? `<img class="pack-cover" src="${esc(fileUrl(profile.icon))}" alt="">` : `<img class="pack-cover" src="${packArt(profile.name)}" alt="">`}
+        ${profile.icon ? `<img class="pack-cover" src="${esc(fileUrl(profile.icon))}" alt="">` : `<img class="pack-cover" src="${blockArt(profile.id || profile.name)}" alt="">`}
         <span class="pack-cover-edit">${ico("i-palette")}</span>
       </button>
       <div class="pack-title">
         <div class="pack-eyebrow"><span class="chip">${esc(profile.loader || "vanilla")}</span><span class="chip">${esc(baseOf(profile.versionId))}</span>${profile.loaderVersion ? `<span class="chip chip-soft">${esc(profile.loaderVersion)}</span>` : ""}${pendingCount() ? `<span class="chip warn">${esc(t("pack.pendingCount", { n: pendingCount() }))}</span>` : ""}</div>
         <h2>${esc(profile.name)}</h2>
-        <p>${esc(t("pack.contentsCount", { n: contents.length }))}</p>
+        <div class="pack-side-meta">
+          <span>Minecraft <b>${esc(baseOf(profile.versionId))}</b></span><i class="dot"></i>
+          <span>${esc(profile.loader || "vanilla")}</span><i class="dot"></i>
+          <span><b>${contents.length}</b> ${esc(t("pack.filesWord"))}</span><i class="dot"></i>
+          <span>${esc(duration(S.stats.playtimeSecs?.[profile.versionId] || 0))}</span>
+        </div>
         <div class="pack-actions">
           <button class="btn btn-primary" id="pack-play">${ico("i-play")}<span>${esc(t("common.play"))}</span></button>
           <button class="btn btn-soft" id="pack-add">${ico("i-plus")}<span>${esc(t("discover.addContent"))}</span></button>
-          <button class="btn btn-quiet" id="pack-version">${ico("i-refresh")}<span>${esc(t("pack.updateVersion"))}</span></button>
-          <button class="btn btn-quiet" id="pack-update-all">${ico("i-download")}<span>${esc(t("pack.updateAll"))}</span></button>
-          <button class="btn btn-quiet" id="pack-clean">${ico("i-trash")}<span>${esc(t("pack.clean"))}</span></button>
-          <button class="btn btn-quiet" id="pack-retry" ${pendingCount() ? "" : "hidden"}>${ico("i-zap")}<span>${esc(t("pack.retryPending"))}</span></button>
-          <button class="btn btn-quiet" id="pack-repair">${ico("i-shield")}<span>${esc(t("discover.repair"))}</span></button>
+          <button class="btn btn-quiet" id="pack-version" title="${esc(t("pack.updateVersion"))}">${ico("i-refresh")}</button>
+          <button class="btn btn-quiet" id="pack-update-all" title="${esc(t("pack.updateAll"))}">${ico("i-download")}</button>
+          <button class="btn btn-quiet" id="pack-clean" title="${esc(t("pack.clean"))}">${ico("i-trash")}</button>
+          <button class="btn btn-quiet" id="pack-retry" ${pendingCount() ? "" : "hidden"} title="${esc(t("pack.retryPending"))}">${ico("i-zap")}</button>
+          <button class="btn btn-quiet" id="pack-repair" title="${esc(t("discover.repair"))}">${ico("i-shield")}</button>
           <button class="btn btn-quiet icon-only" id="pack-rename" title="${esc(t("edit.renameInstance"))}">${ico("i-edit")}</button>
         </div>
       </div>
+    </div>
+    <div class="pack-tabs">
+      <button class="pack-tab is-on" data-pack-tab="content">${ico("i-layers")}<span>${esc(t("project.overview"))}</span></button>
+      <button class="pack-tab" data-pack-tab="files">${ico("i-folder")}<span>${esc(t("pack.tabFiles"))}</span></button>
+      <button class="pack-tab" data-pack-tab="worlds">${ico("i-drive")}<span>${esc(t("pack.tabWorlds"))}</span></button>
+      <button class="pack-tab" data-pack-tab="logs">${ico("i-terminal")}<span>${esc(t("pack.tabLogs"))}</span></button>
+      <button class="pack-tab" data-pack-tab="share">${ico("i-copy")}<span>${esc(t("pack.tabShare"))}</span></button>
     </div>
     <div class="pack-stats">
       <div><span>${esc(t("pack.status"))}</span><b id="pack-status">${esc(statusText())}</b></div>
@@ -2423,7 +2594,10 @@ async function openPack(id) {
         <span>/</span><b>${esc(t("discover.addContent"))}</b>
       </div>
       <div class="pack-add-head">
-        <div><b>${esc(t("pack.addTitle"))}</b><small>${esc(t("pack.addSub"))}</small></div>
+        <div>
+          <b>${esc(t("discover.addContent"))} · ${esc(profile.name)}</b>
+          <small>Minecraft ${esc(baseOf(profile.versionId))} · ${esc(profile.loader || "vanilla")} · ${esc(t("pack.addSub"))}</small>
+        </div>
         <button class="btn btn-quiet icon-only" id="pack-add-close" title="${esc(t("common.cancel"))}">${ico("i-close")}</button>
       </div>
       <div class="pack-lockchips">
@@ -2434,34 +2608,41 @@ async function openPack(id) {
       <div class="pd-subtabs" id="pack-add-kinds">
         ${kinds.map(([k, label], i) => `<button class="pd-subtab ${i === 0 ? "is-on" : ""}" data-addkind="${k}">${esc(label)}</button>`).join("")}
       </div>
-      <div class="pack-add-bar">
-        <label class="input search"><svg class="ico"><use href="#i-search"></use></svg><input id="pack-add-search" placeholder="${esc(t("pack.addSearch"))}" autocomplete="off"></label>
-        <label class="select-inline"><select id="pack-add-sort">
-          <option value="featured" data-i18n="catalog.sortFeatured">${esc(t("catalog.sortFeatured"))}</option>
-          <option value="downloads">${esc(t("catalog.sortDownloads"))}</option>
-          <option value="updated">${esc(t("catalog.sortUpdated"))}</option>
-          <option value="newest">${esc(t("catalog.sortNewest"))}</option>
-        </select><svg class="ico"><use href="#i-chevron"></use></svg></label>
-        <label class="select-inline"><select id="pack-add-provider">
-          <option value="both" data-i18n="discover.both">${esc(t("discover.both"))}</option>
-          <option value="modrinth">Modrinth</option>
-          <option value="curseforge">CurseForge</option>
-        </select><svg class="ico"><use href="#i-chevron"></use></svg></label>
-      </div>
-      <div class="cat-filter-head">
-        <div class="segmented seg-sm" id="pack-add-mode">
-          <button class="seg is-on" data-addmode="include">${esc(t("catalog.include"))}</button>
-          <button class="seg" data-addmode="exclude">${esc(t("catalog.exclude"))}</button>
+      <div class="pack-catalog-grid">
+        <div class="pack-cat-main">
+          <div class="pack-add-bar">
+            <label class="input search"><svg class="ico"><use href="#i-search"></use></svg><input id="pack-add-search" placeholder="${esc(t("pack.addSearch"))}" autocomplete="off"></label>
+            <label class="select-inline"><select id="pack-add-sort">
+              <option value="featured" data-i18n="catalog.sortFeatured">${esc(t("catalog.sortFeatured"))}</option>
+              <option value="downloads">${esc(t("catalog.sortDownloads"))}</option>
+              <option value="updated">${esc(t("catalog.sortUpdated"))}</option>
+              <option value="newest">${esc(t("catalog.sortNewest"))}</option>
+            </select><svg class="ico"><use href="#i-chevron"></use></svg></label>
+            <label class="select-inline"><select id="pack-add-provider">
+              <option value="both" data-i18n="discover.both">${esc(t("discover.both"))}</option>
+              <option value="modrinth">Modrinth</option>
+              <option value="curseforge">CurseForge</option>
+            </select><svg class="ico"><use href="#i-chevron"></use></svg></label>
+          </div>
+          <div class="pack-results" id="pack-add-results">${addRows()}</div>
+          <div class="pager pack-pager" id="pack-add-pager" hidden>
+            <span class="pager-count" id="pack-add-page-count"></span>
+            <div class="pager-pages" id="pack-add-pages"></div>
+            <label class="select-inline pager-size"><select id="pack-add-per">
+              <option value="20">20</option><option value="30">30</option><option value="50">50</option>
+            </select><svg class="ico"><use href="#i-chevron"></use></svg></label>
+          </div>
         </div>
-      </div>
-      <div class="cat-row" id="pack-add-cats"></div>
-      <div class="pack-results" id="pack-add-results">${addRows()}</div>
-      <div class="pager pack-pager" id="pack-add-pager" hidden>
-        <span class="pager-count" id="pack-add-page-count"></span>
-        <div class="pager-pages" id="pack-add-pages"></div>
-        <label class="select-inline pager-size"><select id="pack-add-per">
-          <option value="20">20</option><option value="30">30</option><option value="50">50</option>
-        </select><svg class="ico"><use href="#i-chevron"></use></svg></label>
+        <aside class="pack-cat-side">
+          <div>
+            <div class="cp-title">${esc(t("catalog.categories"))}</div>
+            <div class="segmented seg-sm" id="pack-add-mode">
+              <button class="seg is-on" data-addmode="include">${esc(t("catalog.include"))}</button>
+              <button class="seg" data-addmode="exclude">${esc(t("catalog.exclude"))}</button>
+            </div>
+            <div class="cat-row" id="pack-add-cats"></div>
+          </div>
+        </aside>
       </div>
     </div>`;
   const page = $("#pack-page-body");
@@ -2469,6 +2650,22 @@ async function openPack(id) {
   go("pack");
   (() => {
     $("#pack-back").addEventListener("click", () => go("instances"));
+    page.querySelectorAll("[data-pack-tab]").forEach((btn) => btn.addEventListener("click", async () => {
+      const kind = btn.dataset.packTab;
+      if (kind === "content") return;
+      if (kind === "share") {
+        copyText(`aqua://pack/${profile.id}`);
+        toast(t("common.copied"));
+        return;
+      }
+      try {
+        if (kind === "logs") await invoke("open_dir", { kind: "logs" });
+        else await invoke("open_profile", { id: profile.id });
+        if (kind === "worlds") toast(t("pack.worldsOpened"));
+      } catch (err) {
+        toast(friendly(err), "err");
+      }
+    }));
     const host = $("#pack-rows");
     const paintBulk = () => {
       const list = visibleItems();
@@ -3271,7 +3468,6 @@ function fillSettings() {
   setSwitch("#old-switch", s.showOld !== false);
   setSwitch("#auto-update-switch", s.autoUpdate !== false);
   setSwitch("#discord-switch", s.discordRpc === true);
-  if ($("#discord-client")) $("#discord-client").value = s.discordClientId || "";
   setSwitch("#flags-switch", s.optimizedFlags !== false);
   setSwitch("#auto-java-switch", s.autoJava !== false);
   setSwitch("#strict-switch", s.strictMods !== false);
@@ -3682,10 +3878,6 @@ function bindSettings() {
   bindSwitch("#old-switch", "showOld", () => { renderAll(); });
   bindSwitch("#auto-update-switch", "autoUpdate");
   bindSwitch("#discord-switch", "discordRpc");
-  $("#discord-client")?.addEventListener("input", (e) => {
-    S.settings.discordClientId = e.target.value.trim();
-    markDirty();
-  });
   bindSwitch("#flags-switch", "optimizedFlags");
   bindSwitch("#auto-java-switch", "autoJava");
   bindSwitch("#strict-switch", "strictMods");
@@ -3996,10 +4188,10 @@ function openPackCatalog(profile) {
 }
 
 function closeCatalogPanel() {
-  const panel = $("#discover-panel");
+  const side = $("#discover-side");
   const btn = $("#discover-filters");
-  if (!panel || panel.hidden) return;
-  panel.hidden = true;
+  if (!side || !side.classList.contains("is-open")) return;
+  side.classList.remove("is-open");
   btn?.setAttribute("aria-expanded", "false");
 }
 
@@ -4091,9 +4283,9 @@ function bindDiscover() {
   });
   $("#discover-filters").addEventListener("click", (e) => {
     e.stopPropagation();
-    const panel = $("#discover-panel");
-    panel.hidden = !panel.hidden;
-    e.currentTarget.setAttribute("aria-expanded", String(!panel.hidden));
+    const side = $("#discover-side");
+    side.classList.toggle("is-open");
+    e.currentTarget.setAttribute("aria-expanded", String(side.classList.contains("is-open")));
   });
   $("#discover-panel").addEventListener("click", (e) => e.stopPropagation());
   $("#discover-panel-close").addEventListener("click", closeCatalogPanel);
@@ -4181,7 +4373,10 @@ function bindDiscover() {
     const btn = e.target.closest("[data-install]");
     if (btn) {
       const hit = S.discoverResults.find((r) => r.id === btn.dataset.install);
-      if (hit) installProject(hit);
+      if (hit) {
+        if (hit.kind === "modpack" || S.catalogFromPack) installProject(hit);
+        else openInstancePicker(hit);
+      }
       return;
     }
     const card = e.target.closest("[data-project]");
@@ -4324,6 +4519,7 @@ async function go(page, tab) {
     if (!S.discoverResults.length && !S.discoverBusy) searchDiscover();
   }
   if (page === "instances") renderInstances();
+  if (page === "achievements") renderAchievements();
   if (page === "accounts") renderAccounts();
   if (page === "settings") fillSettings();
   if (page === "home") renderWidgets();
@@ -4398,7 +4594,13 @@ async function bindBackend() {
 function bindStatic() {
   $("#rail-nav").addEventListener("click", (e) => {
     const item = e.target.closest("[data-nav]");
-    if (item) go(item.dataset.nav);
+    if (item) {
+      $("#rail").classList.add("is-open");
+      go(item.dataset.nav);
+    }
+  });
+  document.addEventListener("pointerdown", (e) => {
+    if (!$("#rail").contains(e.target)) $("#rail").classList.remove("is-open");
   });
   $("#nav-settings").addEventListener("click", () => go("settings"));
   $("#account-card").addEventListener("click", () => go("accounts"));

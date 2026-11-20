@@ -1,8 +1,16 @@
 // Generated translations for keys added after the original locale pass.
 export const EXTRA = {
   "en": {
+    "nav": {
+      "achievements": "Achievements"
+    },
     "common": {
       "apply": "Apply"
+    },
+    "launch": {
+      "parallelTitle": "Launch another copy?",
+      "parallelText": "A second copy can write to the same world files. Save the game in the first copy to avoid conflicts.",
+      "parallelRun": "Launch in parallel"
     },
     "edit": {
       "toggle": "Edit layout",
@@ -98,6 +106,12 @@ export const EXTRA = {
       "pendingCount": "{n} awaiting version",
       "pendingChip": "Awaiting version",
       "filteredHint": "Results are limited to this pack's version and loader",
+      "filesWord": "files",
+      "tabFiles": "Files",
+      "tabWorlds": "Worlds",
+      "tabLogs": "Logs",
+      "tabShare": "Share",
+      "worldsOpened": "Opened the worlds folder",
       "updateTitle": "Update pack version",
       "updateSub": "Move the pack to another Minecraft version, or copy it to a new pack.",
       "targetVersion": "Minecraft version",
@@ -158,6 +172,12 @@ export const EXTRA = {
       "searchIn": "Search {source}…",
       "noMatches": "No matches",
       "installed": "Installed",
+      "installTo": "Install to an instance",
+      "existingInstance": "Existing instance",
+      "newInstance": "New instance",
+      "compatibleCount": "{n} compatible instances",
+      "noInstances": "No compatible instance yet — create one first.",
+      "installedInto": "Installed into {name}",
       "include": "Include",
       "exclude": "Exclude",
       "needLoader": "Pick a pack or a loader version first",
@@ -225,14 +245,43 @@ export const EXTRA = {
       "nightHint": "Launch the game after midnight",
       "loyal": "Loyal player",
       "loyalHint": "Launch the launcher 50 times",
+      "tenhours": "Ten hours in",
+      "tenhoursHint": "Play for 10 hours",
+      "hundredhours": "Hundred-hour veteran",
+      "hundredhoursHint": "Play for 100 hours",
+      "packs10": "Pack architect",
+      "packs10Hint": "Create 10 packs",
+      "streak3": "Three days running",
+      "streak3Hint": "Play 3 days in a row",
+      "biweek": "Two weeks strong",
+      "biweekHint": "Play 14 days in a row",
+      "night10": "Regular night owl",
+      "night10Hint": "Launch the game at night 10 times",
+      "launch10": "Getting comfortable",
+      "launch10Hint": "Launch the game 10 times",
+      "launch100": "Hundred launches",
+      "launch100Hint": "Launch the game 100 times",
+      "pageSub": "Every world, every night and every launch counts. Progress is based on your real stats.",
+      "simple": "Simple",
+      "hard": "Hard",
+      "unlocked": "Unlocked: {n}",
+      "remaining": "Left: {n}",
       "done": "Unlocked",
       "locked": "Locked",
       "progress": "{a} of {b}"
     }
   },
   "ru": {
+    "nav": {
+      "achievements": "Достижения"
+    },
     "common": {
       "apply": "Применить"
+    },
+    "launch": {
+      "parallelTitle": "Запустить ещё одну копию?",
+      "parallelText": "Вторая копия может писать в те же файлы мира. Сохраните игру в первой копии, чтобы избежать конфликтов.",
+      "parallelRun": "Запустить параллельно"
     },
     "edit": {
       "toggle": "Редактирование",
@@ -328,6 +377,12 @@ export const EXTRA = {
       "pendingCount": "{n} ждут версию",
       "pendingChip": "Ожидает версии",
       "filteredHint": "Показано только совместимое с версией и загрузчиком сборки",
+      "filesWord": "файлов",
+      "tabFiles": "Файлы",
+      "tabWorlds": "Миры",
+      "tabLogs": "Логи",
+      "tabShare": "Поделиться",
+      "worldsOpened": "Папка миров открыта",
       "updateTitle": "Обновление версии сборки",
       "updateSub": "Перенеси сборку на другую версию Minecraft или создай из неё новую.",
       "targetVersion": "Версия Minecraft",
@@ -388,6 +443,12 @@ export const EXTRA = {
       "searchIn": "Поиск по {source}…",
       "noMatches": "Совпадений нет",
       "installed": "Установлено",
+      "installTo": "Установить в сборку",
+      "existingInstance": "Существующая сборка",
+      "newInstance": "Новая сборка",
+      "compatibleCount": "Подходящих сборок: {n}",
+      "noInstances": "Подходящих сборок нет — сначала создайте одну.",
+      "installedInto": "Установлено в {name}",
       "include": "Включить",
       "exclude": "Исключить",
       "needLoader": "Сначала выберите сборку или версию с загрузчиком",
@@ -455,6 +516,27 @@ export const EXTRA = {
       "nightHint": "Запусти игру после полуночи",
       "loyal": "Верный игрок",
       "loyalHint": "Запусти лаунчер 50 раз",
+      "tenhours": "Десять часов в игре",
+      "tenhoursHint": "Наиграй 10 часов",
+      "hundredhours": "Сотня часов",
+      "hundredhoursHint": "Наиграй 100 часов",
+      "packs10": "Архитектор сборок",
+      "packs10Hint": "Создай 10 сборок",
+      "streak3": "Три дня подряд",
+      "streak3Hint": "Играй 3 дня подряд",
+      "biweek": "Две недели в строю",
+      "biweekHint": "Играй 14 дней подряд",
+      "night10": "Постоянный ночной шахтёр",
+      "night10Hint": "Запусти игру ночью 10 раз",
+      "launch10": "Уже освоился",
+      "launch10Hint": "Запусти игру 10 раз",
+      "launch100": "Сто запусков",
+      "launch100Hint": "Запусти игру 100 раз",
+      "pageSub": "Каждый мир, каждая ночь и каждый запуск идут в копилку. Прогресс считается по реальной статистике.",
+      "simple": "Простые",
+      "hard": "Сложные",
+      "unlocked": "Получено: {n}",
+      "remaining": "Осталось: {n}",
       "done": "Получено",
       "locked": "Закрыто",
       "progress": "{a} из {b}"
