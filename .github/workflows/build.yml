@@ -54,15 +54,20 @@ jobs:
           tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
           releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('Aqua Launcher {0}', github.ref_name) || '' }}
           releaseBody: |
-            Aqua Launcher 0.0.9 Beta — a fast, open Minecraft launcher built with Rust and Tauri.
+            Aqua Launcher 0.0.10 Beta — a fast, open Minecraft launcher built with Rust and Tauri.
 
-            - The sidebar no longer pushes the layout: in Auto mode it stays 76px and expands over the page on hover
-            - "Add content" opens the regular catalog with the pack, version and loader preselected and locked; a chip takes you back
-            - Modpack catalog uses real Modrinth pagination, so 20/30/50 per page and page counts are accurate
-            - Installed list and the hover caption were removed from the catalog; hover stays as a subtle highlight
-            - Settings keep their title and tabs fixed while only the right panel scrolls
-            - Fixed GitHub issues: the whole filter row is clickable, and the color picker no longer repaints the whole window
-            - Everything from 0.0.8: installed marks, resource pack/shader fixes, achievements, pack cleanup, per-mod versions, themed toasts
+            - Fixes every open GitHub issue (#3-#14): sidebar, pack rows, add-content context, home duplication, experimental versions
+            - Auto sidebar expands as a real column, never overlays content or intercepts clicks; keyboard and screen-reader friendly
+            - Pack content rows stay on one line with grouped actions; deletes require confirmation and turn red on hover
+            - Add content is an inline catalog inside the pack with locked version/loader and a back crumb to the same pack
+            - Home shows stats once; achievements span the row; library installs are calm and empty search offers reset/show-all
+            - Experimental toggle now hides snapshots and old versions in both library and version menu, with install blocked upfront
+            - Modals get role=dialog, focus trap, Escape/cancel completion and focus return; Microsoft login is cancelled on close
+            - Leaving dirty settings offers save-and-leave, discard or stay; window close is guarded too
+            - Accounts show inline nickname errors and a clear primary button; Microsoft button sits below the description
+            - Settings polish: no duplicate save button, consistent update copy, wrapped accent swatches, themed selects and scrollbars
+            - Custom checkboxes/switches everywhere, larger tags, centered segmented control, fixed version install buttons, brighter OLED
+            - Everything from 0.0.9: real catalog pagination, fixed settings header, fast accent picker, achievements, pack cleanup, Discord on by default
             - 12 languages; Windows, macOS (universal) and Linux builds
           releaseDraft: false
           prerelease: ${{ startsWith(github.ref_name, 'v0.') }}

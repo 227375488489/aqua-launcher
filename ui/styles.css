@@ -1722,3 +1722,112 @@ html[data-theme="light"][data-rail="auto"] .rail{background:rgba(255,255,255,.9)
 
 @media (max-width:680px){.ach-grid{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){.page:not([hidden]),.result-row:hover,.theme-card-opt:hover{animation:none;transform:none}}
+
+/* ============================================================
+   v0.0.10 — GitHub issues 3–14
+   ============================================================ */
+
+/* #3 auto rail reflows instead of covering content */
+html[data-rail="auto"] .shell{display:flex;position:relative}
+html[data-rail="auto"] .rail{
+  position:relative;left:auto;top:auto;bottom:auto;z-index:30;height:auto;flex:0 0 auto;
+  width:76px;padding:20px 10px 14px;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 5%,rgba(8,20,28,.6)),rgba(5,14,20,.34));
+  backdrop-filter:blur(22px) saturate(1.15);
+  transition:width 220ms var(--ease),padding 220ms var(--ease),box-shadow 220ms var(--ease);
+}
+html[data-rail="auto"] .rail:hover,html[data-rail="auto"] .rail:focus-within{width:238px;padding:20px 14px 14px;box-shadow:16px 0 40px -32px rgba(0,0,0,.7)}
+html[data-rail="auto"] .view{margin-left:0!important}
+html[data-rail="auto"] .rail:not(:hover):not(:focus-within) .rail-label{text-align:center;font-size:0;min-height:16px;padding:0 0 4px;overflow:hidden}
+html[data-rail="auto"] .rail:not(:hover):not(:focus-within) .nav-item{justify-content:center;padding:0}
+html[data-rail="auto"] .rail:not(:hover):not(:focus-within) .nav-item>span,html[data-rail="auto"] .rail:not(:hover):not(:focus-within) .nav-count{display:none}
+html[data-rail="auto"] .rail:not(:hover):not(:focus-within) .account-card{justify-content:center;padding:7px}
+html[data-rail="auto"] .rail:not(:hover):not(:focus-within) .account-meta,html[data-rail="auto"] .rail:not(:hover):not(:focus-within) .account-chevron{display:none}
+html[data-rail="auto"] .rail:not(:hover):not(:focus-within) .rail-version{opacity:0;pointer-events:none}
+html[data-rail="auto"] .rail:not(:hover):not(:focus-within) .nav-item.is-on::before{left:auto;right:-10px}
+html[data-theme="light"][data-rail="auto"] .rail{background:linear-gradient(180deg,rgba(255,255,255,.72),rgba(255,255,255,.42))}
+html[data-theme="light"][data-rail="auto"] .rail:hover{box-shadow:16px 0 38px -30px rgba(12,40,52,.35)}
+
+/* #4 pack rows: one line, actions grouped */
+.pd-row{display:flex;align-items:center;gap:8px;min-height:56px;grid-template-columns:none}
+.pd-row-main{flex:1 1 auto;min-width:0}
+.pd-row>.chip{flex:0 0 auto;max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pd-row-actions{display:flex;align-items:center;gap:6px;margin-left:auto;flex:0 0 auto}
+.pd-row-actions .chip{max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pack-stats{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))!important}
+@media (max-width:760px){
+  .pd-row>.chip{display:none}
+  .pd-row-actions .btn.icon-only:not(.danger-hover){display:none}
+  .pd-row{min-height:52px}
+}
+.danger-hover:hover{color:var(--danger)!important;border-color:color-mix(in srgb,var(--danger) 45%,var(--line))!important;background:var(--danger-soft)!important}
+
+/* #5 pack cards: affordance without extra text */
+.icard{cursor:pointer}
+.icard-open{display:none!important}
+.icard:hover .pack-name,.icard:hover h3{color:var(--accent)}
+
+/* #6 achievements */
+.ach-grid{grid-template-columns:repeat(auto-fit,minmax(178px,1fr))}
+.ach .ach-main b{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25}
+[data-widget="achievements"]{grid-column:span 12}
+
+/* #12 library install is a calm action */
+.vcard-actions .btn-soft{background:var(--s2);border:1px solid var(--line);color:var(--text)}
+.vcard-actions .btn-soft:hover{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 45%,var(--line));color:var(--text)}
+.vcard-actions .btn{width:auto;justify-content:center}
+#library-empty .row-actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
+
+/* #13 unified checkboxes and switch state */
+input.pd-check,input[type="checkbox"]{
+  appearance:none;-webkit-appearance:none;width:18px;height:18px;min-width:18px;border-radius:6px;
+  border:1.5px solid var(--line-strong);background:var(--field);cursor:pointer;position:relative;
+  transition:background var(--fast),border-color var(--fast);
+}
+input.pd-check:hover,input[type="checkbox"]:hover{border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}
+input.pd-check:checked,input[type="checkbox"]:checked{background:var(--accent);border-color:var(--accent)}
+input.pd-check:checked::after,input[type="checkbox"]:checked::after{
+  content:"";position:absolute;left:5px;top:2px;width:5px;height:9px;
+  border:2px solid var(--accent-ink);border-left:0;border-top:0;transform:rotate(42deg);
+}
+input.pd-check:indeterminate,input[type="checkbox"]:indeterminate{background:var(--accent-soft);border-color:var(--accent)}
+input.pd-check:indeterminate::after,input[type="checkbox"]:indeterminate::after{
+  content:"";position:absolute;left:3px;top:7px;width:8px;height:2px;background:var(--accent);border-radius:2px;
+}
+.pd-check:focus-visible,input[type="checkbox"]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.switch[role="switch"]{cursor:pointer}
+.switch[role="switch"][aria-checked="true"]{background:var(--accent)}
+.switch[role="switch"] i{transition:transform var(--fast)}
+
+/* #11 swatches / segmented / tags / selects */
+.swatches{flex-wrap:wrap;overflow:visible;padding:3px;row-gap:10px}
+.swatch{flex:0 0 auto}
+#discover-provider .seg{min-width:0;display:inline-flex;align-items:center;justify-content:center;padding:0 12px;text-align:center}
+.segmented .seg{padding-left:12px;padding-right:12px}
+.tag{font-size:11.5px;padding:4px 9px;line-height:1.25}
+select,input[type="number"]{color-scheme:light dark}
+select option{background:var(--panel-solid);color:var(--text)}
+select{scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--accent) 55%,transparent) transparent}
+.settings-panel .field-grid,.folder-grid{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))!important}
+.field-error{color:var(--danger);font-size:11.5px;margin:6px 0 0;line-height:1.4}
+.input.is-invalid,.input:has(.is-invalid){border-color:color-mix(in srgb,var(--danger) 60%,var(--line));box-shadow:0 0 0 2px var(--danger-soft)}
+
+/* #11 modal a11y */
+body.modal-open{overflow:hidden}
+.modal:focus{outline:none}
+.modal-actions-wrap{flex-wrap:wrap;justify-content:flex-end}
+
+/* #14 version install buttons equal width */
+.pd-version .btn{min-width:126px;justify-content:center}
+.pd-version{grid-template-columns:minmax(0,1fr) auto auto}
+
+/* #14 OLED keeps colored light */
+html[data-theme="oled"] .aurora{opacity:.78}
+html[data-theme="oled"] .backdrop{background:
+  radial-gradient(120% 90% at 12% -10%,color-mix(in srgb,var(--accent) 22%,#000) 0%,transparent 60%),
+  radial-gradient(90% 80% at 96% 8%,color-mix(in srgb,var(--accent-2) 18%,transparent) 0%,transparent 60%),
+  #000}
+html[data-theme="oled"] .btn-primary{box-shadow:0 10px 26px -16px color-mix(in srgb,var(--accent) 70%,transparent)}
+
+/* layout: rail must stay above the page edge shadow but in flow */
+html[data-rail="auto"] .rail:hover{will-change:width}

@@ -22,7 +22,25 @@ export const EXTRA = {
       "unsaved": "You have unsaved settings",
       "unsavedHint": "Save or discard them before leaving.",
       "discard": "Discard",
-      "discarded": "Changes discarded"
+      "discarded": "Changes discarded",
+      "stay": "Stay",
+      "leave": "Leave without saving",
+      "saveAndLeave": "Save and leave"
+    },
+    "update": {
+      "settingsTitle": "Update check",
+      "check": "Check for updates",
+      "checking": "Checking…",
+      "none": "No updates available"
+    },
+    "confirm": {
+      "deleteFile": "Delete file?",
+      "deleteFileText": "Delete {file}? This cannot be undone.",
+      "deleteSelectedText": "Delete {n} selected files? This cannot be undone."
+    },
+    "library": {
+      "reset": "Reset search",
+      "showAll": "Show all versions"
     },
     "cat": {
       "adventure": "Adventure",
@@ -181,7 +199,9 @@ export const EXTRA = {
     },
     "set": {
       "recoPack": "For your current pack ({mods} mods): {gb} GB is enough",
-      "railAuto": "Auto"
+      "railAuto": "Auto",
+      "javaUnknown": "Not checked yet",
+      "connUnknown": "Not connected"
     },
     "instances": {
       "selected": "Selected"
@@ -232,7 +252,25 @@ export const EXTRA = {
       "unsaved": "У вас есть несохранённые настройки",
       "unsavedHint": "Сохрани или отмени изменения, чтобы выйти.",
       "discard": "Отменить",
-      "discarded": "Изменения отменены"
+      "discarded": "Изменения отменены",
+      "stay": "Остаться",
+      "leave": "Выйти без сохранения",
+      "saveAndLeave": "Сохранить и выйти"
+    },
+    "update": {
+      "settingsTitle": "Проверка обновлений",
+      "check": "Проверить обновление",
+      "checking": "Проверка…",
+      "none": "Обновлений нет"
+    },
+    "confirm": {
+      "deleteFile": "Удалить файл?",
+      "deleteFileText": "Удалить {file}? Это действие нельзя отменить.",
+      "deleteSelectedText": "Удалить выбранные файлы ({n})? Это действие нельзя отменить."
+    },
+    "library": {
+      "reset": "Сбросить поиск",
+      "showAll": "Показать все версии"
     },
     "cat": {
       "adventure": "Приключения",
@@ -391,7 +429,9 @@ export const EXTRA = {
     },
     "set": {
       "recoPack": "Для текущей сборки ({mods} модов) хватит {gb} ГБ",
-      "railAuto": "Авто"
+      "railAuto": "Авто",
+      "javaUnknown": "Ещё не проверено",
+      "connUnknown": "Нет подключения"
     },
     "instances": {
       "selected": "Выбрана"

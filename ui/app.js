@@ -12,8 +12,8 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const APP_VERSION = "0.0.9-beta";
-const APP_LABEL = "0.0.9 Beta";
+const APP_VERSION = "0.0.10-beta";
+const APP_LABEL = "0.0.10 Beta";
 const NAV_DEFAULT = ["home", "library", "instances", "discover", "accounts"];
 const WIDGET_DEFAULT = ["stats", "achievements", "pc", "latest", "instances", "console"];
 const LINKS = {
@@ -619,14 +619,18 @@ function buildRail() {
     if (!items.length) return "";
     return `<div class="rail-group" data-group="${group.id}">
       <span class="rail-label">${esc(group.label)}</span>
-      ${items.map((id) => `<button class="nav-item ${S.page === id ? "is-on" : ""}" data-nav="${id}">
-        <svg class="ico"><use href="#${meta[id].icon}"></use></svg>
+      ${items.map((id) => `<button class="nav-item ${S.page === id ? "is-on" : ""}" data-nav="${id}" title="${esc(meta[id].label)}" aria-label="${esc(meta[id].label)}">
+        <svg class="ico" aria-hidden="true"><use href="#${meta[id].icon}"></use></svg>
         <span>${esc(meta[id].label)}</span>
         ${id === "instances" && S.profiles.length ? `<span class="nav-count">${S.profiles.length}</span>` : ""}
       </button>`).join("")}
     </div>`;
   }).join("");
   $("#nav-settings").classList.toggle("is-on", S.page === "settings");
+  $("#nav-settings").title = t("nav.settings");
+  $("#nav-settings").setAttribute("aria-label", t("nav.settings"));
+  $("#account-card").title = activeAccount()?.name || t("nav.accounts");
+  $("#account-card").setAttribute("aria-label", activeAccount()?.name || t("nav.accounts"));
 }
 
 function heroMood() {
@@ -683,12 +687,11 @@ function renderHero() {
         `<span>${esc(t("stats.last"))}: <b>${esc(last)}</b></span>`,
       ].filter(Boolean).join('<i class="dot"></i>')
     : "";
-  $("#hero-stats").innerHTML = [
-    [duration(totalPlaytime()), t("stats.playtime")],
-    [i18n.number(S.stats.launches || 0), t("stats.launches")],
-    [i18n.number(S.stats.sessions || 0), t("stats.sessions")],
-    [last, t("stats.last")],
-  ].map(([value, label]) => `<div class="hs"><b>${esc(value)}</b><span>${esc(label)}</span></div>`).join("");
+  const statsStrip = $("#hero-stats");
+  if (statsStrip) {
+    statsStrip.innerHTML = "";
+    statsStrip.hidden = true;
+  }
   const hasFabric = id ? S.local.some((v) => /fabric/i.test(v.id) && baseOf(v.id) === baseOf(id)) : false;
   $("#fabric-btn").hidden = true;
   renderVersionMenu();
@@ -697,6 +700,9 @@ function renderHero() {
 
 function visibleBySettings(v) {
   const kind = String(v.kind || "");
+  // The parent switch is the single source of truth: with experimental
+  // versions off, snapshots and old builds are hidden and cannot be installed.
+  if (S.settings.allowExperimental !== true && kind !== "release") return false;
   if (kind === "snapshot" && S.settings.showSnapshots === false) return false;
   if (kind.startsWith("old") && S.settings.showOld === false) return false;
   return true;
@@ -732,9 +738,10 @@ function renderVersionList() {
   const q = String(S.versionQuery || "").trim().toLowerCase();
   const known = new Map();
   [...S.remote, ...S.local].forEach((v) => {
-    if (!known.has(v.id)) known.set(v.id, v);
+    if (visibleBySettings(v) && !known.has(v.id)) known.set(v.id, v);
   });
   S.profiles.forEach((p) => {
+    if (!visibleBySettings(known.get(p.versionId) || { id: p.versionId, kind: "release" })) return;
     if (!known.has(p.versionId)) known.set(p.versionId, { id: p.versionId, kind: "release", releaseTime: "" });
   });
   const versions = sortVersions([...known.values()], "new");
@@ -873,7 +880,7 @@ function syncPlay() {
 
 const WIDGET_META = {
   stats: { w: 5, icon: "i-gauge", title: "widget.stats", sub: "widget.statsSub" },
-  achievements: { w: 4, icon: "i-star", title: "achievements.title", sub: "achievements.sub" },
+  achievements: { w: 12, icon: "i-star", title: "achievements.title", sub: "achievements.sub" },
   pc: { w: 3, icon: "i-cpu", title: "widget.pc", sub: "widget.pcSub" },
   latest: { w: 4, icon: "i-sparkles", title: "widget.latest", sub: "widget.latestSub" },
   instances: { w: 5, icon: "i-layers", title: "widget.instances", sub: "widget.instancesSub" },
@@ -1090,7 +1097,7 @@ function renderLibrary() {
           ${installed
             ? `<button class="btn btn-soft" data-lib-play="${esc(v.id)}"><svg class="ico"><use href="#i-play"></use></svg><span>${esc(t("common.play"))}</span></button>
                <button class="btn btn-quiet icon-only" data-lib-delete="${esc(v.id)}" title="${esc(t("common.delete"))}"><svg class="ico"><use href="#i-trash"></use></svg></button>`
-            : `<button class="btn btn-primary" data-lib-install="${esc(v.id)}"><svg class="ico"><use href="#i-download"></use></svg><span>${esc(S.installing.has(v.id) ? t("common.installing") : t("common.install"))}</span></button>`}
+            : `<button class="btn btn-soft" data-lib-install="${esc(v.id)}"><svg class="ico"><use href="#i-download"></use></svg><span>${esc(S.installing.has(v.id) ? t("common.installing") : t("common.install"))}</span></button>`}
         </div>
       </div>
     </article>`;
@@ -1103,6 +1110,22 @@ function bindLibrary() {
     S.libQuery = e.target.value;
     S.libShown = 36;
     renderLibrary();
+  });
+  $("#library-empty")?.addEventListener("click", (e) => {
+    if (e.target.closest("#library-reset")) {
+      S.libQuery = "";
+      $("#library-search").value = "";
+      S.libShown = 36;
+      renderLibrary();
+    }
+    if (e.target.closest("#library-showall")) {
+      S.libQuery = "";
+      S.libFilter = "all";
+      S.libShown = 36;
+      $("#library-search").value = "";
+      $$("#library-filter [data-filter]").forEach((el) => el.classList.toggle("is-on", el.dataset.filter === "all"));
+      renderLibrary();
+    }
   });
   $("#library-filter").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-filter]");
@@ -1535,7 +1558,7 @@ function renderDiscoverResults() {
       <div class="rr-main">
         <div class="rr-head"><h3 title="${esc(hit.title)}">${esc(hit.title)}</h3><span class="rr-author">${esc(t("catalog.by", { name: hit.author || "—" }))}</span></div>
         <p class="rr-desc">${esc(hit.description || "")}</p>
-        <div class="rr-tags">${cats}${sources}${installed ? `<span class="tag ok">${esc(t("catalog.installed"))}</span>` : ""}</div>
+        <div class="rr-tags">${cats}${sources}</div>
       </div>
       <div class="rr-side">
         <span class="rr-downloads"><svg class="ico"><use href="#i-download"></use></svg>${i18n.number(hit.downloads || 0)}</span>
@@ -2312,10 +2335,12 @@ async function openPack(id) {
       <input class="pd-check" type="checkbox" data-select="${esc(item.file)}" ${selected.has(item.file) ? "checked" : ""} aria-label="${esc(item.name)}">
       <div class="pd-row-icon">${icon ? `<img src="${esc(icon)}" alt="" loading="lazy">` : `<img src="${packArt(item.name)}" alt="">`}</div>
       <div class="pd-row-main"><b>${esc(item.name)}</b><span>${esc(item.file)}</span></div>
-      ${kind === "pending" ? `<span class="chip warn">${esc(t("pack.pendingChip"))}</span>` : off ? `<span class="chip">${esc(t("pack.disabled"))}</span>` : `<span class="chip">${esc(i18n.bytes(item.size || 0))}</span>`}
-      ${S.projectIdsByFile.get(item.file) ? `<button class="btn btn-quiet icon-only" data-pack-project="${esc(S.projectIdsByFile.get(item.file))}" title="${esc(t("pack.updateVersion"))}">${ico("i-refresh")}</button>` : ""}
-      ${kind === "mod" ? `<button class="btn btn-quiet icon-only" data-pack-toggle="${esc(item.file)}" data-enabled="${off ? "0" : "1"}" title="${esc(off ? t("pack.enable") : t("pack.disable"))}">${ico(off ? "i-close" : "i-check")}</button>` : ""}
-      <button class="btn btn-quiet icon-only" data-pack-remove="${esc(item.file)}" data-kind="${esc(kind)}" title="${esc(t("common.delete"))}">${ico("i-trash")}</button>
+      <div class="pd-row-actions">
+        ${kind === "pending" ? `<span class="chip warn">${esc(t("pack.pendingChip"))}</span>` : off ? `<span class="chip">${esc(t("pack.disabled"))}</span>` : `<span class="chip">${esc(i18n.bytes(item.size || 0))}</span>`}
+        ${S.projectIdsByFile.get(item.file) ? `<button class="btn btn-quiet icon-only" data-pack-project="${esc(S.projectIdsByFile.get(item.file))}" title="${esc(t("pack.updateVersion"))}" aria-label="${esc(t("pack.updateVersion"))}">${ico("i-refresh")}</button>` : ""}
+        ${kind === "mod" ? `<button class="btn btn-quiet icon-only" data-pack-toggle="${esc(item.file)}" data-enabled="${off ? "0" : "1"}" title="${esc(off ? t("pack.enable") : t("pack.disable"))}" aria-label="${esc(off ? t("pack.enable") : t("pack.disable"))}">${ico(off ? "i-close" : "i-check")}</button>` : ""}
+        <button class="btn btn-quiet icon-only danger-hover" data-pack-remove="${esc(item.file)}" data-kind="${esc(kind)}" title="${esc(t("common.delete"))}" aria-label="${esc(t("common.delete"))}">${ico("i-trash")}</button>
+      </div>
     </div>`;
     }).join("");
   };
@@ -2333,7 +2358,7 @@ async function openPack(id) {
         <div class="rr-main">
           <div class="rr-head"><h3>${esc(hit.title)}</h3><span class="rr-author">${esc(t("catalog.by", { name: hit.author || "—" }))}</span></div>
           <p class="rr-desc">${esc(hit.description || "")}</p>
-          <div class="rr-tags">${cats}<span class="tag src">${esc(hit.provider === "curseforge" ? "CurseForge" : "Modrinth")}</span>${installed ? `<span class="tag ok">${esc(t("catalog.installed"))}</span>` : ""}</div>
+          <div class="rr-tags">${cats}<span class="tag src">${esc(hit.provider === "curseforge" ? "CurseForge" : "Modrinth")}</span></div>
         </div>
         <div class="rr-side">
           <span class="rr-downloads">${ico("i-download")}${i18n.number(hit.downloads || 0)}</span>
@@ -2510,7 +2535,7 @@ async function openPack(id) {
       else list.forEach((item) => selected.delete(item.file));
       paint();
     });
-    $("#pack-bulk").addEventListener("click", (e) => {
+    $("#pack-bulk").addEventListener("click", async (e) => {
       const btn = e.target.closest("[data-bulk]");
       if (!btn) return;
       const action = btn.dataset.bulk;
@@ -2518,6 +2543,10 @@ async function openPack(id) {
         selected.clear();
         paint();
         return;
+      }
+      if (action === "remove") {
+        const ok = await confirmAction(t("confirm.deleteFile"), t("confirm.deleteSelectedText", { n: selected.size }), t("common.delete"));
+        if (!ok) return;
       }
       runAction(action, [...selected]);
     });
@@ -2554,6 +2583,8 @@ async function openPack(id) {
       const remove = e.target.closest("[data-pack-remove]");
       if (!remove) return;
       const kind = remove.dataset.kind === "pending" ? "mod" : remove.dataset.kind;
+      const ok = await confirmAction(t("confirm.deleteFile"), t("confirm.deleteFileText", { file: remove.dataset.packRemove }), t("common.delete"));
+      if (!ok) return;
       if (kind === "mod") {
         await runAction("remove", [remove.dataset.packRemove]);
         return;
@@ -2580,7 +2611,7 @@ async function openPack(id) {
       $("#page-pack").classList.remove("is-catalog");
       $("#pack-add-panel").hidden = true;
     };
-    $("#pack-add").addEventListener("click", () => openPackCatalog(profile));
+    $("#pack-add").addEventListener("click", () => openCatalog());
     $("#pack-add-close").addEventListener("click", closeCatalog);
     $("#pack-add-back").addEventListener("click", closeCatalog);
     $("#pack-repair").addEventListener("click", async () => {
@@ -2900,7 +2931,9 @@ async function openPack(id) {
     $("#pack-add-results").addEventListener("click", async (e) => {
       const btn = e.target.closest("[data-pack-install]");
       if (!btn) return;
+      const label = btn.innerHTML;
       btn.disabled = true;
+      btn.innerHTML = `${ico("i-refresh")}<span>${esc(t("discover.installing"))}</span>`;
       try {
         await invoke("mods_install", {
           project: btn.dataset.packInstall,
@@ -2924,6 +2957,7 @@ async function openPack(id) {
         toast(friendly(err), "err");
       } finally {
         btn.disabled = false;
+        btn.innerHTML = label;
       }
     });
     paintCats();
@@ -3110,13 +3144,30 @@ function renderAccounts() {
 }
 
 function bindAccounts() {
+  const nameInput = $("#offline-name");
+  const errorBox = $("#offline-error");
+  const showNameError = (message) => {
+    if (!errorBox) return;
+    errorBox.textContent = message;
+    errorBox.hidden = !message;
+    nameInput?.classList.toggle("is-invalid", Boolean(message));
+    nameInput?.setAttribute("aria-invalid", message ? "true" : "false");
+    nameInput?.focus();
+  };
+  nameInput?.addEventListener("input", () => {
+    if (!errorBox?.hidden) showNameError("");
+  });
   $("#offline-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const name = $("#offline-name").value.trim();
-    if (!/^[A-Za-z0-9_]{3,16}$/.test(name)) return toast(t("errors.badName"), "err");
+    const name = nameInput.value.trim();
+    if (!/^[A-Za-z0-9_]{3,16}$/.test(name)) {
+      showNameError(t("errors.badName"));
+      return;
+    }
+    showNameError("");
     try {
       await invoke("add_offline_account", { name });
-      $("#offline-name").value = "";
+      nameInput.value = "";
       await refreshBoot();
       renderAll();
       toast(t("toast.accountAdded"));
@@ -3237,13 +3288,24 @@ function fillSettings() {
   $("#jvm-args").value = s.jvmArgs || "";
   $("#java-path").value = s.javaPath || "";
   $("#game-dir").textContent = S.boot?.gameDir || "—";
-  $("#save-state").textContent = S.dirty ? t("settings.unsaved") : t("settings.savedState");
-  $("#save-state").classList.toggle("is-dirty", S.dirty);
+  const saveState = $("#save-state");
+  if (saveState) {
+    saveState.textContent = S.dirty ? t("settings.unsaved") : t("settings.savedState");
+    saveState.classList.toggle("is-dirty", S.dirty);
+  }
   renderOrderEditors();
   fillDiscoverVersions();
   planDiscoverVisibility();
   renderModHealth();
   renderSystem();
+  const javaResult = $("#java-result");
+  if (javaResult && (!javaResult.textContent.trim() || javaResult.textContent.trim() === "-")) {
+    javaResult.textContent = t("set.javaUnknown");
+  }
+  const connection = $("#connection-state");
+  if (connection && (!connection.textContent.trim() || connection.textContent.trim() === "-")) {
+    connection.textContent = t("set.connUnknown");
+  }
 }
 
 function setSegmented(selector, attr, value) {
@@ -3415,7 +3477,7 @@ function renderOrderList(host, items, labelOf, onChange) {
 
 async function checkUpdate(manual = false) {
   const state = $("#update-state");
-  if (manual && state) state.textContent = t("common.loading");
+  if (manual && state) state.textContent = t("update.checking");
   try {
     const info = await invoke("check_update");
     S.update = info;
@@ -3428,8 +3490,8 @@ async function checkUpdate(manual = false) {
       if (manual) toast(t("update.available", { version: `v${info.latest}` }));
       if (S.settings?.autoUpdate && info.asset) downloadUpdate(true);
     } else {
-      if (state) state.textContent = t("update.latest");
-      if (manual) toast(t("update.latest"));
+      if (state) state.textContent = t("update.none");
+      if (manual) toast(t("update.none"));
     }
   } catch {
     if (state) state.textContent = t("update.failed");
@@ -3491,7 +3553,7 @@ function bindSettings() {
     const tab = e.target.closest("[data-tab]");
     if (tab) activateTab(tab.dataset.tab);
   });
-  $("#settings-save").addEventListener("click", saveSettings);
+  $("#settings-save")?.addEventListener("click", saveSettings);
   $("#language-select").addEventListener("change", (e) => {
     S.settings.language = e.target.value;
     i18n.init(e.target.value);
@@ -3801,8 +3863,10 @@ async function saveSettings() {
     }
     await refreshBoot();
     toast(t("toast.saved"));
+    return true;
   } catch (err) {
     toast(friendly(err), "err");
+    return false;
   }
 }
 
@@ -3973,8 +4037,12 @@ function bindDiscover() {
     renderDiscoverActive();
     searchDiscover(true);
   });
-  $("#discover-hide-installed")?.addEventListener("change", (e) => {
-    S.hideInstalled = e.target.checked;
+  $("#discover-hide-installed")?.addEventListener("click", (e) => {
+    const btn = e.currentTarget;
+    const next = btn.getAttribute("aria-checked") !== "true";
+    btn.setAttribute("aria-checked", next ? "true" : "false");
+    btn.classList.toggle("is-on", next);
+    S.hideInstalled = next;
     renderDiscoverResults();
   });
   $("#discover-cat-mode").addEventListener("click", (e) => {
@@ -4130,56 +4198,121 @@ function bindDiscover() {
 
 /* ------------------------------------------------------------------ modal */
 
-function openModal(html, bind, wide = false) {
-  const root = $("#modal-root");
-  root.innerHTML = `<div class="modal ${wide ? "modal-wide" : ""}">${html}</div>`;
-  root.hidden = false;
-  root.onclick = (e) => {
-    if (e.target === root) closeModal();
-  };
-  $$("[data-close]", root).forEach((el) => el.addEventListener("click", closeModal));
-  $$("[data-close-cancel]", root).forEach((el) => el.addEventListener("click", async () => {
-    try { await invoke("ms_cancel"); } catch {}
-    closeModal();
-  }));
-  bind?.();
+let modalOpener = null;
+let modalOnClose = null;
+let modalKeyHandler = null;
+
+function modalFocusables(root) {
+  return [...root.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')];
 }
 
-function closeModal() {
+function openModal(html, bind, wide = false, onClose = null) {
   const root = $("#modal-root");
+  if (!root) return;
+  if (modalOnClose) closeModal("replace");
+  modalOpener = document.activeElement;
+  modalOnClose = onClose;
+  root.innerHTML = `<div class="modal ${wide ? "modal-wide" : ""}" role="dialog" aria-modal="true" tabindex="-1">${html}</div>`;
+  const panel = root.firstElementChild;
+  const title = panel.querySelector("h1,h2,h3");
+  if (title) {
+    if (!title.id) title.id = `modal-title-${Date.now()}`;
+    panel.setAttribute("aria-labelledby", title.id);
+  }
+  root.hidden = false;
+  document.body.classList.add("modal-open");
+  root.onclick = (e) => { if (e.target === root) closeModal("dismiss"); };
+  $$("[data-close]", root).forEach((el) => el.addEventListener("click", () => closeModal("dismiss")));
+  $$("[data-close-cancel]", root).forEach((el) => el.addEventListener("click", () => closeModal("dismiss")));
+  const shell = $(".shell");
+  if (shell) { shell.inert = true; shell.setAttribute("aria-hidden", "true"); }
+  modalKeyHandler = (e) => {
+    if (root.hidden) return;
+    if (e.key === "Tab") {
+      const items = modalFocusables(panel);
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeModal("dismiss");
+    }
+  };
+  document.addEventListener("keydown", modalKeyHandler, true);
+  bind?.();
+  const items = modalFocusables(panel);
+  (items[0] || panel).focus();
+}
+
+function closeModal(reason = "close") {
+  const root = $("#modal-root");
+  if (!root) return;
+  if (modalKeyHandler) document.removeEventListener("keydown", modalKeyHandler, true);
+  modalKeyHandler = null;
   root.hidden = true;
   root.innerHTML = "";
   root.onclick = null;
+  document.body.classList.remove("modal-open");
+  const shell = $(".shell");
+  if (shell) { shell.inert = false; shell.removeAttribute("aria-hidden"); }
+  try { invoke("ms_cancel"); } catch {}
+  const done = modalOnClose;
+  modalOnClose = null;
+  done?.(reason);
+  const opener = modalOpener;
+  modalOpener = null;
+  if (opener && typeof opener.focus === "function" && document.contains(opener)) {
+    setTimeout(() => opener.focus(), 0);
+  }
 }
 
 function confirmAction(title, text, label) {
   return new Promise((resolve) => {
-    const root = $("#modal-root");
-    root.innerHTML = `<div class="modal"><h3>${esc(title)}</h3><p>${esc(text)}</p>
-      <div class="modal-actions"><button class="btn btn-quiet" id="confirm-cancel">${esc(t("common.cancel"))}</button><button class="btn btn-danger" id="confirm-ok">${esc(label)}</button></div></div>`;
-    root.hidden = false;
-    const done = (value) => {
-      root.hidden = true;
-      root.innerHTML = "";
-      root.onclick = null;
-      resolve(value);
-    };
-    root.onclick = (e) => { if (e.target === root) done(false); };
-    $("#confirm-cancel").addEventListener("click", () => done(false));
-    $("#confirm-ok").addEventListener("click", () => done(true));
+    openModal(`<h3>${esc(title)}</h3><p>${esc(text)}</p>
+      <div class="modal-actions"><button class="btn btn-quiet" id="confirm-cancel">${esc(t("common.cancel"))}</button><button class="btn btn-danger" id="confirm-ok">${esc(label)}</button></div>`,
+      () => {
+        $("#confirm-cancel").addEventListener("click", () => closeModal(false));
+        $("#confirm-ok").addEventListener("click", () => closeModal(true));
+      }, false, (result) => resolve(result === true));
+  });
+}
+
+function dirtyChoice() {
+  return new Promise((resolve) => {
+    openModal(`<h3>${esc(t("settings.unsaved"))}</h3><p>${esc(t("settings.unsavedHint"))}</p>
+      <div class="modal-actions modal-actions-wrap">
+        <button class="btn btn-quiet" id="dirty-stay">${esc(t("settings.stay"))}</button>
+        <button class="btn btn-soft" id="dirty-leave">${esc(t("settings.leave"))}</button>
+        <button class="btn btn-primary" id="dirty-save-exit">${esc(t("settings.saveAndLeave"))}</button>
+      </div>`,
+      () => {
+        $("#dirty-stay").addEventListener("click", () => closeModal("stay"));
+        $("#dirty-leave").addEventListener("click", () => closeModal("discard"));
+        $("#dirty-save-exit").addEventListener("click", () => closeModal("save"));
+      }, false, (result) => resolve(result || "stay"));
   });
 }
 
 /* ------------------------------------------------------------------ navigation */
 
-function go(page, tab) {
+async function go(page, tab) {
   if (!page) return;
-  if (page !== "pack") $("#page-pack")?.classList.remove("is-catalog");
   if (S.dirty && S.page === "settings" && page !== "settings") {
     showDirtyBar(true);
-    toast(t("settings.unsavedHint"), "warn");
-    return;
+    const choice = await dirtyChoice();
+    if (choice === "stay") return;
+    if (choice === "save") {
+      const ok = await saveSettings();
+      if (!ok) return;
+    } else {
+      await discardSettings();
+    }
   }
+  if (page !== "pack") $("#page-pack")?.classList.remove("is-catalog");
   S.page = page;
   $$(".page").forEach((el) => { el.hidden = el.dataset.page !== page; });
   $$("[data-nav]").forEach((el) => el.classList.toggle("is-on", el.dataset.nav === page));
