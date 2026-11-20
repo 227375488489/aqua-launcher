@@ -334,6 +334,10 @@ impl Config {
 pub struct GameHandle {
     pub version: String,
     pub pid: u32,
+    pub account: String,
+    pub profile: Option<String>,
+    pub read_only: bool,
+    pub temp_dir: Option<std::path::PathBuf>,
 }
 
 pub struct AppState {

@@ -54,18 +54,19 @@ jobs:
           tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
           releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('Aqua Launcher {0}', github.ref_name) || '' }}
           releaseBody: |
-            Aqua Launcher 0.0.11 Beta — a fast, open Minecraft launcher built with Rust and Tauri.
+            Aqua Launcher 0.0.12 Beta - a fast, open Minecraft launcher built with Rust and Tauri.
 
-            - Modrinth-style catalog: sticky filter sidebar, dense project rows, "Install to an instance" picker with compatible instances
-            - Add content is an in-pack catalog with a back crumb, pack block icon and locked Minecraft version/loader
-            - Pack page header rebuilt: block cover, install status, Play, and Content / Files / Worlds / Logs / Share tabs
-            - Create-pack dialog with generated isometric block art, Randomize and Upload, loader pills and loader version choice
-            - Achievements replace Accounts in the rail: 16 simple and hard goals, progress rings and a dedicated page
-            - Multi-launch: start another copy from a running pack with a save-conflict warning (issue #15)
-            - Built-in Discord application 1573083334517723146; the client ID field is gone and presence is on by default
-            - MCP bridge and agent skill in agent/ for Claude Code, Codex and other agents (issue #16)
-            - README rewritten as a description with links; release notes now live on GitHub Releases (issue #17)
-            - Fixes all issues from 0.0.10 (#3-#14): rail without overlay, one-line pack rows, modal focus trap, dirty-settings dialog, inline account errors
+            - Pack page rebuilt around a Modrinth-style header: block cover, health status, Play, gear settings and a compact menu
+            - Pack health checks missing dependencies, disabled mods, loader mismatches and pending files, with a detailed report
+            - "Update all" now really updates every installed mod from Modrinth and cleans up the replaced jars
+            - Multi-launch: pick the account, run a temporary read-only copy, see all running copies and stop them one by one
+            - Library installs are compact and calm; Play stays the only accent action, with clear empty-state actions
+            - Lightbox with captions, thumbnails, zoom and pan, keyboard and dialog accessibility
+            - Markdown and HTML project descriptions render correctly, including images, tables, lists and video
+            - Catalog and appearance fixes: filter sidebar, live theme previews, custom accent HEX, clipped swatches
+            - Create-pack dialog fully localized; settings reset scroll on tab change; in-pack add header stays visible
+            - AI agent bridge in Settings: connect Claude Code, Codex or Hermes, test the MCP server, see its path
+            - All reported issues #18-#32 fixed; built-in Discord application 1573083334517723146
             - 12 languages; Windows, macOS (universal) and Linux builds
           releaseDraft: false
           prerelease: ${{ startsWith(github.ref_name, 'v0.') }}

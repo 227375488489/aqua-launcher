@@ -267,8 +267,34 @@ pub async fn mods_repair(
 }
 
 #[tauri::command]
+pub async fn mods_update(
+    state: State<'_, AppState>,
+    version: String,
+    loader: String,
+    profile: Option<String>,
+) -> Result<mods::UpdateReport, String> {
+    let cfg = state.snapshot();
+    let root = profile
+        .as_deref()
+        .and_then(|id| cfg.profile(id))
+        .map(|p| cfg.profile_root(p))
+        .unwrap_or_else(|| cfg.active_root());
+    let workers = cfg.settings.download_workers as usize;
+    let progress = std::sync::Arc::new(|_: usize, _: u64| {});
+    Ok(mods::update_all(&state.http, &root, &version, &loader, workers, progress).await)
+}
+
+#[tauri::command]
 pub fn mods_health(state: State<'_, AppState>) -> mods::Health {
     mods::health(&state.snapshot().active_root())
+}
+
+#[tauri::command]
+pub fn profile_health(state: State<'_, AppState>, id: String) -> Result<mods::ProfileHealth, String> {
+    let cfg = state.snapshot();
+    let profile = cfg.profile(&id).ok_or("profile_not_found")?;
+    let root = cfg.profile_root(&profile);
+    Ok(mods::profile_health(&root, &profile.loader))
 }
 
 #[tauri::command]
@@ -325,13 +351,59 @@ fn reader<R: std::io::Read + Send + 'static>(app: AppHandle, stream: R) -> std::
     })
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameSession {
+    pub pid: u32,
+    pub version: String,
+    pub account: String,
+    pub profile: Option<String>,
+    pub read_only: bool,
+}
+
+/// Copy a game folder for a read-only session: files are hard-linked when
+/// possible so mods/config load instantly, worlds are copied so changes can
+/// be thrown away on exit.
+fn clone_tree(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if matches!(name.as_str(), "logs" | "crash-reports" | "screenshots") {
+            continue;
+        }
+        let from = entry.path();
+        let to = dst.join(&name);
+        if from.is_dir() {
+            clone_tree(&from, &to)?;
+        } else if std::fs::hard_link(&from, &to).is_err() {
+            std::fs::copy(&from, &to)?;
+        }
+    }
+    Ok(())
+}
+
+fn readonly_dir(root: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let dir = crate::paths::data_dir()
+        .join("readonly")
+        .join(format!("session-{stamp}"));
+    clone_tree(root, &dir).map_err(|e| format!("Не удалось подготовить режим только чтения: {e}"))?;
+    Ok(dir)
+}
+
 #[tauri::command]
 pub async fn launch(
     app: AppHandle,
     state: State<'_, AppState>,
     id: String,
     parallel: Option<bool>,
-) -> Result<(), String> {
+    account_id: Option<String>,
+    read_only: Option<bool>,
+) -> Result<u32, String> {
     let cfg = state.snapshot();
     let root = cfg.game_root();
 
@@ -342,9 +414,10 @@ pub async fn launch(
         return Err("Версия не установлена. Сначала нажмите «Установить».".into());
     }
 
-    let mut account = cfg
-        .active_account()
-        .cloned()
+    let mut account = account_id
+        .as_deref()
+        .and_then(|wanted| cfg.accounts.iter().find(|a| a.id == wanted).cloned())
+        .or_else(|| cfg.active_account().cloned())
         .ok_or_else(|| "Сначала добавьте аккаунт".to_string())?;
 
     if account.kind == "microsoft" && account.is_expired() {
@@ -362,10 +435,18 @@ pub async fn launch(
 
     let (meta, jar_version) = version::resolve(&root, &id).map_err(|e| e.to_string())?;
     let profile = cfg.active_profile().filter(|p| p.version_id == id);
-    let game_dir = profile
+    let base_dir = profile
         .map(|p| cfg.profile_root(p))
         .unwrap_or_else(|| root.clone());
-    let _ = crate::paths::ensure_dir(&game_dir);
+    let _ = crate::paths::ensure_dir(&base_dir);
+
+    let only_read = read_only == Some(true);
+    let (game_dir, temp_dir) = if only_read {
+        let temp = readonly_dir(&base_dir)?;
+        (temp.clone(), Some(temp))
+    } else {
+        (base_dir.clone(), None)
+    };
 
     if cfg.settings.auto_repair && !mods::health(&game_dir).missing.is_empty() {
         let loader = profile
@@ -432,15 +513,19 @@ pub async fn launch(
         .spawn()
         .map_err(|e| format!("Не удалось запустить Java: {e}"))?;
     let pid = child.id();
+    let account_name = account.name.clone();
 
     let out = child.stdout.take().map(|s| reader(app.clone(), s));
     let err = child.stderr.take().map(|s| reader(app.clone(), s));
 
-    state
-        .game
-        .lock()
-        .unwrap()
-        .push(GameHandle { version: id.clone(), pid });
+    state.game.lock().unwrap().push(GameHandle {
+        version: id.clone(),
+        pid,
+        account: account_name.clone(),
+        profile: profile.map(|p| p.id.clone()),
+        read_only: only_read,
+        temp_dir: temp_dir.clone(),
+    });
     state
         .play_started
         .lock()
@@ -458,7 +543,15 @@ pub async fn launch(
         }
     });
 
-    let _ = app.emit("game://started", id.clone());
+    let _ = app.emit(
+        "game://started",
+        serde_json::json!({
+            "id": id,
+            "pid": pid,
+            "account": account_name,
+            "readOnly": only_read,
+        }),
+    );
 
     let app_exit = app.clone();
     let version = id.clone();
@@ -475,6 +568,9 @@ pub async fn launch(
         let mut guard = state.game.lock().unwrap();
         guard.retain(|g| g.pid != pid);
         drop(guard);
+        if let Some(dir) = temp_dir {
+            let _ = std::fs::remove_dir_all(dir);
+        }
         let secs = state
             .play_started
             .lock()
@@ -484,15 +580,42 @@ pub async fn launch(
             .map(|(_, at)| at.elapsed().as_secs())
             .unwrap_or(0);
         let _ = state.update(|c| c.stats.add_session(&version, secs.max(1)));
-        let _ = app_exit.emit("game://exit", serde_json::json!({ "code": code, "version": version }));
+        let _ = app_exit.emit(
+            "game://exit",
+            serde_json::json!({ "code": code, "version": version, "pid": pid }),
+        );
     });
 
-    Ok(())
+    Ok(pid)
 }
 
 #[tauri::command]
-pub fn stop_game(state: State<'_, AppState>) -> Result<(), String> {
-    let pids: Vec<u32> = state.game.lock().unwrap().iter().map(|g| g.pid).collect();
+pub fn game_sessions(state: State<'_, AppState>) -> Vec<GameSession> {
+    state
+        .game
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|g| GameSession {
+            pid: g.pid,
+            version: g.version.clone(),
+            account: g.account.clone(),
+            profile: g.profile.clone(),
+            read_only: g.read_only,
+        })
+        .collect()
+}
+
+#[tauri::command]
+pub fn stop_game(state: State<'_, AppState>, pid: Option<u32>) -> Result<(), String> {
+    let pids: Vec<u32> = state
+        .game
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|g| pid.map_or(true, |only| only == g.pid))
+        .map(|g| g.pid)
+        .collect();
     for pid in pids {
         #[cfg(windows)]
         {
@@ -2507,6 +2630,167 @@ fn version_greater(a: &str, b: &str) -> bool {
         }
     }
     false
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentStatus {
+    pub node: bool,
+    pub script: bool,
+    pub script_path: String,
+    pub claude: bool,
+    pub codex: bool,
+    pub hermes: bool,
+}
+
+fn agent_script(app: &AppHandle) -> std::path::PathBuf {
+    let mut candidates = Vec::new();
+    if let Ok(dir) = app.path().resource_dir() {
+        candidates.push(dir.join("agent").join("aqua-mcp.mjs"));
+        candidates.push(dir.join("aqua-mcp.mjs"));
+        candidates.push(dir.join("resources").join("agent").join("aqua-mcp.mjs"));
+    }
+    if let Ok(dir) = std::env::current_dir() {
+        candidates.push(dir.join("agent").join("aqua-mcp.mjs"));
+        candidates.push(dir.join("..").join("agent").join("aqua-mcp.mjs"));
+    }
+    candidates
+        .into_iter()
+        .find(|path| path.exists())
+        .unwrap_or_else(|| std::path::PathBuf::from("agent/aqua-mcp.mjs"))
+}
+
+fn write_backup(path: &std::path::Path, body: &str) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    if path.exists() {
+        let backup = path.with_extension(format!(
+            "{}.aqua-bak",
+            path.extension().and_then(|v| v.to_str()).unwrap_or("txt")
+        ));
+        let _ = std::fs::copy(path, backup);
+    }
+    std::fs::write(path, body).map_err(|e| e.to_string())
+}
+
+fn agent_config_path(tool: &str) -> Result<std::path::PathBuf, String> {
+    let home = dirs::home_dir().ok_or("no home directory")?;
+    Ok(match tool {
+        "claude" => home.join(".claude.json"),
+        "codex" => home.join(".codex").join("config.toml"),
+        "hermes" => home.join(".hermes").join("mcp.json"),
+        _ => return Err("agent_unknown".into()),
+    })
+}
+
+#[tauri::command]
+pub fn agent_status(app: AppHandle) -> AgentStatus {
+    let script = agent_script(&app);
+    let node = std::process::Command::new(if cfg!(windows) { "node.exe" } else { "node" })
+        .arg("--version")
+        .output()
+        .map(|out| out.status.success())
+        .unwrap_or(false);
+    let home = dirs::home_dir();
+    let claude = home.as_ref().map(|h| h.join(".claude.json").exists()).unwrap_or(false);
+    let codex = home
+        .as_ref()
+        .map(|h| h.join(".codex").join("config.toml").exists())
+        .unwrap_or(false);
+    let hermes = home
+        .as_ref()
+        .map(|h| h.join(".hermes").join("mcp.json").exists())
+        .unwrap_or(false);
+    AgentStatus {
+        node,
+        script: script.exists(),
+        script_path: script.display().to_string(),
+        claude,
+        codex,
+        hermes,
+    }
+}
+
+#[tauri::command]
+pub fn agent_connect(app: AppHandle, tool: String) -> Result<String, String> {
+    let script = agent_script(&app);
+    if !script.exists() {
+        return Err("agent_script_missing".into());
+    }
+    let path = agent_config_path(&tool)?;
+    let script_text = script.display().to_string().replace('\\', "/");
+    match tool.as_str() {
+        "claude" => {
+            let mut root: serde_json::Value = std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|text| serde_json::from_str(&text).ok())
+                .unwrap_or_else(|| serde_json::json!({}));
+            if !root.is_object() {
+                root = serde_json::json!({});
+            }
+            let servers = root
+                .as_object_mut()
+                .unwrap()
+                .entry("mcpServers")
+                .or_insert_with(|| serde_json::json!({}));
+            servers[&"aqua-launcher"] = serde_json::json!({
+                "command": "node",
+                "args": [script_text],
+            });
+            let body = serde_json::to_string_pretty(&root).map_err(|e| e.to_string())?;
+            write_backup(&path, &body)?;
+        }
+        "codex" => {
+            let mut body = std::fs::read_to_string(&path).unwrap_or_default();
+            if !body.contains("[mcp_servers.aqua-launcher]") {
+                body.push_str(&format!(
+                    "\n[mcp_servers.aqua-launcher]\ncommand = \"node\"\nargs = [\"{}\"]\n",
+                    script_text
+                ));
+            }
+            write_backup(&path, &body)?;
+        }
+        "hermes" => {
+            let body = serde_json::json!({
+                "mcpServers": {
+                    "aqua-launcher": { "command": "node", "args": [script_text] }
+                }
+            });
+            write_backup(&path, &serde_json::to_string_pretty(&body).map_err(|e| e.to_string())?)?;
+        }
+        _ => return Err("agent_unknown".into()),
+    }
+    if let Some(home) = dirs::home_dir() {
+        if let Ok(skill) = std::fs::read(script.with_file_name("SKILL.md")) {
+            let dir = match tool.as_str() {
+                "codex" => home.join(".codex").join("skills").join("aqua-launcher"),
+                "hermes" => home.join(".hermes").join("skills").join("aqua-launcher"),
+                _ => home.join(".claude").join("skills").join("aqua-launcher"),
+            };
+            let _ = std::fs::create_dir_all(&dir);
+            let _ = std::fs::write(dir.join("SKILL.md"), skill);
+        }
+    }
+    Ok(path.display().to_string())
+}
+
+#[tauri::command]
+pub fn agent_test(app: AppHandle) -> Result<String, String> {
+    let script = agent_script(&app);
+    if !script.exists() {
+        return Err("agent_script_missing".into());
+    }
+    let out = std::process::Command::new(if cfg!(windows) { "node.exe" } else { "node" })
+        .arg("--check")
+        .arg(&script)
+        .output()
+        .map_err(|_| "agent_node_missing".to_string())?;
+    if out.status.success() {
+        Ok("ok".into())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).into_owned())
+    }
 }
 
 #[tauri::command]

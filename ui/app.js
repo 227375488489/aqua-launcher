@@ -12,8 +12,8 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const APP_VERSION = "0.0.11-beta";
-const APP_LABEL = "0.0.11 Beta";
+const APP_VERSION = "0.0.12-beta";
+const APP_LABEL = "0.0.12 Beta";
 const NAV_DEFAULT = ["home", "library", "instances", "discover", "accounts"];
 const WIDGET_DEFAULT = ["stats", "achievements", "pc", "latest", "instances", "console"];
 const LINKS = {
@@ -181,6 +181,7 @@ const S = {
   hideInstalled: false,
   savedSettings: null,
   running: null,
+  sessions: [],
   launching: false,
   installing: new Set(),
   dirty: false,
@@ -889,7 +890,7 @@ function syncPlay() {
   let iconName = "i-play";
   let text = t("common.play");
   if (S.running) {
-    text = t("common.stop");
+    text = S.sessions.length > 1 ? `${t("common.stop")} · ${S.sessions.length}` : t("common.stop");
     iconName = "i-stop";
   } else if (S.launching) {
     text = t("common.launching");
@@ -1166,9 +1167,9 @@ function renderLibrary() {
         </div>
         <div class="vcard-actions">
           ${installed
-            ? `<button class="btn btn-soft" data-lib-play="${esc(v.id)}"><svg class="ico"><use href="#i-play"></use></svg><span>${esc(t("common.play"))}</span></button>
-               <button class="btn btn-quiet icon-only" data-lib-delete="${esc(v.id)}" title="${esc(t("common.delete"))}"><svg class="ico"><use href="#i-trash"></use></svg></button>`
-            : `<button class="btn btn-soft" data-lib-install="${esc(v.id)}"><svg class="ico"><use href="#i-download"></use></svg><span>${esc(S.installing.has(v.id) ? t("common.installing") : t("common.install"))}</span></button>`}
+            ? `<button class="btn btn-primary btn-sm" data-lib-play="${esc(v.id)}"><svg class="ico"><use href="#i-play"></use></svg><span>${esc(t("common.play"))}</span></button>
+               <button class="btn btn-quiet icon-only" data-lib-delete="${esc(v.id)}" title="${esc(t("common.delete"))}" aria-label="${esc(t("common.delete"))}"><svg class="ico"><use href="#i-trash"></use></svg></button>`
+            : `<button class="btn btn-soft btn-sm vcard-install" data-lib-install="${esc(v.id)}" aria-label="${esc(t("common.install"))}"><svg class="ico"><use href="#i-download"></use></svg><span>${esc(S.installing.has(v.id) ? t("common.installing") : t("common.install"))}</span></button>`}
         </div>
       </div>
     </article>`;
@@ -1326,19 +1327,7 @@ async function launchSelected() {
     toast(t("toast.launched"));
   } catch (err) {
     if (String(err).includes("game_running")) {
-      const proceed = await confirmAction(
-        t("launch.parallelTitle"),
-        t("launch.parallelText"),
-        t("launch.parallelRun")
-      );
-      if (proceed) {
-        try {
-          await invoke("launch", { id: S.selected, parallel: true });
-          toast(t("toast.launched"));
-        } catch (second) {
-          toast(friendly(second), "err");
-        }
-      }
+      openParallelLaunch();
     } else {
       toast(friendly(err), "err");
     }
@@ -1348,13 +1337,88 @@ async function launchSelected() {
   }
 }
 
+async function refreshSessions() {
+  try {
+    const list = await invoke("game_sessions");
+    if (Array.isArray(list)) {
+      S.sessions = list;
+      S.running = list[0]?.version || null;
+      syncPlay();
+    }
+  } catch { /* older backend */ }
+  return S.sessions;
+}
+
+function openParallelLaunch() {
+  const accounts = S.accounts || [];
+  const active = accountById(S.active) || accounts[0];
+  openModal(`<h3>${esc(t("launch.parallelTitle"))}</h3>
+    <p>${esc(t("launch.parallelText"))}</p>
+    <div class="pl-grid">
+      <label class="cp-label">${esc(t("launch.account"))}</label>
+      <label class="select-inline wide"><select id="pl-account">${accounts.map((a) => `<option value="${esc(a.id)}" ${a.id === active?.id ? "selected" : ""}>${esc(a.name)}${a.kind === "microsoft" ? " · Microsoft" : ""}</option>`).join("")}</select><svg class="ico"><use href="#i-chevron"></use></svg></label>
+      <span></span>
+      <label class="pl-check"><input type="checkbox" id="pl-readonly"><span><b>${esc(t("launch.readOnly"))}</b><small>${esc(t("launch.readOnlyHint"))}</small></span></label>
+    </div>
+    <div class="notice warn">${ico("i-alert")}<span>${esc(t("launch.parallelWarn"))}</span></div>
+    <div class="modal-actions"><button class="btn btn-quiet" data-close>${esc(t("common.cancel"))}</button><button class="btn btn-primary" id="pl-start">${esc(t("launch.parallelRun"))}</button></div>`, () => {
+    $("#pl-start").addEventListener("click", async () => {
+      const accountId = $("#pl-account")?.value || "";
+      const readOnly = $("#pl-readonly")?.checked || false;
+      closeModal();
+      S.launching = true;
+      syncPlay();
+      try {
+        await invoke("launch", { id: S.selected, parallel: true, accountId, readOnly });
+        toast(t("toast.launched"));
+        await refreshSessions();
+      } catch (err) {
+        toast(friendly(err), "err");
+      } finally {
+        S.launching = false;
+        syncPlay();
+      }
+    });
+  });
+}
+
+async function openSessions() {
+  await refreshSessions();
+  const rows = S.sessions.map((s) => `<div class="session-row">
+    <span class="session-ico">${ico("i-gamepad")}</span>
+    <div class="session-main"><b>${esc(s.profile ? profileById(s.profile)?.name || s.version : s.version)}</b><small>${esc(s.version)} · ${esc(s.account || "—")}${s.readOnly ? ` · ${esc(t("launch.readOnlyTag"))}` : ""}</small></div>
+    <button class="btn btn-quiet btn-sm" data-stop="${s.pid}">${ico("i-stop")}<span>${esc(t("launch.stopOne"))}</span></button>
+  </div>`).join("") || `<p class="muted">${esc(t("launch.noSessions"))}</p>`;
+  openModal(`<h3>${esc(t("launch.sessionsTitle"))}</h3>
+    <p>${esc(t("launch.sessionsText"))}</p>
+    <div class="session-list">${rows}</div>
+    <div class="modal-actions"><button class="btn btn-quiet" data-close>${esc(t("common.close"))}</button>${S.sessions.length ? `<button class="btn btn-danger" id="sessions-stop-all">${esc(t("launch.stopAll"))}</button>` : ""}</div>`, () => {
+    $$("[data-stop]").forEach((btn) => btn.addEventListener("click", async () => {
+      try {
+        await invoke("stop_game", { pid: Number(btn.dataset.stop) });
+        closeModal();
+        toast(t("launch.stopped"));
+      } catch (err) {
+        toast(friendly(err), "err");
+      }
+    }));
+    $("#sessions-stop-all")?.addEventListener("click", async () => {
+      try {
+        await invoke("stop_game");
+        S.sessions = [];
+        S.running = null;
+        closeModal();
+        syncPlay();
+      } catch (err) {
+        toast(friendly(err), "err");
+      }
+    });
+  });
+}
+
 async function handlePlay() {
   if (S.running) {
-    try {
-      await invoke("stop_game");
-    } catch (err) {
-      toast(friendly(err), "err");
-    }
+    await openSessions();
     return;
   }
   if (!S.selected || S.launching) return;
@@ -1758,6 +1822,7 @@ function sanitizeHtml(html) {
     "P", "BR", "HR", "H1", "H2", "H3", "H4", "H5", "H6", "UL", "OL", "LI",
     "STRONG", "EM", "B", "I", "U", "S", "CODE", "PRE", "BLOCKQUOTE", "A", "IMG",
     "TABLE", "THEAD", "TBODY", "TR", "TD", "TH", "DIV", "SPAN", "DETAILS", "SUMMARY",
+    "VIDEO", "SOURCE", "FIGCAPTION", "FIGURE", "SMALL", "CENTER",
   ]);
   const clean = (node) => {
     [...node.childNodes].forEach((child) => {
@@ -1771,13 +1836,17 @@ function sanitizeHtml(html) {
       }
       [...child.attributes].forEach((attr) => {
         const name = attr.name.toLowerCase();
-        const keep = name === "href" || name === "src" || name === "alt" || name === "title";
+        const keep = ["href", "src", "alt", "title", "width", "height", "controls", "poster", "colspan", "rowspan", "start"].includes(name);
         if (!keep || name.startsWith("on")) child.removeAttribute(attr.name);
       });
       if (tag === "A") {
         const href = child.getAttribute("href") || "";
         if (!/^https?:\/\//i.test(href)) child.removeAttribute("href");
-        else child.setAttribute("data-ext", href);
+        else {
+          child.setAttribute("data-ext", href);
+          child.setAttribute("target", "_blank");
+          child.setAttribute("rel", "noopener noreferrer");
+        }
       }
       if (tag === "IMG") {
         const src = child.getAttribute("src") || "";
@@ -1787,6 +1856,11 @@ function sanitizeHtml(html) {
           child.setAttribute("data-seed", child.getAttribute("alt") || "project");
         }
       }
+      if (tag === "VIDEO" || tag === "SOURCE") {
+        const src = child.getAttribute("src") || "";
+        if (src && !/^https?:\/\//i.test(src)) child.removeAttribute("src");
+      }
+      if (tag === "VIDEO") child.setAttribute("controls", "");
       clean(child);
     });
   };
@@ -1795,62 +1869,210 @@ function sanitizeHtml(html) {
 }
 
 function mdToHtml(markdown) {
-  const source = String(markdown || "");
-  if (/<(p|div|h[1-6]|ul|ol|li|img|table|br|blockquote)\b/i.test(source)) return sanitizeHtml(source);
-  const lines = source.split(/\r?\n/);
+  const source = String(markdown || "").replace(/\r\n?/g, "\n").trim();
+  if (!source) return "";
+  const blockTag = /^<\/?(p|div|h[1-6]|ul|ol|li|table|thead|tbody|tr|td|th|blockquote|pre|details|summary|figure|figcaption|video|img|hr|br)\b/i;
   const out = [];
-  let list = false;
-  const closeList = () => { if (list) { out.push("</ul>"); list = false; } };
-  const inline = (text) => esc(text)
-    .replace(/!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, '<img src="$2" alt="$1" loading="lazy" data-seed="$1">')
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" data-ext="$2">$1</a>')
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line) { closeList(); continue; }
-    if (/^#{1,3}\s/.test(line)) {
-      closeList();
-      const level = line.match(/^#+/)[0].length;
-      out.push(`<h${level + 2}>${inline(line.replace(/^#+\s*/, ""))}</h${level + 2}>`);
-    } else if (/^[-*]\s/.test(line)) {
-      if (!list) { out.push("<ul>"); list = true; }
-      out.push(`<li>${inline(line.replace(/^[-*]\s*/, ""))}</li>`);
+  const md = [];
+  const html = [];
+  let htmlDepth = 0;
+  const flushMd = () => {
+    if (!md.length) return;
+    out.push(markdownBlocks(md.splice(0)));
+  };
+  const flushHtml = () => {
+    if (!html.length) return;
+    out.push(sanitizeHtml(html.splice(0).join("\n")));
+    htmlDepth = 0;
+  };
+  for (const line of source.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      if (htmlDepth > 0) html.push(line);
+      else {
+        flushHtml();
+        md.push(line);
+      }
+      continue;
+    }
+    if (blockTag.test(trimmed)) {
+      flushMd();
+      const opens = (trimmed.match(/<(?!\/)[a-z][\w-]*[^>]*>/gi) || []).length;
+      const closes = (trimmed.match(/<\/[a-z][\w-]*>/gi) || []).length;
+      const self = /\/>$/.test(trimmed);
+      if (opens && !self) htmlDepth += opens - closes;
+      else if (closes) htmlDepth = Math.max(0, htmlDepth - closes);
+      html.push(line);
+      if (htmlDepth <= 0) flushHtml();
     } else {
-      closeList();
-      out.push(`<p>${inline(line)}</p>`);
+      flushHtml();
+      md.push(line);
     }
   }
-  closeList();
+  flushMd();
+  flushHtml();
+  return out.join("\n");
+}
+
+function markdownInline(raw) {
+  const codes = [];
+  let text = esc(raw).replace(/`([^`]+)`/g, (_, code) => {
+    codes.push(`<code>${code}</code>`);
+    return `\u0000${codes.length - 1}\u0000`;
+  });
+  text = text
+    .replace(/!\[([^\]]*)\]\((https?:\/\/[^)\s]+)(?:\s+"[^"]*")?\)/g, '<img src="$2" alt="$1" loading="lazy" data-seed="$1">')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)(?:\s+"[^"]*")?\)/g, '<a href="$2" data-ext="$2">$1</a>')
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+    .replace(/__([^_]+)__/g, "<b>$1</b>")
+    .replace(/\*([^*]+)\*/g, "<i>$1</i>")
+    .replace(/~~([^~]+)~~/g, "<s>$1</s>");
+  return text.replace(/\u0000(\d+)\u0000/g, (_, n) => codes[Number(n)]);
+}
+
+function markdownBlocks(lines) {
+  const out = [];
+  let list = null;
+  let quote = false;
+  let code = null;
+  let table = false;
+  const close = () => {
+    if (list) { out.push(`</${list}>`); list = null; }
+    if (quote) { out.push("</blockquote>"); quote = false; }
+    if (table) { out.push("</tbody></table>"); table = false; }
+  };
+  const tableRow = (line) => line.replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
+  for (let i = 0; i < lines.length; i += 1) {
+    const raw = lines[i];
+    const line = raw.trim();
+    if (code !== null) {
+      if (/^```/.test(line)) {
+        out.push(`<pre><code>${esc(code.join("\n"))}</code></pre>`);
+        code = null;
+      } else code.push(raw);
+      continue;
+    }
+    if (/^```/.test(line)) {
+      close();
+      code = [];
+      continue;
+    }
+    if (!line) { close(); continue; }
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(line)) { close(); out.push("<hr>"); continue; }
+    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) {
+      close();
+      const level = Math.min(6, heading[1].length);
+      out.push(`<h${level}>${markdownInline(heading[2])}</h${level}>`);
+      continue;
+    }
+    if (/^>\s?/.test(line)) {
+      if (list) { out.push(`</${list}>`); list = null; }
+      if (!quote) { out.push("<blockquote>"); quote = true; }
+      out.push(`<p>${markdownInline(line.replace(/^>\s?/, ""))}</p>`);
+      continue;
+    }
+    const ordered = line.match(/^\d+[.)]\s+(.*)$/);
+    const bullet = line.match(/^[-*+]\s+(.*)$/);
+    if (ordered || bullet) {
+      if (quote) { out.push("</blockquote>"); quote = false; }
+      const type = ordered ? "ol" : "ul";
+      if (list !== type) {
+        if (list) out.push(`</${list}>`);
+        out.push(`<${type}>`);
+        list = type;
+      }
+      out.push(`<li>${markdownInline((ordered || bullet)[1])}</li>`);
+      continue;
+    }
+    if (/^\|.+\|$/.test(line) && i + 1 < lines.length && /^\|?[\s:|-]+\|?$/.test(lines[i + 1].trim())) {
+      close();
+      const cells = tableRow(line);
+      out.push(`<table><thead><tr>${cells.map((cell) => `<th>${markdownInline(cell)}</th>`).join("")}</tr></thead><tbody>`);
+      table = true;
+      i += 1;
+      continue;
+    }
+    if (table && /^\|.+\|$/.test(line)) {
+      out.push(`<tr>${tableRow(line).map((cell) => `<td>${markdownInline(cell)}</td>`).join("")}</tr>`);
+      continue;
+    }
+    close();
+    out.push(`<p>${markdownInline(line)}</p>`);
+  }
+  if (code !== null) out.push(`<pre><code>${esc(code.join("\n"))}</code></pre>`);
+  close();
   return out.join("");
 }
 
-function openLightbox(urls, index = 0) {
+function openLightbox(urls, index = 0, caption = "") {
   const list = (urls || []).filter(Boolean);
   if (!list.length) return;
-  let at = Math.max(0, Math.min(index, list.length - 1));
+  const at = Math.max(0, Math.min(index, list.length - 1));
   let host = $("#lightbox");
   if (!host) {
     host = document.createElement("div");
     host.id = "lightbox";
     host.className = "lightbox";
-    host.innerHTML = `<button class="lb-close" aria-label="Close"><svg class="ico"><use href="#i-close"></use></svg></button>
-      <button class="lb-nav lb-prev" aria-label="Previous"><svg class="ico"><use href="#i-chevron"></use></svg></button>
-      <img class="lb-img" alt="">
-      <button class="lb-nav lb-next" aria-label="Next"><svg class="ico"><use href="#i-chevron"></use></svg></button>
-      <span class="lb-count"></span>`;
+    host.setAttribute("role", "dialog");
+    host.setAttribute("aria-modal", "true");
+    host.setAttribute("aria-label", "Screenshots");
+    host.innerHTML = `<button class="lb-close" aria-label="${esc(t("common.close"))}"><svg class="ico"><use href="#i-close"></use></svg></button>
+      <button class="lb-nav lb-prev" aria-label="${esc(t("common.back"))}"><svg class="ico"><use href="#i-chevron"></use></svg></button>
+      <figure class="lb-stage"><div class="lb-frame"><img class="lb-img" alt=""><span class="lb-zoom">100%</span></div><figcaption class="lb-caption"><b class="lb-title"></b><span class="lb-count"></span></figcaption></figure>
+      <button class="lb-nav lb-next" aria-label="${esc(t("common.next"))}"><svg class="ico"><use href="#i-chevron"></use></svg></button>
+      <div class="lb-thumbs"></div>`;
     document.body.appendChild(host);
     host.addEventListener("click", (e) => {
       if (e.target === host || e.target.closest(".lb-close")) return closeLightbox();
       if (e.target.closest(".lb-prev")) return stepLightbox(-1);
       if (e.target.closest(".lb-next")) return stepLightbox(1);
+      if (e.target.closest(".lb-thumb")) return gotoLightbox(Number(e.target.closest(".lb-thumb").dataset.at));
+    });
+    const img = $(".lb-img", host);
+    img.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      setLightboxZoom((host._zoom || 1) + (e.deltaY < 0 ? 0.2 : -0.2));
+    }, { passive: false });
+    img.addEventListener("dblclick", () => setLightboxZoom((host._zoom || 1) > 1 ? 1 : 2));
+    let drag = null;
+    img.addEventListener("pointerdown", (e) => {
+      if ((host._zoom || 1) <= 1) return;
+      drag = { x: e.clientX, y: e.clientY, ox: host._ox || 0, oy: host._oy || 0 };
+      img.setPointerCapture(e.pointerId);
+      img.classList.add("is-dragging");
+    });
+    img.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      host._ox = drag.ox + e.clientX - drag.x;
+      host._oy = drag.oy + e.clientY - drag.y;
+      applyLightboxTransform();
+    });
+    img.addEventListener("pointerup", () => { drag = null; img.classList.remove("is-dragging"); });
+    host.addEventListener("keydown", (e) => {
+      if (e.key !== "Tab") return;
+      const items = [...host.querySelectorAll("button:not([hidden])")].filter((el) => el.offsetParent !== null);
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     });
   }
   host._urls = list;
   host._at = at;
+  host._caption = caption;
+  host._opener = document.activeElement;
+  host._zoom = 1;
+  host._ox = 0;
+  host._oy = 0;
   paintLightbox();
   host.hidden = false;
-  requestAnimationFrame(() => host.classList.add("is-on"));
+  document.body.classList.add("lightbox-open");
+  requestAnimationFrame(() => {
+    host.classList.add("is-on");
+    $(".lb-close", host)?.focus();
+  });
 }
 function paintLightbox() {
   const host = $("#lightbox");
@@ -1858,11 +2080,52 @@ function paintLightbox() {
   const list = host._urls || [];
   const at = host._at || 0;
   const img = $(".lb-img", host);
-  if (img) img.src = list[at];
+  if (img) {
+    img.src = list[at];
+    img.alt = host._caption ? `${host._caption} — ${at + 1}` : "";
+  }
+  host._zoom = 1;
+  host._ox = 0;
+  host._oy = 0;
+  applyLightboxTransform();
   const counter = $(".lb-count", host);
-  if (counter) counter.textContent = `${at + 1} / ${list.length}`;
+  if (counter) counter.textContent = list.length > 1 ? `${at + 1} / ${list.length}` : "";
+  const title = $(".lb-title", host);
+  if (title) title.textContent = host._caption || "";
   $(".lb-prev", host).hidden = list.length < 2;
   $(".lb-next", host).hidden = list.length < 2;
+  const thumbs = $(".lb-thumbs", host);
+  if (thumbs) {
+    thumbs.hidden = list.length < 2;
+    thumbs.innerHTML = list.map((url, i) => `<button class="lb-thumb ${i === at ? "is-on" : ""}" data-at="${i}" aria-label="${i + 1}"><img src="${esc(url)}" alt="" loading="lazy"></button>`).join("");
+  }
+  $(".lb-stage", host)?.classList.toggle("is-single", list.length < 2);
+}
+function applyLightboxTransform() {
+  const host = $("#lightbox");
+  if (!host) return;
+  const img = $(".lb-img", host);
+  if (!img) return;
+  const zoom = host._zoom || 1;
+  img.style.transform = `translate(${host._ox || 0}px, ${host._oy || 0}px) scale(${zoom})`;
+  img.classList.toggle("is-zoomed", zoom > 1);
+  const badge = $(".lb-zoom", host);
+  if (badge) badge.textContent = `${Math.round(zoom * 100)}%`;
+}
+function setLightboxZoom(value) {
+  const host = $("#lightbox");
+  if (!host) return;
+  host._zoom = Math.max(1, Math.min(4, value));
+  if (host._zoom === 1) { host._ox = 0; host._oy = 0; }
+  applyLightboxTransform();
+}
+function gotoLightbox(index) {
+  const host = $("#lightbox");
+  if (!host) return;
+  const list = host._urls || [];
+  if (!Number.isFinite(index) || index < 0 || index >= list.length) return;
+  host._at = index;
+  paintLightbox();
 }
 function stepLightbox(delta) {
   const host = $("#lightbox");
@@ -1876,14 +2139,21 @@ function closeLightbox() {
   const host = $("#lightbox");
   if (!host) return;
   host.classList.remove("is-on");
-  setTimeout(() => { if (host && !host.classList.contains("is-on")) host.hidden = true; }, 160);
+  document.body.classList.remove("lightbox-open");
+  const opener = host._opener;
+  setTimeout(() => {
+    if (host && !host.classList.contains("is-on")) host.hidden = true;
+    if (opener && typeof opener.focus === "function") opener.focus({ preventScroll: true });
+  }, 160);
 }
 document.addEventListener("keydown", (e) => {
   const host = $("#lightbox");
   if (!host || host.hidden) return;
-  if (e.key === "Escape") closeLightbox();
+  if (e.key === "Escape") { e.preventDefault(); closeLightbox(); }
   if (e.key === "ArrowLeft") stepLightbox(-1);
   if (e.key === "ArrowRight") stepLightbox(1);
+  if (e.key === "+" || e.key === "=") setLightboxZoom((host._zoom || 1) + 0.2);
+  if (e.key === "-") setLightboxZoom((host._zoom || 1) - 0.2);
 });
 
 async function openProject(id, kindHint, targetProfile = "") {
@@ -1986,15 +2256,15 @@ async function openProject(id, kindHint, targetProfile = "") {
     `, () => {
       const coverImg = $("#pd-cover");
       const galleryUrls = (gallery.length ? gallery.map((shot) => shot.url) : [cover]).filter(Boolean);
-      coverImg?.addEventListener("click", () => openLightbox(galleryUrls, 0));
+      coverImg?.addEventListener("click", () => openLightbox(galleryUrls, 0, detail.title));
       $$(".pd-shot").forEach((btn, index) => btn.addEventListener("click", () => {
         $$(".pd-shot").forEach((b) => b.classList.toggle("is-on", b === btn));
         if (coverImg) coverImg.src = btn.dataset.shot;
-        openLightbox(galleryUrls, index);
+        openLightbox(galleryUrls, index, detail.title);
       }));
       $$(".pd-markdown img", $("#modal-root")).forEach((img) => img.addEventListener("click", () => {
         const urls = $$(".pd-markdown img", $("#modal-root")).map((node) => node.src);
-        openLightbox(urls, urls.indexOf(img.src));
+        openLightbox(urls, urls.indexOf(img.src), detail.title);
       }));
       $("[data-project-install]")?.addEventListener("click", async () => {
         closeModal();
@@ -2321,12 +2591,12 @@ function createInstance() {
       <div class="cp-fields">
         <label class="cp-label">${esc(t("instances.name"))}</label>
         <label class="input"><input id="instance-name" maxlength="40" placeholder="${esc(t("instances.name"))}" autocomplete="off"></label>
-        <label class="cp-label">${esc(t("instances.version")) || "Minecraft"}</label>
+        <label class="cp-label">${esc(t("instances.version"))}</label>
         <label class="select-inline wide"><select id="instance-version">${versions.map((v) => `<option value="${esc(v.id)}" ${v.id === first ? "selected" : ""}>${esc(v.id)}${installed.has(v.id) ? " · ✓" : ""}</option>`).join("")}</select><svg class="ico"><use href="#i-chevron"></use></svg></label>
-        <label class="cp-label">${esc(t("instances.loader")) || "Loader"}</label>
+        <label class="cp-label">${esc(t("instances.loader"))}</label>
         <div class="cp-loaders" id="instance-loaders">${loaders.map(([value, label], i) => `<button class="cp-loader ${i === 0 ? "is-on" : ""}" data-loader="${value}" type="button">${label}</button>`).join("")}</div>
-        <label class="cp-label">${esc(t("instances.loaderVersion")) || "Loader version"}</label>
-        <label class="select-inline wide"><select id="instance-loader-version"><option value="">${esc(t("instances.stable")) || "Stable"} · auto</option></select><svg class="ico"><use href="#i-chevron"></use></svg></label>
+        <label class="cp-label">${esc(t("instances.loaderVersion"))}</label>
+        <label class="select-inline wide"><select id="instance-loader-version"><option value="">${esc(t("instances.stable"))} · auto</option></select><svg class="ico"><use href="#i-chevron"></use></svg></label>
         <input id="instance-icon" type="hidden" value="">
       </div>
     </div>
@@ -2338,15 +2608,15 @@ function createInstance() {
       const select = $("#instance-loader-version");
       if (!select) return;
       const token = ++loaderToken;
-      select.innerHTML = `<option value="">Loader version · auto</option>`;
+      select.innerHTML = `<option value="">${esc(t("instances.stable"))} · auto</option>`;
       select.disabled = loader === "vanilla";
       if (loader === "vanilla") return;
       try {
         const list = await invoke("loader_versions", { id: $("#instance-version").value, loader });
         if (token !== loaderToken) return;
-        select.innerHTML = `<option value="">Loader version · auto</option>` + (list || []).map((value) => `<option value="${esc(value)}">${esc(value)}</option>`).join("");
+        select.innerHTML = `<option value="">${esc(t("instances.stable"))} · auto</option>` + (list || []).map((value) => `<option value="${esc(value)}">${esc(value)}</option>`).join("");
       } catch {
-        if (token === loaderToken) select.innerHTML = `<option value="">Loader version · auto</option>`;
+        if (token === loaderToken) select.innerHTML = `<option value="">${esc(t("instances.stable"))} · auto</option>`;
       }
     };
     let coverSeed = seed;
@@ -2505,7 +2775,19 @@ async function openPack(id) {
   };
   const count = (kind) => contents.filter((item) => kindOf(item) === kind).length;
   const pendingCount = () => count("pending");
-  const statusText = () => (pendingCount() ? t("pack.pendingCount", { n: pendingCount() }) : t("status.ready"));
+  let health = null;
+  const healthState = () => {
+    if (!health) return "is-ok";
+    if (health.critical > 0) return "is-critical";
+    if (health.warnings > 0) return "is-warn";
+    return "is-ok";
+  };
+  const statusText = () => {
+    if (health?.critical > 0) return t("pack.healthCritical", { n: health.critical });
+    if (health?.warnings > 0) return t("pack.healthWarn", { n: health.warnings });
+    if (pendingCount()) return t("pack.pendingCount", { n: pendingCount() });
+    return t("status.ready");
+  };
   const addRows = () => {
     if (addBusy && !addResults.length) return `<div class="result-skeleton"><span class="spinner"></span><span>${esc(t("common.loading"))}</span></div>`;
     if (!addResults.length) return `<div class="empty" style="padding:26px"><p>${esc(t("pack.searchHint"))}</p></div>`;
@@ -2541,18 +2823,25 @@ async function openPack(id) {
         <div class="pack-side-meta">
           <span>Minecraft <b>${esc(baseOf(profile.versionId))}</b></span><i class="dot"></i>
           <span>${esc(profile.loader || "vanilla")}</span><i class="dot"></i>
-          <span><b>${contents.length}</b> ${esc(t("pack.filesWord"))}</span><i class="dot"></i>
+          <span>${plural(contents.length, t("pack.fileOne"), t("pack.fileMany"))}</span><i class="dot"></i>
           <span>${esc(duration(S.stats.playtimeSecs?.[profile.versionId] || 0))}</span>
         </div>
         <div class="pack-actions">
           <button class="btn btn-primary" id="pack-play">${ico("i-play")}<span>${esc(t("common.play"))}</span></button>
           <button class="btn btn-soft" id="pack-add">${ico("i-plus")}<span>${esc(t("discover.addContent"))}</span></button>
-          <button class="btn btn-quiet" id="pack-version" title="${esc(t("pack.updateVersion"))}">${ico("i-refresh")}</button>
-          <button class="btn btn-quiet" id="pack-update-all" title="${esc(t("pack.updateAll"))}">${ico("i-download")}</button>
-          <button class="btn btn-quiet" id="pack-clean" title="${esc(t("pack.clean"))}">${ico("i-trash")}</button>
-          <button class="btn btn-quiet" id="pack-retry" ${pendingCount() ? "" : "hidden"} title="${esc(t("pack.retryPending"))}">${ico("i-zap")}</button>
-          <button class="btn btn-quiet" id="pack-repair" title="${esc(t("discover.repair"))}">${ico("i-shield")}</button>
-          <button class="btn btn-quiet icon-only" id="pack-rename" title="${esc(t("edit.renameInstance"))}">${ico("i-edit")}</button>
+          <button class="btn btn-quiet icon-only" id="pack-settings" title="${esc(t("pack.settings"))}" aria-label="${esc(t("pack.settings"))}">${ico("i-settings")}</button>
+          <div class="pack-menu-wrap">
+            <button class="btn btn-quiet icon-only" id="pack-menu-btn" title="${esc(t("pack.more"))}" aria-label="${esc(t("pack.more"))}" aria-haspopup="menu" aria-expanded="false">${ico("i-grip")}</button>
+            <div class="pack-menu" id="pack-menu" role="menu" hidden>
+              <button role="menuitem" id="pack-version">${ico("i-refresh")}<span>${esc(t("pack.updateVersion"))}</span></button>
+              <button role="menuitem" id="pack-update-all">${ico("i-download")}<span>${esc(t("pack.updateAll"))}</span></button>
+              <button role="menuitem" id="pack-repair">${ico("i-shield")}<span>${esc(t("discover.repair"))}</span></button>
+              <button role="menuitem" id="pack-clean">${ico("i-sparkles")}<span>${esc(t("pack.clean"))}</span></button>
+              <button role="menuitem" id="pack-retry" ${pendingCount() ? "" : "hidden"}>${ico("i-zap")}<span>${esc(t("pack.retryPending"))}</span></button>
+              <div class="pack-menu-div"></div>
+              <button role="menuitem" id="pack-rename">${ico("i-edit")}<span>${esc(t("edit.renameInstance"))}</span></button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -2564,7 +2853,7 @@ async function openPack(id) {
       <button class="pack-tab" data-pack-tab="share">${ico("i-copy")}<span>${esc(t("pack.tabShare"))}</span></button>
     </div>
     <div class="pack-stats">
-      <div><span>${esc(t("pack.status"))}</span><b id="pack-status">${esc(statusText())}</b></div>
+      <div><span>${esc(t("pack.status"))}</span><button class="pack-status-btn ${healthState()}" id="pack-health-open" type="button">${ico(health?.critical ? "i-alert" : "i-shield")}<b id="pack-status">${esc(statusText())}</b></button></div>
       <div><span>${esc(t("pack.modsCount"))}</span><b id="pack-mods-count">${count("mod") + count("pending")}</b></div>
       <div><span>${esc(t("stats.last"))}</span><b>${esc(S.stats.lastPlayed ? i18n.date(new Date(S.stats.lastPlayed * 1000)) : t("stats.never"))}</b></div>
       <div><span>${esc(t("stats.playtime"))}</span><b>${esc(duration(S.stats.playtimeSecs?.[profile.versionId] || 0))}</b></div>
@@ -2589,16 +2878,14 @@ async function openPack(id) {
     </div>
     <div class="pd-rows" id="pack-rows">${rows()}</div>
     <div id="pack-add-panel" hidden>
-      <div class="pack-crumb">
-        <button class="btn btn-quiet btn-sm" id="pack-add-back">${ico("i-chevron")}<span>${esc(profile.name)}</span></button>
-        <span>/</span><b>${esc(t("discover.addContent"))}</b>
-      </div>
       <div class="pack-add-head">
-        <div>
+        <button class="btn btn-quiet icon-only" id="pack-add-back" title="${esc(t("common.back"))}" aria-label="${esc(t("common.back"))}">${ico("i-chevron")}</button>
+        <img class="pack-add-icon" src="${profile.icon ? fileUrl(profile.icon) : blockArt(profile.id || profile.name)}" alt="">
+        <div class="pack-add-title">
           <b>${esc(t("discover.addContent"))} · ${esc(profile.name)}</b>
           <small>Minecraft ${esc(baseOf(profile.versionId))} · ${esc(profile.loader || "vanilla")} · ${esc(t("pack.addSub"))}</small>
         </div>
-        <button class="btn btn-quiet icon-only" id="pack-add-close" title="${esc(t("common.cancel"))}">${ico("i-close")}</button>
+        <button class="btn btn-quiet icon-only" id="pack-add-close" title="${esc(t("common.cancel"))}" aria-label="${esc(t("common.cancel"))}">${ico("i-close")}</button>
       </div>
       <div class="pack-lockchips">
         <span class="lock-chip">${ico("i-layers")}${esc(profile.loader || "vanilla")}</span>
@@ -2697,6 +2984,11 @@ async function openPack(id) {
       }
       const status = $("#pack-status");
       if (status) status.textContent = statusText();
+      const statusBtn = $("#pack-health-open");
+      if (statusBtn) {
+        statusBtn.className = `pack-status-btn ${healthState()}`;
+        statusBtn.querySelector("use")?.setAttribute("href", health?.critical ? "#i-alert" : "#i-shield");
+      }
       const retry = $("#pack-retry");
       if (retry) retry.hidden = !pendingCount();
       const mods = $("#pack-mods-count");
@@ -2707,6 +2999,11 @@ async function openPack(id) {
         const map = await invoke("profile_icons", { id });
         Object.entries(map || {}).forEach(([file, url]) => { if (url) S.icons.set(`${id}:${file}`, url); });
         await loadProjectIds(id);
+        try {
+          health = await invoke("profile_health", { id });
+        } catch {
+          health = null;
+        }
         paint();
       } catch {}
     };
@@ -2811,6 +3108,125 @@ async function openPack(id) {
     $("#pack-add").addEventListener("click", () => openCatalog());
     $("#pack-add-close").addEventListener("click", closeCatalog);
     $("#pack-add-back").addEventListener("click", closeCatalog);
+    const packMenu = $("#pack-menu");
+    const closePackMenu = () => {
+      if (!packMenu) return;
+      packMenu.hidden = true;
+      $("#pack-menu-btn")?.setAttribute("aria-expanded", "false");
+    };
+    $("#pack-menu-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const open = packMenu.hidden;
+      packMenu.hidden = !open;
+      $("#pack-menu-btn").setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    packMenu.addEventListener("click", () => closePackMenu());
+    document.addEventListener("click", (e) => {
+      if (!$("#pack-menu-btn")?.contains(e.target)) closePackMenu();
+    });
+    const openPackSettings = () => {
+      openModal(`<h3>${esc(t("pack.settings"))}</h3>
+        <p class="hint">${esc(t("pack.settingsSub"))}</p>
+        <div class="pack-settings">
+          <section>
+            <h4>${esc(t("pack.psGeneral"))}</h4>
+            <label class="input"><input id="ps-name" maxlength="40" value="${esc(profile.name)}" aria-label="${esc(t("instances.name"))}"></label>
+            <div class="pack-settings-row">
+              <button class="btn btn-soft btn-sm" id="ps-save">${ico("i-check")}<span>${esc(t("common.save"))}</span></button>
+              <button class="btn btn-quiet btn-sm" id="ps-icon">${ico("i-palette")}<span>${esc(t("pack.cover"))}</span></button>
+            </div>
+          </section>
+          <section>
+            <h4>${esc(t("pack.psInstall"))}</h4>
+            <p class="hint">Minecraft ${esc(baseOf(profile.versionId))} · ${esc(profile.loader || "vanilla")} ${esc(profile.loaderVersion || "")}</p>
+            <button class="btn btn-soft btn-sm" id="ps-version">${ico("i-refresh")}<span>${esc(t("pack.updateVersion"))}</span></button>
+          </section>
+          <section>
+            <h4>${esc(t("pack.psGame"))}</h4>
+            <button class="btn btn-soft btn-sm" id="ps-options">${ico("i-gamepad")}<span>${esc(t("instances.options"))}</span></button>
+          </section>
+          <section>
+            <h4>${esc(t("pack.psMaintenance"))}</h4>
+            <div class="pack-settings-row">
+              <button class="btn btn-soft btn-sm" id="ps-update">${ico("i-download")}<span>${esc(t("pack.updateAll"))}</span></button>
+              <button class="btn btn-soft btn-sm" id="ps-repair">${ico("i-shield")}<span>${esc(t("discover.repair"))}</span></button>
+              <button class="btn btn-soft btn-sm" id="ps-clean">${ico("i-sparkles")}<span>${esc(t("pack.clean"))}</span></button>
+            </div>
+          </section>
+          <section class="is-danger">
+            <h4>${esc(t("pack.psDanger"))}</h4>
+            <button class="btn btn-danger btn-sm" id="ps-delete">${ico("i-trash")}<span>${esc(t("common.delete"))}</span></button>
+          </section>
+        </div>
+        <div class="modal-actions"><button class="btn btn-quiet" data-close>${esc(t("common.close"))}</button></div>`, () => {
+        $("#ps-save").addEventListener("click", async () => {
+          const name = $("#ps-name").value.trim();
+          if (!name) return;
+          try {
+            await invoke("profile_rename", { id, name });
+            await refreshBoot();
+            closeModal();
+            renderAll();
+            openPack(id);
+            toast(t("edit.saved"));
+          } catch (err) {
+            toast(friendly(err), "err");
+          }
+        });
+        $("#ps-icon").addEventListener("click", async () => {
+          try {
+            const path = await invoke("pick_wallpaper");
+            if (!path) return;
+            await invoke("profile_set_icon", { id, path });
+            await refreshBoot();
+            renderAll();
+            closeModal();
+            openPack(id);
+          } catch (err) {
+            toast(friendly(err), "err");
+          }
+        });
+        $("#ps-version").addEventListener("click", () => { closeModal(); $("#pack-version").click(); });
+        $("#ps-options").addEventListener("click", () => { closeModal(); openInstanceOptions(id); });
+        $("#ps-update").addEventListener("click", () => { closeModal(); $("#pack-update-all").click(); });
+        $("#ps-repair").addEventListener("click", () => { closeModal(); $("#pack-repair").click(); });
+        $("#ps-clean").addEventListener("click", () => { closeModal(); $("#pack-clean").click(); });
+        $("#ps-delete").addEventListener("click", () => { closeModal(); askDeleteProfile(id); });
+      });
+    };
+    $("#pack-settings").addEventListener("click", openPackSettings);
+    const issueText = (issue) => {
+      const raw = issue.text || "";
+      if (raw.startsWith("missing dependency: ")) return t("pack.healthMissing", { dep: raw.slice(20) });
+      if (raw === "disabled") return t("pack.disabled");
+      if (raw === "pending") return t("pack.pendingChip");
+      if (raw.startsWith("loader: ")) return raw;
+      return raw;
+    };
+    const openHealth = () => {
+      const issues = health?.issues || [];
+      const critical = health?.critical || 0;
+      const warnings = health?.warnings || 0;
+      openModal(`<h3>${esc(t("pack.healthTitle"))}</h3>
+        <p class="hint">${esc(t("pack.healthSub"))}</p>
+        <div class="health-summary ${critical ? "is-critical" : warnings ? "is-warn" : "is-ok"}">
+          ${ico(critical ? "i-alert" : warnings ? "i-shield" : "i-check")}
+          <b>${esc(critical ? t("pack.healthCritical", { n: critical }) : warnings ? t("pack.healthWarn", { n: warnings }) : t("status.ready"))}</b>
+        </div>
+        ${issues.length ? `<div class="health-list">${issues.map((issue) => `<div class="health-item ${issue.level === "critical" ? "is-critical" : "is-warn"}">
+          <b>${esc(issue.name || issue.file)}</b><span>${esc(issueText(issue))}</span></div>`).join("")}</div>` : `<div class="empty" style="padding:22px"><p>${esc(t("pack.healthOk"))}</p></div>`}
+        <div class="modal-actions"><button class="btn btn-quiet" data-close>${esc(t("common.close"))}</button><button class="btn btn-primary" id="health-refresh">${ico("i-refresh")}<span>${esc(t("pack.healthRefresh"))}</span></button></div>`, () => {
+        $("#health-refresh").addEventListener("click", async () => {
+          try {
+            health = await invoke("profile_health", { id });
+          } catch {}
+          paint();
+          closeModal();
+          openHealth();
+        });
+      });
+    };
+    $("#pack-health-open").addEventListener("click", openHealth);
     $("#pack-repair").addEventListener("click", async () => {
       try {
         await invoke("mods_repair", { version: baseOf(profile.versionId) || profile.versionId, loader: profile.loader || "fabric", profile: id });
@@ -2821,13 +3237,20 @@ async function openPack(id) {
       }
     });
     $("#pack-update-all").addEventListener("click", async () => {
+      const btn = $("#pack-update-all");
+      btn?.classList.add("is-busy");
       try {
-        const result = await invoke("mods_repair", { version: baseOf(profile.versionId) || profile.versionId, loader: profile.loader || "fabric", profile: id });
+        const report = await invoke("mods_update", { version: baseOf(profile.versionId) || profile.versionId, loader: profile.loader || "fabric", profile: id });
         await refreshContents();
-        toast(t("pack.updateClean"));
-        return result;
+        const count = report?.updated?.length || 0;
+        if (count) toast(t("pack.updatedN", { n: count }));
+        else toast(t("pack.upToDate"));
+        if (report?.errors?.length) toast(report.errors[0], "err");
+        return report;
       } catch (err) {
         toast(friendly(err), "err");
+      } finally {
+        btn?.classList.remove("is-busy");
       }
     });
     $("#pack-clean").addEventListener("click", () => {
@@ -3430,6 +3853,8 @@ function fillSettings() {
   setSegmented("#accent-choice", "data-accent", s.uiAccent || "aqua");
   const customInput = $("#accent-custom");
   if (customInput) customInput.value = hexRgb(s.uiAccentCustom) ? s.uiAccentCustom : "#5ce8dc";
+  const hexInput = $("#accent-hex");
+  if (hexInput) hexInput.value = String(s.uiAccentCustom || "#5ce8dc").replace("#", "");
     const themeHost = $("#theme-presets");
   if (themeHost) {
     themeHost.innerHTML = THEMES.map((theme) => {
@@ -3772,6 +4197,7 @@ function bindSettings() {
   $("#accent-custom").addEventListener("input", (e) => {
     S.settings.uiAccent = "custom";
     S.settings.uiAccentCustom = e.target.value;
+    if ($("#accent-hex")) $("#accent-hex").value = e.target.value.replace("#", "");
     setSegmented("#accent-choice", "data-accent", "custom");
     $$("#theme-presets .theme-card").forEach((card) => card.classList.remove("is-on"));
     previewAccent(e.target.value);
@@ -3782,6 +4208,20 @@ function bindSettings() {
     markDirty();
   });
   $("#accent-custom").addEventListener("click", (e) => e.stopPropagation());
+  $("#accent-hex")?.addEventListener("input", (e) => {
+    const clean = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
+    e.target.value = clean;
+    if (clean.length !== 6) return;
+    const hex = `#${clean}`;
+    S.settings.uiAccent = "custom";
+    S.settings.uiAccentCustom = hex;
+    if ($("#accent-custom")) $("#accent-custom").value = hex;
+    setSegmented("#accent-choice", "data-accent", "custom");
+    $$("#theme-presets .theme-card").forEach((card) => card.classList.remove("is-on"));
+    previewAccent(hex);
+    markDirty();
+  });
+  $("#accent-hex")?.addEventListener("change", () => applyAppearance(S.settings));
   $("#theme-presets").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-theme-preset]");
     if (!btn) return;
@@ -3986,6 +4426,50 @@ function bindSettings() {
       toast(t("toast.statsReset"));
     } catch (err) { toast(friendly(err), "err"); }
   });
+  const paintAgent = (status) => {
+    const ready = Boolean(status?.node && status?.script);
+    const state = $("#agent-state");
+    if (state) {
+      state.textContent = ready ? t("set.agentConnected") : t("set.agentMissing");
+      state.classList.toggle("ok", ready);
+    }
+    $$("[data-agent-state]").forEach((chip) => {
+      const on = Boolean(status?.[chip.dataset.agentState]);
+      chip.textContent = on ? t("set.agentConnected") : "—";
+      chip.classList.toggle("ok", on);
+    });
+    const path = $("#agent-path");
+    if (path) path.textContent = status?.scriptPath || "";
+  };
+  const refreshAgent = async () => {
+    try {
+      paintAgent(await invoke("agent_status"));
+    } catch {
+      paintAgent(null);
+    }
+  };
+  refreshAgent();
+  $("#agent-test")?.addEventListener("click", async () => {
+    try {
+      const result = await invoke("agent_test");
+      toast(result === "ok" ? t("set.agentConnected") : String(result), result === "ok" ? "ok" : "err");
+      refreshAgent();
+    } catch (err) {
+      toast(friendly(err), "err");
+    }
+  });
+  $$("[data-agent]").forEach((btn) => btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      await invoke("agent_connect", { tool: btn.dataset.agent });
+      toast(t("set.agentConnected"));
+      refreshAgent();
+    } catch (err) {
+      toast(friendly(err), "err");
+    } finally {
+      btn.disabled = false;
+    }
+  }));
   $("#factory-reset").addEventListener("click", async () => {
     const ok = await confirmAction(t("confirm.resetSettings"), t("confirm.resetSettingsText"), t("common.reset"));
     if (!ok) return;
@@ -4072,6 +4556,14 @@ async function discardSettings() {
 function activateTab(name) {
   $$("#settings-tabs [data-tab]").forEach((el) => el.classList.toggle("is-on", el.dataset.tab === name));
   $$(".settings-panel").forEach((el) => el.classList.toggle("is-on", el.dataset.panel === name));
+  const body = $(".settings-body");
+  if (body) body.scrollTop = 0;
+  const panel = $(`.settings-panel[data-panel="${name}"]`);
+  const heading = panel?.querySelector("h2, h3");
+  if (heading) {
+    if (!heading.hasAttribute("tabindex")) heading.setAttribute("tabindex", "-1");
+    heading.focus({ preventScroll: true });
+  }
 }
 
 function applyRecommendation() {
@@ -4563,14 +5055,19 @@ async function bindBackend() {
     appendLog(typeof p === "string" ? p : p?.line || p?.text || "");
   });
   await listen("game://started", (e) => {
-    S.running = e.payload?.version || S.selected;
-    appendLog(`Started ${S.running}`, "ok");
+    const p = e.payload || {};
+    const session = { pid: p.pid, version: p.id || S.selected, account: p.account || "", profile: p.profile || null, readOnly: Boolean(p.readOnly) };
+    if (session.pid && !S.sessions.some((s) => s.pid === session.pid)) S.sessions.push(session);
+    S.running = S.sessions[0]?.version || session.version;
+    appendLog(`Started ${session.version}`, "ok");
     syncPlay();
   });
   await listen("game://exit", (e) => {
-    const version = e.payload?.version || S.running;
-    S.running = null;
-    appendLog(`Exited ${version ?? ""} (${e.payload?.code ?? 0})`, "ok");
+    const p = e.payload || {};
+    if (p.pid) S.sessions = S.sessions.filter((s) => s.pid !== p.pid);
+    else S.sessions = [];
+    S.running = S.sessions[0]?.version || null;
+    appendLog(`Exited ${p.version ?? ""} (${p.code ?? 0})`, "ok");
     syncPlay();
     refreshBoot().then(() => renderAll());
   });
@@ -4744,6 +5241,7 @@ async function init() {
     applyBoot(boot, true);
     bindStatic();
     await bindBackend();
+    refreshSessions();
     loadRemote();
     loadMods();
     checkUpdate();

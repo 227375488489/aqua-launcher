@@ -73,7 +73,7 @@
         <img class="brand-mark" src="assets/logo-64.png" alt="" />
         <span class="brand-word" data-edit-key="brand.word">aqua</span>
         <span class="brand-tag" data-i18n="brand.tag">launcher</span>
-        <span class="chip chip-soft chip-mono" id="version-chip">v0.0.11 Beta</span>
+        <span class="chip chip-soft chip-mono" id="version-chip">v0.0.12 Beta</span>
       </div>
       <div class="window-controls" id="window-controls">
         <button class="win-btn" id="win-min" data-i18n-title="window.minimize" aria-label="Minimize"><svg class="ico"><use href="#i-minus"></use></svg></button>
@@ -99,7 +99,7 @@
             <span data-i18n="nav.settings">Настройки</span>
           </button>
           <div class="rail-version">
-            <span id="rail-version">0.0.11 Beta</span><span class="dot"></span><span id="rail-platform">Windows</span>
+            <span id="rail-version">0.0.12 Beta</span><span class="dot"></span><span id="rail-platform">Windows</span>
           </div>
         </div>
       </aside>
@@ -107,7 +107,7 @@
       <main class="view" id="view">
         <div class="update-banner" id="update-banner" hidden>
           <span class="update-dot"></span>
-          <div class="update-text"><b data-i18n="update.title">Доступно обновление</b><span id="update-version">0.0.11 Beta</span><em id="update-detail"></em></div>
+          <div class="update-text"><b data-i18n="update.title">Доступно обновление</b><span id="update-version">0.0.12 Beta</span><em id="update-detail"></em></div>
           <button class="btn btn-quiet btn-sm" id="update-notes" data-i18n="update.notes">Что нового</button>
           <button class="btn btn-soft btn-sm" id="update-open"><svg class="ico"><use href="#i-download"></use></svg><span id="update-label" data-i18n="update.download">Скачать</span></button>
           <button class="win-btn" id="update-hide" aria-label="Hide"><svg class="ico"><use href="#i-close"></use></svg></button>
@@ -143,7 +143,7 @@
           </div>
 
           <div class="section-head">
-            <div><h2 data-i18n="widget.stats">Обзор</h2><p data-i18n="widget.statsSub">Твоя статистика и железо</p></div>
+            <div><h2 data-i18n="home.dashboard">Панель</h2><p data-i18n="home.dashboardSub">Виджеты, статистика и сборки</p></div>
             <button class="btn btn-quiet btn-sm" id="customize-btn"><svg class="ico"><use href="#i-layout"></use></svg><span data-i18n="widget.customize">Настроить</span></button>
           </div>
           <div class="widgets" id="widgets"></div>
@@ -442,7 +442,9 @@
                       <label class="swatch swatch-custom" data-accent="custom" title="Custom color">
                         <input type="color" id="accent-custom" value="#5ce8dc" aria-label="Custom accent color">
                       </label>
-                    </div></div>
+                    </div>
+                    <label class="accent-hex"><span>#</span><input id="accent-hex" maxlength="6" spellcheck="false" autocomplete="off" aria-label="Accent HEX"></label>
+                    </div>
                   </div>
                   <div class="field">
                     <div class="field-label"><b data-i18n="set.radius">Скругления</b></div>
@@ -695,6 +697,19 @@
                     <div class="field-label"><b data-i18n="set.discord">Показывать лаунчер в Discord</b><span class="hint" data-i18n="set.discordSub">Статус лаунчера и игры в профиле Discord</span></div>
                     <div class="field-control"><button class="switch" id="discord-switch" role="switch"><i></i></button></div>
                   </div>
+                  <div class="agent-box">
+                    <div class="agent-head"><b data-i18n="set.agent">AI-агент</b><span class="chip chip-soft" id="agent-state">—</span></div>
+                    <p class="hint" data-i18n="set.agentSub">Подключите лаунчер к Claude Code, Codex или Hermes — агент сможет ставить моды и запускать сборки.</p>
+                    <div class="agent-tools">
+                      <div class="agent-tool"><b>Claude Code</b><span class="chip" data-agent-state="claude">—</span><button class="btn btn-soft btn-sm" data-agent="claude" data-i18n="set.agentConnect">Подключить</button></div>
+                      <div class="agent-tool"><b>Codex</b><span class="chip" data-agent-state="codex">—</span><button class="btn btn-soft btn-sm" data-agent="codex" data-i18n="set.agentConnect">Подключить</button></div>
+                      <div class="agent-tool"><b>Hermes</b><span class="chip" data-agent-state="hermes">—</span><button class="btn btn-soft btn-sm" data-agent="hermes" data-i18n="set.agentConnect">Подключить</button></div>
+                    </div>
+                    <div class="agent-actions">
+                      <button class="btn btn-quiet btn-sm" id="agent-test"><svg class="ico"><use href="#i-terminal"></use></svg><span data-i18n="set.agentTest">Проверить сервер</span></button>
+                      <code id="agent-path"></code>
+                    </div>
+                  </div>
                   <div class="field">
                     <div class="field-label"><b data-i18n="set.factoryReset">Сброс настроек</b><span class="hint" data-i18n="set.factoryResetSub">Вернуть внешний вид и параметры запуска к заводским</span></div>
                     <div class="field-control"><button class="btn btn-danger btn-sm" id="factory-reset"><svg class="ico"><use href="#i-refresh"></use></svg><span data-i18n="common.reset">Сбросить</span></button></div>
@@ -706,7 +721,7 @@
                   <div class="hr"></div>
                   <div class="about-row">
                     <img class="brand-mark" src="assets/logo-64.png" alt="" />
-                    <div><b>Aqua Launcher <span id="about-version">0.0.11 Beta</span></b><p data-i18n="set.aboutText">Открытый лаунчер на Rust + Tauri. Без рекламы и слежки.</p></div>
+                    <div><b>Aqua Launcher <span id="about-version">0.0.12 Beta</span></b><p data-i18n="set.aboutText">Открытый лаунчер на Rust + Tauri. Без рекламы и слежки.</p></div>
                     <button class="btn btn-soft btn-sm" id="about-github"><svg class="ico"><use href="#i-external"></use></svg><span>GitHub</span></button>
                   </div>
                 </div>

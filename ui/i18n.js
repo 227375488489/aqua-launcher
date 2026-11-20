@@ -50,7 +50,11 @@ export const i18n = {
     const table = stringsFor(this.code);
     let text = table[key];
     if (text === undefined) text = stringsFor(DEFAULT_LOCALE)[key];
-    if (text === undefined) return key;
+    if (text === undefined) {
+      const last = String(key).split(".").pop() || key;
+      console.warn(`[i18n] missing key: ${key}`);
+      return last.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
+    }
     if (vars && typeof vars === "object") {
       text = text.replace(/\{(\w+)\}/g, (match, name) => (vars[name] === undefined ? match : String(vars[name])));
     }

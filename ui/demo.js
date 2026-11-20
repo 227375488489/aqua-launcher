@@ -52,6 +52,7 @@ let accounts = [
 let active = "off-1";
 let lastVersion = "1.21.8";
 let running = null;
+let demoPid = 4000;
 let runTimer = null;
 
 const platform = /Mac/i.test(navigator.userAgent) ? "macos" : /Linux/i.test(navigator.userAgent) ? "linux" : "windows";
@@ -289,26 +290,33 @@ const handlers = {
     return loaderId;
   },
 
-  async launch({ id, version }) {
+  async launch({ id, version, parallel }) {
     const target = id ?? version;
-    if (running) throw new Error("game_already_running");
+    if (running && !parallel) throw new Error("game_running");
     if (!local.some((v) => v.id === target)) throw new Error("version_not_installed");
     running = target;
     lastVersion = target;
     stats.launches += 1;
     stats.sessions += 1;
     stats.lastPlayed = now();
-    emit("game://started", { version: target });
+    demoPid = 4000 + stats.launches;
+    emit("game://started", { id: target, pid: demoPid, account: "Demo", readOnly: false });
     clearInterval(runTimer);
     runTimer = setInterval(() => emit("game://log", logLine(target)), 1200);
-    return null;
+    return demoPid;
   },
 
-  async stop_game() {
+  async game_sessions() {
+    return running
+      ? [{ pid: demoPid, version: running, account: "Demo", readOnly: false }]
+      : [];
+  },
+
+  async stop_game({ pid } = {}) {
     const version = running || lastVersion;
     clearInterval(runTimer);
     running = null;
-    emit("game://exit", { code: 0, version });
+    emit("game://exit", { code: 0, version, pid: pid ?? demoPid });
     return null;
   },
 
@@ -783,6 +791,28 @@ const handlers = {
     await sleep(600);
     return { installed: ["fabric-api-0.130.0.jar"], notes: [] };
   },
+
+  async mods_update() {
+    await sleep(700);
+    return { updated: [], skipped: 5, errors: [] };
+  },
+
+  profile_health() {
+    return { ready: true, critical: 0, warnings: 0, disabled: 0, pending: 0, issues: [] };
+  },
+
+  agent_status: () => ({
+    node: true,
+    script: true,
+    scriptPath: "agent/aqua-mcp.mjs",
+    claude: false,
+    codex: false,
+    hermes: false,
+  }),
+
+  agent_connect: () => "agent/aqua-mcp.mjs",
+
+  agent_test: () => "ok",
 
   async mods_remove({ file }) {
     installedMods = installedMods.filter((m) => m.file !== file);

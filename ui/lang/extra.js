@@ -4,13 +4,28 @@ export const EXTRA = {
     "nav": {
       "achievements": "Achievements"
     },
+    "home": {
+      "dashboard": "Dashboard",
+      "dashboardSub": "Widgets, stats and packs"
+    },
     "common": {
       "apply": "Apply"
     },
     "launch": {
       "parallelTitle": "Launch another copy?",
       "parallelText": "A second copy can write to the same world files. Save the game in the first copy to avoid conflicts.",
-      "parallelRun": "Launch in parallel"
+      "parallelRun": "Launch in parallel",
+      "parallelWarn": "Read-only mode runs from a temporary copy of the pack. Progress is not saved back.",
+      "account": "Account",
+      "readOnly": "Read-only copy",
+      "readOnlyHint": "Runs from a temporary folder; saves and configs are discarded.",
+      "readOnlyTag": "read-only",
+      "sessionsTitle": "Running copies",
+      "sessionsText": "Each copy has its own account and can be stopped separately.",
+      "stopOne": "Stop",
+      "stopAll": "Stop all",
+      "stopped": "Copy stopped",
+      "noSessions": "No running copies"
     },
     "edit": {
       "toggle": "Edit layout",
@@ -106,7 +121,27 @@ export const EXTRA = {
       "pendingCount": "{n} awaiting version",
       "pendingChip": "Awaiting version",
       "filteredHint": "Results are limited to this pack's version and loader",
+      "updatedN": "Mods updated: {n}",
+      "upToDate": "All mods are up to date",
+      "settings": "Pack settings",
+      "more": "More",
+      "settingsSub": "Icon, version, memory and maintenance in one place",
+      "psGeneral": "General",
+      "psInstall": "Install",
+      "psGame": "Game and memory",
+      "psMaintenance": "Maintenance",
+      "psDanger": "Danger zone",
+      "cover": "Cover",
+      "healthTitle": "Pack health",
+      "healthSub": "Dependencies, loader and disabled files",
+      "healthCritical": "{n} critical issues",
+      "healthWarn": "{n} warnings",
+      "healthOk": "Everything is in place",
+      "healthRefresh": "Check again",
+      "healthMissing": "Missing: {dep}",
       "filesWord": "files",
+      "fileOne": "file",
+      "fileMany": "files",
       "tabFiles": "Files",
       "tabWorlds": "Worlds",
       "tabLogs": "Logs",
@@ -221,10 +256,23 @@ export const EXTRA = {
       "recoPack": "For your current pack ({mods} mods): {gb} GB is enough",
       "railAuto": "Auto",
       "javaUnknown": "Not checked yet",
-      "connUnknown": "Not connected"
+      "connUnknown": "Not connected",
+      "agent": "AI agent",
+      "agentSub": "Connect the launcher to Claude Code, Codex or Hermes so an agent can install mods and launch packs.",
+      "agentConnect": "Connect",
+      "agentConnected": "Connected",
+      "agentTest": "Test server",
+      "agentMissing": "Not set up"
     },
     "instances": {
-      "selected": "Selected"
+      "selected": "Selected",
+      "name": "Pack name",
+      "version": "Minecraft version",
+      "loader": "Mod loader",
+      "loaderVersion": "Loader version",
+      "stable": "Stable",
+      "randomize": "Randomize",
+      "upload": "Upload"
     },
     "achievements": {
       "title": "Achievements",
@@ -275,13 +323,28 @@ export const EXTRA = {
     "nav": {
       "achievements": "Достижения"
     },
+    "home": {
+      "dashboard": "Панель",
+      "dashboardSub": "Виджеты, статистика и сборки"
+    },
     "common": {
       "apply": "Применить"
     },
     "launch": {
       "parallelTitle": "Запустить ещё одну копию?",
       "parallelText": "Вторая копия может писать в те же файлы мира. Сохраните игру в первой копии, чтобы избежать конфликтов.",
-      "parallelRun": "Запустить параллельно"
+      "parallelRun": "Запустить параллельно",
+      "parallelWarn": "Режим только для чтения запускает временную копию сборки. Прогресс не сохранится.",
+      "account": "Аккаунт",
+      "readOnly": "Копия только для чтения",
+      "readOnlyHint": "Работает из временной папки, сохранения и конфиги удаляются.",
+      "readOnlyTag": "только чтение",
+      "sessionsTitle": "Запущенные копии",
+      "sessionsText": "У каждой копии свой аккаунт, её можно остановить отдельно.",
+      "stopOne": "Остановить",
+      "stopAll": "Остановить все",
+      "stopped": "Копия остановлена",
+      "noSessions": "Нет запущенных копий"
     },
     "edit": {
       "toggle": "Редактирование",
@@ -377,7 +440,27 @@ export const EXTRA = {
       "pendingCount": "{n} ждут версию",
       "pendingChip": "Ожидает версии",
       "filteredHint": "Показано только совместимое с версией и загрузчиком сборки",
+      "updatedN": "Обновлено модов: {n}",
+      "upToDate": "Все моды уже обновлены",
+      "settings": "Настройки сборки",
+      "more": "Ещё",
+      "settingsSub": "Обложка, версия, память и обслуживание в одном месте",
+      "psGeneral": "Основное",
+      "psInstall": "Установка",
+      "psGame": "Игра и память",
+      "psMaintenance": "Обслуживание",
+      "psDanger": "Опасная зона",
+      "cover": "Обложка",
+      "healthTitle": "Здоровье сборки",
+      "healthSub": "Зависимости, загрузчик и отключённые файлы",
+      "healthCritical": "Критичных проблем: {n}",
+      "healthWarn": "Предупреждений: {n}",
+      "healthOk": "Всё на месте",
+      "healthRefresh": "Проверить снова",
+      "healthMissing": "Не хватает: {dep}",
       "filesWord": "файлов",
+      "fileOne": "файл",
+      "fileMany": "файлов",
       "tabFiles": "Файлы",
       "tabWorlds": "Миры",
       "tabLogs": "Логи",
@@ -492,10 +575,23 @@ export const EXTRA = {
       "recoPack": "Для текущей сборки ({mods} модов) хватит {gb} ГБ",
       "railAuto": "Авто",
       "javaUnknown": "Ещё не проверено",
-      "connUnknown": "Нет подключения"
+      "connUnknown": "Нет подключения",
+      "agent": "AI-агент",
+      "agentSub": "Подключите лаунчер к Claude Code, Codex или Hermes — агент сможет ставить моды и запускать сборки.",
+      "agentConnect": "Подключить",
+      "agentConnected": "Подключено",
+      "agentTest": "Проверить сервер",
+      "agentMissing": "Не настроено"
     },
     "instances": {
-      "selected": "Выбрана"
+      "selected": "Выбрана",
+      "name": "Название сборки",
+      "version": "Версия Minecraft",
+      "loader": "Загрузчик",
+      "loaderVersion": "Версия загрузчика",
+      "stable": "Стабильная",
+      "randomize": "Случайный блок",
+      "upload": "Загрузить"
     },
     "achievements": {
       "title": "Достижения",

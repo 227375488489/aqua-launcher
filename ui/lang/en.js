@@ -122,7 +122,7 @@ export default {
   },
   settings: {
     title: "Settings",
-    sub: "Make Aqua yours.",
+    sub: "Made to be yours.",
     savedState: "Saved",
     unsaved: "Unsaved changes",
   },
@@ -201,7 +201,7 @@ export default {
     navOrderSub: "Reorder or hide sidebar sections.",
     widgetOrder: "Home widgets",
     widgetOrderSub: "Reorder or hide blocks on the play screen.",
-    layoutHint: "Changes apply instantly. Save to keep them.",
+    layoutHint: "Changes apply instantly. Save button is at the bottom.",
     layoutReset: "Reset layout",
     gameDir: "Game folder",
     resolution: "Window size",

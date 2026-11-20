@@ -76,6 +76,12 @@ struct Dependency {
 #[derive(Deserialize, Default)]
 struct Version {
     #[serde(default)]
+    id: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    version_number: String,
+    #[serde(default)]
     dependencies: Vec<Dependency>,
     #[serde(default)]
     files: Vec<FileEntry>,
@@ -261,6 +267,80 @@ pub async fn install(
     Ok(InstallOutcome { installed, notes })
 }
 
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ModUpdate {
+    pub name: String,
+    pub from: String,
+    pub to: String,
+}
+
+#[derive(Serialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateReport {
+    pub updated: Vec<ModUpdate>,
+    pub skipped: u32,
+    pub errors: Vec<String>,
+}
+
+pub async fn update_all(
+    client: &reqwest::Client,
+    root: &Path,
+    game_version: &str,
+    loader: &str,
+    workers: usize,
+    progress: Arc<dyn Fn(usize, u64) + Send + Sync>,
+) -> UpdateReport {
+    let mut report = UpdateReport::default();
+    let installed = list(root);
+    for item in installed {
+        if !item.enabled || item.id.is_empty() {
+            report.skipped += 1;
+            continue;
+        }
+        let list = match versions(client, &item.id, game_version, loader).await {
+            Ok(list) => list,
+            Err(err) => {
+                report.errors.push(format!("{}: {}", item.name, err));
+                continue;
+            }
+        };
+        let Some(latest) = list.into_iter().next() else {
+            report.skipped += 1;
+            continue;
+        };
+        if latest.version_number == item.version {
+            report.skipped += 1;
+            continue;
+        }
+        match install(
+            client,
+            root,
+            &item.id,
+            game_version,
+            loader,
+            workers,
+            "mods",
+            progress.clone(),
+        )
+        .await
+        {
+            Ok(outcome) => {
+                if !outcome.installed.contains(&item.file) {
+                    let _ = std::fs::remove_file(root.join("mods").join(&item.file));
+                }
+                report.updated.push(ModUpdate {
+                    name: item.name.clone(),
+                    from: item.version.clone(),
+                    to: latest.version_number.clone(),
+                });
+            }
+            Err(err) => report.errors.push(format!("{}: {}", item.name, err)),
+        }
+    }
+    report
+}
+
 pub fn list(root: &Path) -> Vec<InstalledMod> {
     let dir = root.join("mods");
     let Ok(entries) = std::fs::read_dir(&dir) else {
@@ -439,6 +519,95 @@ pub struct Missing {
 pub struct Health {
     pub total: usize,
     pub missing: Vec<Missing>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthIssue {
+    pub level: String,
+    pub file: String,
+    pub name: String,
+    pub text: String,
+}
+
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileHealth {
+    pub ready: bool,
+    pub critical: usize,
+    pub warnings: usize,
+    pub disabled: usize,
+    pub pending: usize,
+    pub issues: Vec<HealthIssue>,
+}
+
+/// Полная проверка содержимого сборки: зависимости, отключённые файлы,
+/// несовместимый загрузчик и файлы, ожидающие обновления.
+pub fn profile_health(root: &Path, loader: &str) -> ProfileHealth {
+    let list = list(root);
+    let base = health(root);
+    let mut issues = Vec::new();
+    let mut critical = 0usize;
+    let mut warnings = 0usize;
+    let mut disabled = 0usize;
+
+    for missing in &base.missing {
+        critical += 1;
+        issues.push(HealthIssue {
+            level: "critical".into(),
+            file: String::new(),
+            name: missing.mod_name.clone(),
+            text: format!("missing dependency: {}", missing.need),
+        });
+    }
+    for item in &list {
+        if !item.enabled {
+            disabled += 1;
+            warnings += 1;
+            issues.push(HealthIssue {
+                level: "warning".into(),
+                file: item.file.clone(),
+                name: item.name.clone(),
+                text: "disabled".into(),
+            });
+        }
+        let own = item.loader.to_lowercase();
+        if !own.is_empty() && !loader.is_empty() && own != loader.to_lowercase() {
+            warnings += 1;
+            issues.push(HealthIssue {
+                level: "warning".into(),
+                file: item.file.clone(),
+                name: item.name.clone(),
+                text: format!("loader: {} / pack: {}", item.loader, loader),
+            });
+        }
+    }
+
+    let mut pending = 0usize;
+    if let Ok(entries) = std::fs::read_dir(root.join("mods")) {
+        for entry in entries.flatten() {
+            let file = entry.file_name().to_string_lossy().to_string();
+            if file.ends_with(".jar.disabled") {
+                pending += 1;
+                warnings += 1;
+                issues.push(HealthIssue {
+                    level: "warning".into(),
+                    file: file.clone(),
+                    name: file,
+                    text: "pending".into(),
+                });
+            }
+        }
+    }
+
+    ProfileHealth {
+        ready: critical == 0 && warnings == 0,
+        critical,
+        warnings,
+        disabled,
+        pending,
+        issues,
+    }
 }
 
 /// Ищет зависимости, которых нет среди установленных jar.
