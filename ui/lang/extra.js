@@ -103,7 +103,19 @@ export const EXTRA = {
       "selectedN": "{n} selected",
       "enable": "Enable",
       "disable": "Disable",
-      "disabled": "Disabled"
+      "disabled": "Disabled",
+      "openContent": "Open content",
+      "updateAll": "Update all",
+      "clean": "Clean up",
+      "cleanTitle": "Clean up pack",
+      "cleanSub": "Removes cache and diagnostic files. Worlds are never touched.",
+      "cleanLogs": "Logs and crash reports",
+      "cleanMaps": "Minimap and chunk cache",
+      "cleanMapsHint": "Voxy, Bobby, Distant Horizons, Xaero and JourneyMap data",
+      "cleanRun": "Clean now",
+      "cleanDone": "Freed {size}",
+      "cleanNothing": "Nothing to clean",
+      "projects": "projects"
     },
     "catalog": {
       "sort": "Sort",
@@ -127,8 +139,11 @@ export const EXTRA = {
       "sub": "Search {kind} on {source} — with dependencies and safety checks.",
       "searchIn": "Search {source}…",
       "noMatches": "No matches",
+      "installed": "Installed",
       "include": "Include",
-      "exclude": "Exclude"
+      "exclude": "Exclude",
+      "needLoader": "Pick a pack or a loader version first",
+      "hideInstalled": "Hide installed"
     },
     "theme": {
       "quick": "Toggle theme",
@@ -165,7 +180,34 @@ export const EXTRA = {
       "memApply": "Apply"
     },
     "set": {
-      "recoPack": "For your current pack ({mods} mods): {gb} GB is enough"
+      "recoPack": "For your current pack ({mods} mods): {gb} GB is enough",
+      "railAuto": "Auto"
+    },
+    "instances": {
+      "selected": "Selected"
+    },
+    "achievements": {
+      "title": "Achievements",
+      "sub": "Small milestones on your Minecraft road",
+      "first": "First launch",
+      "firstHint": "Launch the game once",
+      "hour": "One hour in",
+      "hourHint": "Play for 1 hour",
+      "day": "A full day",
+      "dayHint": "Play for 24 hours",
+      "packs": "Collector",
+      "packsHint": "Create 5 packs",
+      "week": "Minecraft week",
+      "weekHint": "Play 7 days in a row",
+      "month": "30 days of Minecraft",
+      "monthHint": "Play 30 days in a row",
+      "night": "Night owl",
+      "nightHint": "Launch the game after midnight",
+      "loyal": "Loyal player",
+      "loyalHint": "Launch the launcher 50 times",
+      "done": "Unlocked",
+      "locked": "Locked",
+      "progress": "{a} of {b}"
     }
   },
   "ru": {
@@ -271,7 +313,19 @@ export const EXTRA = {
       "selectedN": "Выбрано: {n}",
       "enable": "Включить",
       "disable": "Отключить",
-      "disabled": "Отключён"
+      "disabled": "Отключён",
+      "openContent": "Открыть содержимое",
+      "updateAll": "Обновить все",
+      "clean": "Очистка",
+      "cleanTitle": "Очистка сборки",
+      "cleanSub": "Удаляет кеш и диагностические файлы. Миры не затрагиваются.",
+      "cleanLogs": "Логи и отчёты о крашах",
+      "cleanMaps": "Кеш миникарты и чанков",
+      "cleanMapsHint": "Данные Voxy, Bobby, Distant Horizons, Xaero и JourneyMap",
+      "cleanRun": "Очистить",
+      "cleanDone": "Освобождено {size}",
+      "cleanNothing": "Нечего очищать",
+      "projects": "проектов"
     },
     "catalog": {
       "sort": "Сортировка",
@@ -295,8 +349,11 @@ export const EXTRA = {
       "sub": "Поиск: {kind} на {source} — с зависимостями и проверкой безопасности.",
       "searchIn": "Поиск по {source}…",
       "noMatches": "Совпадений нет",
+      "installed": "Установлено",
       "include": "Включить",
-      "exclude": "Исключить"
+      "exclude": "Исключить",
+      "needLoader": "Сначала выберите сборку или версию с загрузчиком",
+      "hideInstalled": "Скрывать установленные"
     },
     "theme": {
       "quick": "Переключить тему",
@@ -333,7 +390,34 @@ export const EXTRA = {
       "memApply": "Применить"
     },
     "set": {
-      "recoPack": "Для текущей сборки ({mods} модов) хватит {gb} ГБ"
+      "recoPack": "Для текущей сборки ({mods} модов) хватит {gb} ГБ",
+      "railAuto": "Авто"
+    },
+    "instances": {
+      "selected": "Выбрана"
+    },
+    "achievements": {
+      "title": "Достижения",
+      "sub": "Маленькие вехи на твоём пути в Minecraft",
+      "first": "Первый запуск",
+      "firstHint": "Запусти игру один раз",
+      "hour": "Первый час",
+      "hourHint": "Наиграй 1 час",
+      "day": "Целый день",
+      "dayHint": "Наиграй 24 часа",
+      "packs": "Коллекционер",
+      "packsHint": "Создай 5 сборок",
+      "week": "Неделя Minecraft",
+      "weekHint": "Играй 7 дней подряд",
+      "month": "30 дней Minecraft",
+      "monthHint": "Играй 30 дней подряд",
+      "night": "Ночной шахтёр",
+      "nightHint": "Запусти игру после полуночи",
+      "loyal": "Верный игрок",
+      "loyalHint": "Запусти лаунчер 50 раз",
+      "done": "Получено",
+      "locked": "Закрыто",
+      "progress": "{a} из {b}"
     }
   },
   "uk": {

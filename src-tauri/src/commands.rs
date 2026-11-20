@@ -197,6 +197,9 @@ pub async fn mods_install(
         Some("shader") => "shaderpacks",
         _ => "mods",
     };
+    // Resource packs and shaders have no mod loader. Filtering by a loader
+    // makes Modrinth/CurseForge return an empty version list.
+    let loader = if folder == "mods" { loader } else { String::new() };
     let handle = app.clone();
     let progress = std::sync::Arc::new(move |done: usize, bytes: u64| {
         let _ = handle.emit(
@@ -428,6 +431,13 @@ pub async fn launch(app: AppHandle, state: State<'_, AppState>, id: String) -> R
     let _ = state.update(|c| {
         c.last_version = Some(id.clone());
         c.stats.launches += 1;
+        let hour = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| (d.as_secs() / 3600) % 24)
+            .unwrap_or(12);
+        if hour < 5 {
+            c.stats.night_launches += 1;
+        }
     });
 
     let _ = app.emit("game://started", id.clone());
@@ -1040,8 +1050,9 @@ pub async fn catalog_search(
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty() && value != "all");
     let mut hits = Vec::new();
+    let mut failures: Vec<String> = Vec::new();
     if provider != "curseforge" {
-        let found = mods::search(
+        match mods::search(
             &state.http,
             &query,
             &kind,
@@ -1053,11 +1064,13 @@ pub async fn catalog_search(
             &sort,
         )
         .await
-        .map_err(|e| e.to_string())?;
-        hits.extend(found);
+        {
+            Ok(found) => hits.extend(found),
+            Err(err) => failures.push(err.to_string()),
+        }
     }
     if provider != "modrinth" {
-        let found = curse::search(
+        match curse::search(
             &state.http,
             &query,
             &kind,
@@ -1068,8 +1081,16 @@ pub async fn catalog_search(
             &sort,
         )
         .await
-        .map_err(|e| e.to_string())?;
-        hits.extend(found);
+        {
+            Ok(found) => hits.extend(found),
+            Err(err) => failures.push(err.to_string()),
+        }
+    }
+    // With "both" one dead provider must not take the whole catalog down.
+    if hits.is_empty() {
+        if let Some(err) = failures.first() {
+            return Err(err.clone());
+        }
     }
 
     if provider == "both" {
@@ -1832,9 +1853,9 @@ pub async fn install_update(app: AppHandle, path: String) -> Result<(), String> 
         let script = dir.join("restart-update.cmd");
         let body = format!(
             "@echo off\r\n\
-             ping 127.0.0.1 -n 3 >nul\r\n\
+             ping 127.0.0.1 -n 2 >nul\r\n\
              {installer}\r\n\
-             ping 127.0.0.1 -n 3 >nul\r\n\
+             ping 127.0.0.1 -n 2 >nul\r\n\
              start \"\" \"{}\"\r\n\
              del \"%~f0\"\r\n",
             exe.display()
@@ -1848,7 +1869,7 @@ pub async fn install_update(app: AppHandle, path: String) -> Result<(), String> 
             .stderr(Stdio::null())
             .spawn()
             .map_err(|e| e.to_string())?;
-        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
         app.exit(0);
         return Ok(());
     }
@@ -1898,6 +1919,174 @@ fn hash_file(path: &std::path::Path) -> Option<String> {
         hasher.update(&buffer[..read]);
     }
     Some(format!("{:x}", hasher.finalize()))
+}
+
+/// Modrinth project ids for the jars of a pack. Used to mark already
+/// installed projects in the catalog without trusting file names.
+#[tauri::command]
+pub async fn profile_project_ids(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    use std::collections::HashMap;
+
+    let cfg = state.snapshot();
+    let profile = cfg.profile(&id).ok_or_else(|| "profile_not_found".to_string())?;
+    let root = cfg.profile_root(profile);
+    let cache_path = root.join(".aqua-project-ids.json");
+    let mut cache: HashMap<String, String> = std::fs::read_to_string(&cache_path)
+        .ok()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default();
+
+    let mut pending: Vec<(String, String)> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(root.join("mods")) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let name = path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or_default()
+                .to_string();
+            let lower = name.to_ascii_lowercase();
+            if (!lower.ends_with(".jar") && !lower.ends_with(".jar.off")) || cache.contains_key(&name) {
+                continue;
+            }
+            if let Some(hash) = hash_file(&path) {
+                pending.push((name, hash));
+            }
+        }
+    }
+    if pending.is_empty() {
+        return Ok(cache);
+    }
+
+    let ua = concat!("AquaLauncher/", env!("CARGO_PKG_VERSION"));
+    let mut found: HashMap<String, String> = HashMap::new();
+    for chunk in pending.chunks(24) {
+        let hashes: Vec<&str> = chunk.iter().map(|(_, hash)| hash.as_str()).collect();
+        let response = state
+            .http
+            .post("https://api.modrinth.com/v2/version_files")
+            .header("User-Agent", ua)
+            .json(&serde_json::json!({ "hashes": hashes, "algorithm": "sha1" }))
+            .send()
+            .await;
+        let Ok(response) = response else { continue };
+        if !response.status().is_success() {
+            continue;
+        }
+        let Ok(value) = response.json::<serde_json::Value>().await else { continue };
+        let Some(map) = value.as_object() else { continue };
+        for (name, hash) in chunk {
+            if let Some(project) = map.get(hash.as_str()).and_then(|v| v["project_id"].as_str()) {
+                if !project.is_empty() {
+                    found.insert(name.clone(), project.to_string());
+                }
+            }
+        }
+    }
+    for (name, _) in &pending {
+        cache.entry(name.clone()).or_default();
+    }
+    cache.extend(found);
+    let _ = std::fs::write(
+        &cache_path,
+        serde_json::to_string(&cache).unwrap_or_else(|_| "{}".into()),
+    );
+    Ok(cache)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupResult {
+    pub bytes: u64,
+    pub files: u32,
+}
+
+fn path_stats(path: &std::path::Path) -> (u64, u32) {
+    let mut bytes = 0;
+    let mut files = 0;
+    if let Ok(meta) = std::fs::metadata(path) {
+        if meta.is_file() {
+            return (meta.len(), 1);
+        }
+    }
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let (b, f) = path_stats(&entry.path());
+            bytes += b;
+            files += f;
+        }
+    }
+    (bytes, files)
+}
+
+/// Removes accumulated junk from an instance: game logs, crash reports and
+/// local map caches. Saved worlds are never touched.
+#[tauri::command]
+pub fn profile_cleanup(
+    state: State<'_, AppState>,
+    id: String,
+    logs: bool,
+    maps: bool,
+) -> Result<CleanupResult, String> {
+    let cfg = state.snapshot();
+    let profile = cfg.profile(&id).ok_or_else(|| "profile_not_found".to_string())?;
+    let root = cfg.profile_root(profile);
+
+    let mut targets: Vec<std::path::PathBuf> = Vec::new();
+    if logs {
+        for name in ["logs", "crash-reports", ".mixin.out"] {
+            targets.push(root.join(name));
+        }
+        if let Ok(entries) = std::fs::read_dir(&root) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+                if name.starts_with("hs_err_pid") || name.ends_with(".log.gz") {
+                    targets.push(entry.path());
+                }
+            }
+        }
+    }
+    if maps {
+        for name in [
+            ".voxy",
+            "voxy",
+            "bobby",
+            "DistantHorizons",
+            "Distant_Horizons_server_data",
+            "DistantHorizons-server-data",
+            "XaeroWaypoints",
+            "XaeroWorldMap",
+            "journeymap",
+            "xaero",
+        ] {
+            targets.push(root.join(name));
+        }
+    }
+
+    let mut bytes = 0;
+    let mut files = 0;
+    for target in targets {
+        if !target.exists() {
+            continue;
+        }
+        let (b, f) = path_stats(&target);
+        let removed = if target.is_dir() {
+            std::fs::remove_dir_all(&target).is_ok()
+        } else {
+            std::fs::remove_file(&target).is_ok()
+        };
+        if removed {
+            bytes += b;
+            files += f;
+        }
+    }
+    Ok(CleanupResult { bytes, files })
 }
 
 /// Иконки модов сборки. Файлы опознаются по SHA-1 через Modrinth и кешируются

@@ -126,7 +126,7 @@ let settings = {
   uiWallpaperBlur: 18,
   uiWallpaperDim: 45,
   uiSidebar: pick("side", "left"),
-  uiSidebarMode: pick("rail", "full"),
+  uiSidebarMode: pick("rail", "auto"),
   uiMotion: pick("motion", "on") !== "off",
   uiNav: JSON.stringify(["home", "library", "instances", "discover", "accounts"]),
   uiLayout: JSON.stringify(["stats", "pc", "latest", "instances", "console"]),
@@ -138,8 +138,8 @@ let settings = {
   strictMods: true,
   autoRepair: true,
   autoUpdate: true,
-  discordRpc: false,
-  discordClientId: "",
+  discordRpc: true,
+  discordClientId: "1573083334517723146",
   allowExperimental: false,
   showSnapshots: true,
   showOld: true,
@@ -495,6 +495,29 @@ const handlers = {
       { file: "Complementary.zip", name: "Complementary Reimagined", kind: "shader", size: 4_300_000, enabled: true },
       { file: "Terralith.zip", name: "Terralith", kind: "datapack", size: 9_200_000, enabled: true },
     ].concat((packExtras.get(id) || []).map((item) => ({ ...item, enabled: !demoDisabled.has(`${id}:${item.file}`) })));
+  },
+
+  profile_project_ids({ id }) {
+    const map = {};
+    for (const item of handlers.profile_contents({ id })) {
+      const project = MODS.find((m) => m.title.toLowerCase() === item.name.toLowerCase());
+      if (project) map[item.file] = project.id;
+    }
+    return map;
+  },
+
+  profile_cleanup({ logs, maps }) {
+    let bytes = 0;
+    let files = 0;
+    if (logs) {
+      bytes += 1_840_000;
+      files += 12;
+    }
+    if (maps) {
+      bytes += 84_200_000;
+      files += 240;
+    }
+    return { bytes, files };
   },
 
   profile_files_action({ id, action, files }) {

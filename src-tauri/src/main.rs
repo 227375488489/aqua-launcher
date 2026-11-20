@@ -51,6 +51,8 @@ fn main() {
             commands::profile_options,
             commands::profile_contents,
             commands::profile_icons,
+            commands::profile_project_ids,
+            commands::profile_cleanup,
             commands::mods_quarantine,
             commands::mods_retry_pending,
             commands::profile_files_action,

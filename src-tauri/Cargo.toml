@@ -1,6 +1,6 @@
 [package]
 name = "aqua-launcher"
-version = "0.0.7-beta"
+version = "0.0.8-beta"
 edition = "2021"
 rust-version = "1.82"
 description = "Aqua Launcher вЂ” a fast, beautiful Minecraft launcher written in Rust"

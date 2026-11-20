@@ -174,11 +174,16 @@ async fn versions(
     loader: &str,
 ) -> Result<Vec<Version>> {
     let gv = serde_json::to_string(&[game_version])?;
-    let ld = serde_json::to_string(&[loader])?;
+    let mut query = vec![("game_versions", gv)];
+    // Resource packs and shaders are not tied to a mod loader; sending one
+    // filters every compatible version out.
+    if !loader.is_empty() {
+        query.push(("loaders", serde_json::to_string(&[loader])?));
+    }
     let res = client
         .get(format!("{}/project/{}/version", API, project))
         .header("User-Agent", UA)
-        .query(&[("game_versions", gv), ("loaders", ld)])
+        .query(&query)
         .send()
         .await
         .context("Modrinth недоступен")?

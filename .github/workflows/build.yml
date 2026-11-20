@@ -54,20 +54,19 @@ jobs:
           tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
           releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('Aqua Launcher {0}', github.ref_name) || '' }}
           releaseBody: |
-            Aqua Launcher 0.0.7 Beta — a fast, open Minecraft launcher built with Rust and Tauri.
+            Aqua Launcher 0.0.8 Beta — a fast, open Minecraft launcher built with Rust and Tauri.
 
-            - Versions menu is a tree: vanilla base, loader sub-versions and packs underneath, with covers and search
-            - All Minecraft versions are visible, including snapshots and old builds, each with a banner or generated cover
-            - Hero greeting changes with time of day and playtime ("Isn't it time for bed?", "Do you ever rest?")
-            - Add content is a full catalog page inside the pack with breadcrumbs, back button, locked version and loader
-            - Select multiple mods to enable, disable or delete them at once; disabled files stay in the pack
-            - Modrinth-style category filters that can include or exclude categories, shown as removable chips
-            - Project pages render sanitized HTML correctly and open screenshots in a keyboard-friendly lightbox
-            - Theme colors reach every surface, notification and generated banner; custom theme preset added
-            - Fabric, Quilt, Forge and NeoForge with a pickable loader version when creating a pack
-            - Boot animation, smoother list transitions, themed toasts, and automatic update download + restart
-            - Everything from 0.0.6: catalog paging, pack version updates, visual layout editor, per-pack memory, Discord RPC 1573083334517723146
-            - 12 fully translated languages; Windows, macOS (universal) and Linux builds
+            - Catalog marks installed mods, resource packs, shaders and data packs, with an optional "hide installed" filter
+            - Resource pack and shader installs no longer ask for a mod loader; "Both" providers keep working when one source is down
+            - Pack cards reveal an "Open content" action on hover; sidebar starts collapsed to icons and expands on hover
+            - Per-mod version switching, "Update all mods", bulk enable/disable/delete and inline toggles
+            - Pack cleanup removes logs, crash reports and minimap/chunk caches for Voxy, Bobby, Distant Horizons, Xaero and JourneyMap
+            - Achievements for playtime, packs, streaks, night launches and loyalty, computed from real stats
+            - Themes reach every toast and surface, presets no longer move the background, scale slider no longer jumps
+            - Larger icon targets, cleaner settings alignment, Microsoft button moved below the text, selected pack label fixed
+            - Discord presence is enabled by default; the Fabric download button is gone from version selection
+            - Everything from 0.0.7: version tree, live hero, in-pack catalog, Modrinth-style filters, Quilt/Forge/NeoForge, fast auto-update
+            - 12 languages; Windows, macOS (universal) and Linux builds
           releaseDraft: false
           prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
           args: ${{ matrix.args }}

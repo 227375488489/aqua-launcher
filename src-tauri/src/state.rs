@@ -104,7 +104,7 @@ impl Default for Settings {
             ui_wallpaper_blur: 18,
             ui_wallpaper_dim: 45,
             ui_sidebar: "left".into(),
-            ui_sidebar_mode: "full".into(),
+            ui_sidebar_mode: "auto".into(),
             ui_motion: true,
             language: "auto".into(),
             ui_nav: String::new(),
@@ -119,7 +119,7 @@ impl Default for Settings {
             show_old: true,
             allow_experimental: false,
             auto_update: true,
-            discord_rpc: false,
+            discord_rpc: true,
             discord_client_id: "1573083334517723146".into(),
             strict_mods: true,
             auto_repair: true,
@@ -201,6 +201,9 @@ pub struct Stats {
     pub launches: u32,
     pub sessions: u32,
     pub last_played: i64,
+    /// Дни (unix day), в которые запускалась игра — для серии дней.
+    pub days: Vec<u64>,
+    pub night_launches: u32,
 }
 
 impl Stats {
@@ -208,6 +211,13 @@ impl Stats {
         *self.playtime_secs.entry(version.to_string()).or_default() += secs;
         self.sessions += 1;
         self.last_played = now_secs();
+        let day = (now_secs() as u64) / 86_400;
+        if !self.days.contains(&day) {
+            self.days.push(day);
+            if self.days.len() > 400 {
+                self.days.remove(0);
+            }
+        }
     }
 
     pub fn total_secs(&self) -> u64 {
