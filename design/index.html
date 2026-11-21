@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aqua Launcher — design frames</title>
+<style>
+  @font-face{font-family:Manrope;font-weight:200 800;src:url("../ui/assets/fonts/manrope-cyrillic.woff2") format("woff2");unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+  @font-face{font-family:Manrope;font-weight:200 800;src:url("../ui/assets/fonts/manrope-latin.woff2") format("woff2")}
+  :root{color-scheme:dark;--bg:#050f17;--panel:#0a1923;--line:rgba(255,255,255,.09);--text:#e9f5f8;--dim:#aac2cc;--muted:#7d97a4;--accent:#5ce8dc}
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(900px 500px at 15% -10%,rgba(92,232,220,.13),transparent 60%),radial-gradient(800px 500px at 90% 110%,rgba(59,198,255,.10),transparent 60%),var(--bg);color:var(--text);font:14px/1.5 Manrope,Inter,system-ui,sans-serif;padding:40px}
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;max-width:1440px;margin:0 auto 28px}
+  h1{margin:0;font-size:30px;letter-spacing:-.8px}
+  header p{margin:6px 0 0;color:var(--muted);font-size:13px}
+  .badge{border:1px solid var(--line);border-radius:999px;padding:7px 12px;color:var(--dim);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+  .master{display:flex;align-items:center;justify-content:space-between;gap:18px;max-width:1440px;margin:0 auto 26px;padding:16px 20px;border:1px solid rgba(92,232,220,.35);border-radius:16px;background:linear-gradient(120deg,rgba(92,232,220,.12),rgba(59,198,255,.05));color:inherit;text-decoration:none;transition:border-color .18s,background .18s}
+  .master:hover,.master:focus-visible{border-color:rgba(92,232,220,.75);background:linear-gradient(120deg,rgba(92,232,220,.18),rgba(59,198,255,.08))}
+  .master b{display:block;font-size:14px}
+  .master small{display:block;margin-top:3px;color:var(--dim);font-size:11.5px}
+  .master span{flex:none;border:1px solid rgba(92,232,220,.4);border-radius:999px;padding:7px 12px;color:var(--accent);font-size:11px;font-weight:700}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:24px;max-width:1440px;margin:0 auto}
+  a.card{display:block;border:1px solid var(--line);border-radius:20px;background:var(--panel);overflow:hidden;color:inherit;text-decoration:none;transition:border-color .18s,transform .18s}
+  a.card:hover,a.card:focus-visible{border-color:rgba(92,232,220,.5);transform:translateY(-2px)}
+  a.card img{display:block;width:100%;height:auto;border-bottom:1px solid var(--line);background:#04121b}
+  .meta{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px}
+  .meta b{font-size:13px}
+  .meta span{font-size:11px;color:var(--muted)}
+  footer{max-width:1440px;margin:28px auto 0;color:var(--muted);font-size:12px;display:flex;gap:18px;flex-wrap:wrap}
+  footer code{color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Aqua Launcher — design frames</h1>
+    <p>Реальные экраны приложения 1440×900, снятые с работающего интерфейса. Импорт в Figma: File → Import.</p>
+  </div>
+  <span class="badge">v0.0.13 · 8 frames</span>
+</header>
+<a class="master" href="Aqua-Launcher.fig.svg">
+  <div>
+    <b>Один файл для Figma</b>
+    <small>Все восемь экранов на одном холсте, с подписями и редактируемыми слоями.</small>
+  </div>
+  <span>Открыть SVG</span>
+</a>
+<main class="grid">
+  <a class="card" href="screens/home.svg"><img src="screens/home.svg" alt="Главная"><div class="meta"><b>Главная</b><span>hero · widgets</span></div></a>
+  <a class="card" href="screens/library.svg"><img src="screens/library.svg" alt="Версии"><div class="meta"><b>Версии</b><span>toolbar · cards</span></div></a>
+  <a class="card" href="screens/discover.svg"><img src="screens/discover.svg" alt="Каталог"><div class="meta"><b>Каталог</b><span>tabs · results · pager</span></div></a>
+  <a class="card" href="screens/instances.svg"><img src="screens/instances.svg" alt="Сборки"><div class="meta"><b>Сборки</b><span>grid · empty action</span></div></a>
+  <a class="card" href="screens/pack.svg"><img src="screens/pack.svg" alt="Сборка"><div class="meta"><b>Сборка</b><span>hero · files</span></div></a>
+  <a class="card" href="screens/achievements.svg"><img src="screens/achievements.svg" alt="Достижения"><div class="meta"><b>Достижения</b><span>progress · cards</span></div></a>
+  <a class="card" href="screens/accounts.svg"><img src="screens/accounts.svg" alt="Аккаунты"><div class="meta"><b>Аккаунты</b><span>list · login</span></div></a>
+  <a class="card" href="screens/settings.svg"><img src="screens/settings.svg" alt="Настройки"><div class="meta"><b>Настройки</b><span>tabs · appearance</span></div></a>
+</main>
+<footer>
+  <span>Токены: <code>tokens.json</code></span>
+  <span>Правила: <code>DESIGN.md</code></span>
+  <span>Пересборка: <code>node design/build.mjs</code></span>
+</footer>
+</body>
+</html>

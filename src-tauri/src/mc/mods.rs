@@ -2,10 +2,11 @@
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::Read;
-use std::path::Path;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::UNIX_EPOCH;
 
 use crate::net::{self, Job};
 
@@ -346,7 +347,7 @@ pub fn list(root: &Path) -> Vec<InstalledMod> {
     let Ok(entries) = std::fs::read_dir(&dir) else {
         return Vec::new();
     };
-    let mut out = Vec::new();
+    let mut files: Vec<(PathBuf, String, bool, u64)> = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
@@ -359,21 +360,62 @@ pub fn list(root: &Path) -> Vec<InstalledMod> {
             continue;
         };
         let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-        let meta = read_meta(&path);
-        let (risk, notes) = scan(&path);
-        out.push(InstalledMod {
-            file: name,
-            name: meta.0,
-            id: meta.1,
-            version: meta.2,
-            loader: meta.3,
-            size,
-            depends: meta.4,
-            risk,
-            notes,
-            enabled,
-        });
+        files.push((path, name, enabled, size));
     }
+
+    // Zip inspection is CPU/IO heavy. Scan a few archives in parallel so a
+    // profile with hundreds of mods does not freeze the async runtime.
+    let workers = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
+        .clamp(1, 8)
+        .min(files.len().max(1));
+    let slots: Mutex<Vec<Option<InstalledMod>>> = Mutex::new((0..files.len()).map(|_| None).collect());
+    if workers > 1 {
+        let next = std::sync::atomic::AtomicUsize::new(0);
+        std::thread::scope(|scope| {
+            for _ in 0..workers {
+                scope.spawn(|| loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    if i >= files.len() {
+                        break;
+                    }
+                    let (path, name, enabled, size) = &files[i];
+                    let meta = cached_meta(path);
+                    slots.lock().unwrap()[i] = Some(InstalledMod {
+                        file: name.clone(),
+                        name: meta.name,
+                        id: meta.id,
+                        version: meta.version,
+                        loader: meta.loader,
+                        size: *size,
+                        depends: meta.depends,
+                        risk: meta.risk,
+                        notes: meta.notes,
+                        enabled: *enabled,
+                    });
+                });
+            }
+        });
+    } else {
+        for (i, (path, name, enabled, size)) in files.iter().enumerate() {
+            let meta = cached_meta(path);
+            slots.lock().unwrap()[i] = Some(InstalledMod {
+                file: name.clone(),
+                name: meta.name,
+                id: meta.id,
+                version: meta.version,
+                loader: meta.loader,
+                size: *size,
+                depends: meta.depends,
+                risk: meta.risk,
+                notes: meta.notes,
+                enabled: *enabled,
+            });
+        }
+    }
+
+    let mut out: Vec<InstalledMod> = slots.into_inner().unwrap().into_iter().flatten().collect();
     out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     out
 }
@@ -387,8 +429,102 @@ pub fn remove(root: &Path, file: &str) -> Result<()> {
     Ok(())
 }
 
+/// Parsed archive metadata plus the result of the (expensive) security scan.
+#[derive(Clone)]
+struct ModMeta {
+    name: String,
+    id: String,
+    version: String,
+    loader: String,
+    depends: Vec<String>,
+    risk: String,
+    notes: Vec<String>,
+}
+
+struct CachedMeta {
+    size: u64,
+    modified: u128,
+    meta: ModMeta,
+}
+
+static META_CACHE: OnceLock<Mutex<HashMap<PathBuf, CachedMeta>>> = OnceLock::new();
+
+fn fingerprint(path: &Path) -> (u64, u128) {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return (0, 0);
+    };
+    let modified = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    (meta.len(), modified)
+}
+
+/// Metadata is cached by path + size + mtime, so repeated open of the same
+/// profile is instant while replaced files are re-inspected.
+fn cached_meta(path: &Path) -> ModMeta {
+    let (size, modified) = fingerprint(path);
+    let cache = META_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(map) = cache.lock() {
+        if let Some(hit) = map.get(path) {
+            if hit.size == size && hit.modified == modified {
+                return hit.meta.clone();
+            }
+        }
+    }
+    let meta = inspect(path);
+    if let Ok(mut map) = cache.lock() {
+        if map.len() > 4096 {
+            map.clear();
+        }
+        map.insert(
+            path.to_path_buf(),
+            CachedMeta {
+                size,
+                modified,
+                meta: meta.clone(),
+            },
+        );
+    }
+    meta
+}
+
+fn inspect(path: &Path) -> ModMeta {
+    let fallback = || ModMeta {
+        name: path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default(),
+        id: String::new(),
+        version: String::new(),
+        loader: String::new(),
+        depends: Vec::new(),
+        risk: "medium".into(),
+        notes: vec!["Архив повреждён или недоступен для проверки".into()],
+    };
+    let Ok(file) = std::fs::File::open(path) else {
+        return fallback();
+    };
+    let Ok(mut zip) = zip::ZipArchive::new(file) else {
+        return fallback();
+    };
+    let (name, id, version, loader, depends) = read_meta(&mut zip, path);
+    let (risk, notes) = scan(&mut zip);
+    ModMeta {
+        name,
+        id,
+        version,
+        loader,
+        depends,
+        risk,
+        notes,
+    }
+}
+
 /// (name, id, version, loader, depends)
-fn read_meta(path: &Path) -> (String, String, String, String, Vec<String>) {
+fn read_meta(zip: &mut zip::ZipArchive<std::fs::File>, path: &Path) -> (String, String, String, String, Vec<String>) {
     let fallback = (
         path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(),
         String::new(),
@@ -396,14 +532,8 @@ fn read_meta(path: &Path) -> (String, String, String, String, Vec<String>) {
         String::new(),
         Vec::new(),
     );
-    let Ok(file) = std::fs::File::open(path) else {
-        return fallback;
-    };
-    let Ok(mut zip) = zip::ZipArchive::new(file) else {
-        return fallback;
-    };
 
-    if let Some(text) = read_entry(&mut zip, "fabric.mod.json").or_else(|| read_entry(&mut zip, "quilt.mod.json")) {
+    if let Some(text) = read_entry(zip, "fabric.mod.json").or_else(|| read_entry(zip, "quilt.mod.json")) {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
             let quilt = v.get("quilt_loader");
             let src = quilt.unwrap_or(&v);
@@ -435,8 +565,8 @@ fn read_meta(path: &Path) -> (String, String, String, String, Vec<String>) {
         }
     }
 
-    if let Some(text) = read_entry(&mut zip, "META-INF/neoforge.mods.toml")
-        .or_else(|| read_entry(&mut zip, "META-INF/mods.toml"))
+    if let Some(text) = read_entry(zip, "META-INF/neoforge.mods.toml")
+        .or_else(|| read_entry(zip, "META-INF/mods.toml"))
     {
         let mut ids = Vec::new();
         let mut name = String::new();
@@ -545,7 +675,7 @@ pub struct ProfileHealth {
 /// несовместимый загрузчик и файлы, ожидающие обновления.
 pub fn profile_health(root: &Path, loader: &str) -> ProfileHealth {
     let list = list(root);
-    let base = health(root);
+    let base = health_from(&list);
     let mut issues = Vec::new();
     let mut critical = 0usize;
     let mut warnings = 0usize;
@@ -613,13 +743,17 @@ pub fn profile_health(root: &Path, loader: &str) -> ProfileHealth {
 /// Ищет зависимости, которых нет среди установленных jar.
 pub fn health(root: &Path) -> Health {
     let list = list(root);
+    health_from(&list)
+}
+
+fn health_from(list: &[InstalledMod]) -> Health {
     let ids: HashSet<String> = list
         .iter()
         .filter(|m| !m.id.is_empty())
         .map(|m| m.id.to_lowercase())
         .collect();
     let mut missing = Vec::new();
-    for item in &list {
+    for item in list {
         for dep in &item.depends {
             let key = dep.to_lowercase();
             if PLATFORM.contains(&key.as_str()) || ids.contains(&key) {
@@ -678,13 +812,7 @@ pub async fn repair(
 }
 
 /// Оценка безопасности: читает содержимое jar без запуска кода.
-fn scan(path: &Path) -> (String, Vec<String>) {
-    let Ok(file) = std::fs::File::open(path) else {
-        return ("medium".into(), vec!["Архив повреждён или недоступен для проверки".into()]);
-    };
-    let Ok(mut zip) = zip::ZipArchive::new(file) else {
-        return ("medium".into(), vec!["Архив повреждён или недоступен для проверки".into()]);
-    };
+fn scan(zip: &mut zip::ZipArchive<std::fs::File>) -> (String, Vec<String>) {
     let mut notes: Vec<String> = Vec::new();
     let mut level = 0u8; // 0 низкий, 1 средний, 2 высокий
     let mut budget = 32u64 * 1024 * 1024;

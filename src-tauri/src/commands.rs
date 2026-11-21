@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::Ordering;
@@ -98,7 +98,7 @@ fn loader_of(id: &str, meta: &VersionMeta) -> String {
 }
 
 #[tauri::command]
-pub fn bootstrap(state: State<'_, AppState>) -> Result<Bootstrap, String> {
+pub async fn bootstrap(state: State<'_, AppState>) -> Result<Bootstrap, String> {
     let cfg = state.snapshot();
     let root = cfg.game_root();
     let running = state
@@ -107,11 +107,15 @@ pub fn bootstrap(state: State<'_, AppState>) -> Result<Bootstrap, String> {
         .unwrap()
         .first()
         .map(|g| g.version.clone());
+    let scan_root = root.clone();
+    let local = tauri::async_runtime::spawn_blocking(move || scan_local(&scan_root))
+        .await
+        .unwrap_or_default();
     Ok(Bootstrap {
         settings: cfg.settings.clone(),
         accounts: cfg.accounts.clone(),
         active: cfg.active.clone(),
-        local: scan_local(&root),
+        local,
         game_dir: root.display().to_string(),
         active_dir: cfg.active_root().display().to_string(),
         data_dir: crate::paths::data_dir().display().to_string(),
@@ -144,8 +148,10 @@ pub async fn remote_versions(
 }
 
 #[tauri::command]
-pub fn system_report(refresh: bool) -> crate::system::Report {
-    crate::system::report(refresh)
+pub async fn system_report(refresh: bool) -> crate::system::Report {
+    tauri::async_runtime::spawn_blocking(move || crate::system::report(refresh))
+        .await
+        .unwrap_or_else(|_| crate::system::report(false))
 }
 
 #[tauri::command]
@@ -285,26 +291,41 @@ pub async fn mods_update(
 }
 
 #[tauri::command]
-pub fn mods_health(state: State<'_, AppState>) -> mods::Health {
-    mods::health(&state.snapshot().active_root())
+pub async fn mods_health(state: State<'_, AppState>) -> Result<mods::Health, String> {
+    let root = state.snapshot().active_root();
+    tauri::async_runtime::spawn_blocking(move || mods::health(&root))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn profile_health(state: State<'_, AppState>, id: String) -> Result<mods::ProfileHealth, String> {
+pub async fn profile_health(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<mods::ProfileHealth, String> {
     let cfg = state.snapshot();
     let profile = cfg.profile(&id).ok_or("profile_not_found")?;
     let root = cfg.profile_root(&profile);
-    Ok(mods::profile_health(&root, &profile.loader))
+    let loader = profile.loader.clone();
+    tauri::async_runtime::spawn_blocking(move || mods::profile_health(&root, &loader))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn mods_list(state: State<'_, AppState>) -> Vec<mods::InstalledMod> {
-    mods::list(&state.snapshot().active_root())
+pub async fn mods_list(state: State<'_, AppState>) -> Result<Vec<mods::InstalledMod>, String> {
+    let root = state.snapshot().active_root();
+    tauri::async_runtime::spawn_blocking(move || mods::list(&root))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn mods_remove(state: State<'_, AppState>, file: String) -> Result<(), String> {
-    mods::remove(&state.snapshot().active_root(), &file).map_err(|e| e.to_string())
+pub async fn mods_remove(state: State<'_, AppState>, file: String) -> Result<(), String> {
+    let root = state.snapshot().active_root();
+    tauri::async_runtime::spawn_blocking(move || mods::remove(&root, &file).map_err(|e| e.to_string()))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -1481,7 +1502,7 @@ pub fn profile_set_version(
 }
 
 #[tauri::command]
-pub fn profile_clone(
+pub async fn profile_clone(
     state: State<'_, AppState>,
     id: String,
     name: String,
@@ -1512,25 +1533,31 @@ pub fn profile_clone(
     }
     let dir = format!("profiles/{new_id}");
     let target = cfg.game_root().join(&dir);
-    crate::paths::ensure_dir(&target).map_err(|e| e.to_string())?;
     let source_root = cfg.profile_root(&source);
-    for folder in [
-        "mods",
-        "config",
-        "defaultconfigs",
-        "resourcepacks",
-        "shaderpacks",
-        "datapacks",
-    ] {
-        let from = source_root.join(folder);
-        if from.is_dir() {
-            copy_dir(&from, &target.join(folder)).map_err(|e| e.to_string())?;
+    let clone_target = target.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::paths::ensure_dir(&clone_target).map_err(|e| e.to_string())?;
+        for folder in [
+            "mods",
+            "config",
+            "defaultconfigs",
+            "resourcepacks",
+            "shaderpacks",
+            "datapacks",
+        ] {
+            let from = source_root.join(folder);
+            if from.is_dir() {
+                copy_dir(&from, &clone_target.join(folder)).map_err(|e| e.to_string())?;
+            }
         }
-    }
-    let options_txt = source_root.join("options.txt");
-    if options_txt.is_file() {
-        std::fs::copy(&options_txt, target.join("options.txt")).map_err(|e| e.to_string())?;
-    }
+        let options_txt = source_root.join("options.txt");
+        if options_txt.is_file() {
+            std::fs::copy(&options_txt, clone_target.join("options.txt")).map_err(|e| e.to_string())?;
+        }
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
     let loader = normalize_loader(&version_id, loader);
     let loader_version = loader_version
         .map(|value| value.trim().to_string())
@@ -1630,80 +1657,84 @@ pub struct ProfileFile {
 }
 
 #[tauri::command]
-pub fn profile_contents(
+pub async fn profile_contents(
     state: State<'_, AppState>,
     id: String,
 ) -> Result<Vec<ProfileFile>, String> {
     let cfg = state.snapshot();
     let profile = cfg.profile(&id).ok_or_else(|| "profile_not_found".to_string())?;
     let root = cfg.profile_root(profile);
-    let mut out: Vec<ProfileFile> = mods::list(&root)
-        .into_iter()
-        .map(|m| ProfileFile {
-            file: m.file,
-            name: m.name,
-            kind: "mod".into(),
-            size: m.size,
-            enabled: m.enabled,
-        })
-        .collect();
-    if let Ok(entries) = std::fs::read_dir(root.join("mods")) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
-            let file = entry.file_name().to_string_lossy().to_string();
-            let Some(name) = file.strip_suffix(".jar.disabled").map(|value| value.to_string()) else {
-                continue;
-            };
-            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-            out.push(ProfileFile {
-                file,
-                name,
-                kind: "pending".into(),
-                size,
-                enabled: false,
-            });
-        }
-    }
-    for (folder, kind) in [
-        ("resourcepacks", "resourcepack"),
-        ("shaderpacks", "shader"),
-        ("datapacks", "datapack"),
-    ] {
-        let dir = root.join(folder);
-        if let Ok(entries) = std::fs::read_dir(dir) {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut out: Vec<ProfileFile> = mods::list(&root)
+            .into_iter()
+            .map(|m| ProfileFile {
+                file: m.file,
+                name: m.name,
+                kind: "mod".into(),
+                size: m.size,
+                enabled: m.enabled,
+            })
+            .collect();
+        if let Ok(entries) = std::fs::read_dir(root.join("mods")) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if !path.is_file() {
                     continue;
                 }
-                let file = path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_default();
-                let name = path
-                    .file_stem()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| file.clone());
+                let file = entry.file_name().to_string_lossy().to_string();
+                let Some(name) = file.strip_suffix(".jar.disabled").map(|value| value.to_string()) else {
+                    continue;
+                };
                 let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
                 out.push(ProfileFile {
                     file,
                     name,
-                    kind: kind.into(),
+                    kind: "pending".into(),
                     size,
-                    enabled: true,
+                    enabled: false,
                 });
             }
         }
-    }
-    out.sort_by(|a, b| a.kind.cmp(&b.kind).then(a.name.cmp(&b.name)));
-    Ok(out)
+        for (folder, kind) in [
+            ("resourcepacks", "resourcepack"),
+            ("shaderpacks", "shader"),
+            ("datapacks", "datapack"),
+        ] {
+            let dir = root.join(folder);
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if !path.is_file() {
+                        continue;
+                    }
+                    let file = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    let name = path
+                        .file_stem()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_else(|| file.clone());
+                    let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                    out.push(ProfileFile {
+                        file,
+                        name,
+                        kind: kind.into(),
+                        size,
+                        enabled: true,
+                    });
+                }
+            }
+        }
+        out.sort_by(|a, b| a.kind.cmp(&b.kind).then(a.name.cmp(&b.name)));
+        Ok(out)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-pub fn profile_file_remove(
+pub async fn profile_file_remove(
     state: State<'_, AppState>,
     id: String,
     file: String,
@@ -1715,21 +1746,25 @@ pub fn profile_file_remove(
     let cfg = state.snapshot();
     let profile = cfg.profile(&id).ok_or_else(|| "profile_not_found".to_string())?;
     let root = cfg.profile_root(profile);
-    let folder = match kind.as_str() {
-        "resourcepack" => "resourcepacks",
-        "shader" => "shaderpacks",
-        "datapack" => "datapacks",
-        _ => "mods",
-    };
-    let path = root.join(folder).join(&file);
-    if path.exists() {
-        std::fs::remove_file(&path).map_err(|e| format!("Не удалось удалить: {e}"))?;
-    }
-    Ok(())
+    tauri::async_runtime::spawn_blocking(move || {
+        let folder = match kind.as_str() {
+            "resourcepack" => "resourcepacks",
+            "shader" => "shaderpacks",
+            "datapack" => "datapacks",
+            _ => "mods",
+        };
+        let path = root.join(folder).join(&file);
+        if path.exists() {
+            std::fs::remove_file(&path).map_err(|e| format!("Не удалось удалить: {e}"))?;
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-pub fn profile_files_action(
+pub async fn profile_files_action(
     state: State<'_, AppState>,
     id: String,
     action: String,
@@ -1738,33 +1773,37 @@ pub fn profile_files_action(
     let cfg = state.snapshot();
     let profile = cfg.profile(&id).ok_or_else(|| "profile_not_found".to_string())?;
     let dir = cfg.profile_root(profile).join("mods");
-    for file in files {
-        if file.contains('/') || file.contains('\\') || file.contains("..") {
-            return Err("bad_file_name".into());
+    tauri::async_runtime::spawn_blocking(move || {
+        for file in files {
+            if file.contains('/') || file.contains('\\') || file.contains("..") {
+                return Err("bad_file_name".into());
+            }
+            let path = dir.join(&file);
+            match action.as_str() {
+                "remove" => {
+                    if path.exists() {
+                        std::fs::remove_file(&path).map_err(|e| format!("Не удалось удалить: {e}"))?;
+                    }
+                }
+                "disable" => {
+                    if path.exists() && file.to_ascii_lowercase().ends_with(".jar") {
+                        let target = dir.join(format!("{file}.off"));
+                        std::fs::rename(&path, target).map_err(|e| e.to_string())?;
+                    }
+                }
+                "enable" => {
+                    if path.exists() && file.to_ascii_lowercase().ends_with(".jar.off") {
+                        let target = dir.join(file.trim_end_matches(".off"));
+                        std::fs::rename(&path, target).map_err(|e| e.to_string())?;
+                    }
+                }
+                other => return Err(format!("bad_action:{other}")),
+            }
         }
-        let path = dir.join(&file);
-        match action.as_str() {
-            "remove" => {
-                if path.exists() {
-                    std::fs::remove_file(&path).map_err(|e| format!("Не удалось удалить: {e}"))?;
-                }
-            }
-            "disable" => {
-                if path.exists() && file.to_ascii_lowercase().ends_with(".jar") {
-                    let target = dir.join(format!("{file}.off"));
-                    std::fs::rename(&path, target).map_err(|e| e.to_string())?;
-                }
-            }
-            "enable" => {
-                if path.exists() && file.to_ascii_lowercase().ends_with(".jar.off") {
-                    let target = dir.join(file.trim_end_matches(".off"));
-                    std::fs::rename(&path, target).map_err(|e| e.to_string())?;
-                }
-            }
-            other => return Err(format!("bad_action:{other}")),
-        }
-    }
-    Ok(())
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -1813,18 +1852,18 @@ pub fn set_game_defaults(
 }
 
 #[tauri::command]
-pub fn profile_remove(
+pub async fn profile_remove(
     state: State<'_, AppState>,
     id: String,
     delete_files: bool,
 ) -> Result<Config, String> {
-    let cfg = state.snapshot();
     if delete_files {
+        let cfg = state.snapshot();
         if let Some(profile) = cfg.profile(&id) {
             let dir = cfg.profile_root(profile);
             // Удаляем только внутри папки профилей, чтобы не задеть пользовательские данные.
             if dir.starts_with(cfg.game_root().join("profiles")) {
-                let _ = std::fs::remove_dir_all(&dir);
+                let _ = tauri::async_runtime::spawn_blocking(move || std::fs::remove_dir_all(&dir)).await;
             }
         }
     }
@@ -2072,6 +2111,80 @@ fn hash_file(path: &std::path::Path) -> Option<String> {
     Some(format!("{:x}", hasher.finalize()))
 }
 
+#[derive(Serialize, Deserialize, Clone, Default)]
+struct FileStamp {
+    size: u64,
+    modified: u64,
+    hash: String,
+}
+
+/// SHA-1 of every installed jar, cached by name + size + mtime. Both the
+/// project-id and icon lookups share it, so a mod is read from disk at most
+/// once per file change.
+fn mod_hashes(root: &std::path::Path) -> std::collections::HashMap<String, String> {
+    let store_path = root.join(".aqua-hashes.json");
+    let mut store: std::collections::HashMap<String, FileStamp> = std::fs::read_to_string(&store_path)
+        .ok()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default();
+    let mut out = std::collections::HashMap::new();
+    let mut changed = false;
+    if let Ok(entries) = std::fs::read_dir(root.join("mods")) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            let lower = name.to_ascii_lowercase();
+            if !lower.ends_with(".jar") && !lower.ends_with(".jar.off") {
+                continue;
+            }
+            let meta = entry.metadata().ok();
+            let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+            let modified = meta
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            if let Some(stamp) = store.get(&name) {
+                if stamp.size == size && stamp.modified == modified && !stamp.hash.is_empty() {
+                    out.insert(name, stamp.hash.clone());
+                    continue;
+                }
+            }
+            if let Some(hash) = hash_file(&path) {
+                store.insert(
+                    name.clone(),
+                    FileStamp {
+                        size,
+                        modified,
+                        hash: hash.clone(),
+                    },
+                );
+                out.insert(name, hash);
+                changed = true;
+            }
+        }
+    }
+    if changed {
+        let _ = std::fs::write(&store_path, serde_json::to_string(&store).unwrap_or_default());
+    }
+    out
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+struct ProjectEntry {
+    hash: String,
+    project: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+struct IconEntry {
+    hash: String,
+    icon: String,
+}
+
 /// Modrinth project ids for the jars of a pack. Used to mark already
 /// installed projects in the catalog without trusting file names.
 #[tauri::command]
@@ -2085,34 +2198,25 @@ pub async fn profile_project_ids(
     let profile = cfg.profile(&id).ok_or_else(|| "profile_not_found".to_string())?;
     let root = cfg.profile_root(profile);
     let cache_path = root.join(".aqua-project-ids.json");
-    let mut cache: HashMap<String, String> = std::fs::read_to_string(&cache_path)
+    let mut cache: HashMap<String, ProjectEntry> = std::fs::read_to_string(&cache_path)
         .ok()
         .and_then(|raw| serde_json::from_str(&raw).ok())
         .unwrap_or_default();
+    let hashes = mod_hashes(&root);
 
     let mut pending: Vec<(String, String)> = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(root.join("mods")) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
-            let name = path
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or_default()
-                .to_string();
-            let lower = name.to_ascii_lowercase();
-            if (!lower.ends_with(".jar") && !lower.ends_with(".jar.off")) || cache.contains_key(&name) {
-                continue;
-            }
-            if let Some(hash) = hash_file(&path) {
-                pending.push((name, hash));
-            }
+    for (name, hash) in &hashes {
+        match cache.get(name) {
+            Some(entry) if entry.hash == *hash => {}
+            _ => pending.push((name.clone(), hash.clone())),
         }
     }
     if pending.is_empty() {
-        return Ok(cache);
+        return Ok(cache
+            .into_iter()
+            .filter(|(name, entry)| hashes.get(name).is_some_and(|hash| hash == &entry.hash))
+            .map(|(name, entry)| (name, entry.project))
+            .collect());
     }
 
     let ua = concat!("AquaLauncher/", env!("CARGO_PKG_VERSION"));
@@ -2140,15 +2244,26 @@ pub async fn profile_project_ids(
             }
         }
     }
-    for (name, _) in &pending {
-        cache.entry(name.clone()).or_default();
+    for (name, hash) in &pending {
+        if let Some(project) = found.get(name) {
+            cache.insert(
+                name.clone(),
+                ProjectEntry {
+                    hash: hash.clone(),
+                    project: project.clone(),
+                },
+            );
+        }
     }
-    cache.extend(found);
     let _ = std::fs::write(
         &cache_path,
         serde_json::to_string(&cache).unwrap_or_else(|_| "{}".into()),
     );
-    Ok(cache)
+    Ok(cache
+        .into_iter()
+        .filter(|(name, entry)| hashes.get(name).is_some_and(|hash| hash == &entry.hash))
+        .map(|(name, entry)| (name, entry.project))
+        .collect())
 }
 
 #[derive(Serialize)]
@@ -2179,7 +2294,7 @@ fn path_stats(path: &std::path::Path) -> (u64, u32) {
 /// Removes accumulated junk from an instance: game logs, crash reports and
 /// local map caches. Saved worlds are never touched.
 #[tauri::command]
-pub fn profile_cleanup(
+pub async fn profile_cleanup(
     state: State<'_, AppState>,
     id: String,
     logs: bool,
@@ -2188,56 +2303,59 @@ pub fn profile_cleanup(
     let cfg = state.snapshot();
     let profile = cfg.profile(&id).ok_or_else(|| "profile_not_found".to_string())?;
     let root = cfg.profile_root(profile);
-
-    let mut targets: Vec<std::path::PathBuf> = Vec::new();
-    if logs {
-        for name in ["logs", "crash-reports", ".mixin.out"] {
-            targets.push(root.join(name));
-        }
-        if let Ok(entries) = std::fs::read_dir(&root) {
-            for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-                if name.starts_with("hs_err_pid") || name.ends_with(".log.gz") {
-                    targets.push(entry.path());
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut targets: Vec<std::path::PathBuf> = Vec::new();
+        if logs {
+            for name in ["logs", "crash-reports", ".mixin.out"] {
+                targets.push(root.join(name));
+            }
+            if let Ok(entries) = std::fs::read_dir(&root) {
+                for entry in entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+                    if name.starts_with("hs_err_pid") || name.ends_with(".log.gz") {
+                        targets.push(entry.path());
+                    }
                 }
             }
         }
-    }
-    if maps {
-        for name in [
-            ".voxy",
-            "voxy",
-            "bobby",
-            "DistantHorizons",
-            "Distant_Horizons_server_data",
-            "DistantHorizons-server-data",
-            "XaeroWaypoints",
-            "XaeroWorldMap",
-            "journeymap",
-            "xaero",
-        ] {
-            targets.push(root.join(name));
+        if maps {
+            for name in [
+                ".voxy",
+                "voxy",
+                "bobby",
+                "DistantHorizons",
+                "Distant_Horizons_server_data",
+                "DistantHorizons-server-data",
+                "XaeroWaypoints",
+                "XaeroWorldMap",
+                "journeymap",
+                "xaero",
+            ] {
+                targets.push(root.join(name));
+            }
         }
-    }
 
-    let mut bytes = 0;
-    let mut files = 0;
-    for target in targets {
-        if !target.exists() {
-            continue;
+        let mut bytes = 0;
+        let mut files = 0;
+        for target in targets {
+            if !target.exists() {
+                continue;
+            }
+            let (b, f) = path_stats(&target);
+            let removed = if target.is_dir() {
+                std::fs::remove_dir_all(&target).is_ok()
+            } else {
+                std::fs::remove_file(&target).is_ok()
+            };
+            if removed {
+                bytes += b;
+                files += f;
+            }
         }
-        let (b, f) = path_stats(&target);
-        let removed = if target.is_dir() {
-            std::fs::remove_dir_all(&target).is_ok()
-        } else {
-            std::fs::remove_file(&target).is_ok()
-        };
-        if removed {
-            bytes += b;
-            files += f;
-        }
-    }
-    Ok(CleanupResult { bytes, files })
+        CleanupResult { bytes, files }
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// Иконки модов сборки. Файлы опознаются по SHA-1 через Modrinth и кешируются
@@ -2253,36 +2371,28 @@ pub async fn profile_icons(
     let profile = cfg.profile(&id).ok_or_else(|| "profile_not_found".to_string())?;
     let root = cfg.profile_root(profile);
     let cache_path = root.join(".aqua-icons.json");
-    let mut cache: HashMap<String, String> = std::fs::read_to_string(&cache_path)
+    let mut cache: HashMap<String, IconEntry> = std::fs::read_to_string(&cache_path)
         .ok()
         .and_then(|raw| serde_json::from_str(&raw).ok())
         .unwrap_or_default();
+    let hashes = mod_hashes(&root);
 
     let mut pending: Vec<(String, String)> = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(root.join("mods")) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
-            let name = path
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or_default()
-                .to_string();
-            if !name.to_ascii_lowercase().ends_with(".jar") && !name.to_ascii_lowercase().ends_with(".jar.off") {
-                continue;
-            }
-            if cache.contains_key(&name) {
-                continue;
-            }
-            if let Some(hash) = hash_file(&path) {
-                pending.push((name, hash));
-            }
+    for (name, hash) in &hashes {
+        match cache.get(name) {
+            Some(entry) if entry.hash == *hash => {}
+            _ => pending.push((name.clone(), hash.clone())),
         }
     }
+    let current = |cache: &HashMap<String, IconEntry>, hashes: &HashMap<String, String>| {
+        cache
+            .iter()
+            .filter(|(name, entry)| hashes.get(*name).is_some_and(|hash| hash == &entry.hash))
+            .map(|(name, entry)| ((*name).clone(), entry.icon.clone()))
+            .collect::<HashMap<String, String>>()
+    };
     if pending.is_empty() {
-        return Ok(cache);
+        return Ok(current(&cache, &hashes));
     }
 
     let ua = concat!("AquaLauncher/", env!("CARGO_PKG_VERSION"));
@@ -2338,13 +2448,18 @@ pub async fn profile_icons(
         }
     }
     for (name, project) in by_file {
-        cache.insert(name, icons.get(&project).cloned().unwrap_or_default());
-    }
-    for (name, _) in &pending {
-        cache.entry(name.clone()).or_default();
+        if let Some(hash) = hashes.get(&name) {
+            cache.insert(
+                name,
+                IconEntry {
+                    hash: hash.clone(),
+                    icon: icons.get(&project).cloned().unwrap_or_default(),
+                },
+            );
+        }
     }
     let _ = std::fs::write(&cache_path, serde_json::to_string(&cache).unwrap_or_default());
-    Ok(cache)
+    Ok(current(&cache, &hashes))
 }
 
 const MODRINTH_UA: &str = concat!("AquaLauncher/", env!("CARGO_PKG_VERSION"));

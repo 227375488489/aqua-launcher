@@ -54,19 +54,16 @@ jobs:
           tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
           releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('Aqua Launcher {0}', github.ref_name) || '' }}
           releaseBody: |
-            Aqua Launcher 0.0.12 Beta - a fast, open Minecraft launcher built with Rust and Tauri.
+            Aqua Launcher 0.0.13 Beta - faster with large modpacks, plus a cleaner, calmer interface.
 
-            - Pack page rebuilt around a Modrinth-style header: block cover, health status, Play, gear settings and a compact menu
-            - Pack health checks missing dependencies, disabled mods, loader mismatches and pending files, with a detailed report
-            - "Update all" now really updates every installed mod from Modrinth and cleans up the replaced jars
-            - Multi-launch: pick the account, run a temporary read-only copy, see all running copies and stop them one by one
-            - Library installs are compact and calm; Play stays the only accent action, with clear empty-state actions
-            - Lightbox with captions, thumbnails, zoom and pan, keyboard and dialog accessibility
-            - Markdown and HTML project descriptions render correctly, including images, tables, lists and video
-            - Catalog and appearance fixes: filter sidebar, live theme previews, custom accent HEX, clipped swatches
-            - Create-pack dialog fully localized; settings reset scroll on tab change; in-pack add header stays visible
-            - AI agent bridge in Settings: connect Claude Code, Codex or Hermes, test the MCP server, see its path
-            - All reported issues #18-#32 fixed; built-in Discord application 1573083334517723146
+            - Mod scanning is cached by size and modification time, reads each jar once and runs in parallel
+            - Heavy mod, profile and system commands no longer block the UI thread; startup stops re-measuring every version folder
+            - Modrinth project and icon lookups share one SHA-1 cache with proper cache invalidation
+            - Network requests now have a read timeout, so downloads cannot hang forever
+            - Sidebar no longer shifts the page or leaves a wide stripe after a nav click; it only expands on hover
+            - Mods load in parallel and render in pages, with lazy images and a focus-safe version menu
+            - Stat tiles, widgets, catalog filters, instances, accounts, settings and pack details reworked for readability
+            - Figma kit: all eight screens exported 1:1 from the live UI into design/Aqua-Launcher.fig.svg
             - 12 languages; Windows, macOS (universal) and Linux builds
           releaseDraft: false
           prerelease: ${{ startsWith(github.ref_name, 'v0.') }}

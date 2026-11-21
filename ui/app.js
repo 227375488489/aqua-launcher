@@ -12,8 +12,8 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const APP_VERSION = "0.0.12-beta";
-const APP_LABEL = "0.0.12 Beta";
+const APP_VERSION = "0.0.13-beta";
+const APP_LABEL = "0.0.13 Beta";
 const NAV_DEFAULT = ["home", "library", "instances", "discover", "accounts"];
 const WIDGET_DEFAULT = ["stats", "achievements", "pc", "latest", "instances", "console"];
 const LINKS = {
@@ -107,8 +107,13 @@ function accentHue() {
 
 /* Recolor the taskbar icon to the current accent (hue-rotate the source mark). */
 let iconSource = null;
+let iconDeg = null;
+let iconBound = false;
 function syncWindowIcon(deg) {
   try {
+    const value = Math.round(Number(deg) || 0);
+    if (value === iconDeg) return;
+    iconDeg = value;
     if (!iconSource) {
       iconSource = new Image();
       iconSource.src = "assets/logo.png";
@@ -121,7 +126,7 @@ function syncWindowIcon(deg) {
         canvas.height = size;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
-        ctx.filter = `hue-rotate(${Math.round(Number(deg) || 0)}deg)`;
+        ctx.filter = `hue-rotate(${iconDeg}deg)`;
         ctx.drawImage(iconSource, 0, 0, size, size);
         let link = document.querySelector('link[rel="icon"]');
         if (!link) {
@@ -135,7 +140,13 @@ function syncWindowIcon(deg) {
       } catch {}
     };
     if (iconSource.complete && iconSource.naturalWidth) paint();
-    else iconSource.addEventListener("load", paint, { once: true });
+    else if (!iconBound) {
+      iconBound = true;
+      iconSource.addEventListener("load", () => {
+        iconDeg = null;
+        syncWindowIcon(value);
+      }, { once: true });
+    }
   } catch {}
 }
 
@@ -392,10 +403,13 @@ function fileUrl(path) {
 }
 function applyImgFallback(root, selector, fn) {
   $$(selector, root).forEach((img) => {
-    img.addEventListener("error", () => {
+    if (img.dataset.fallbackBound) return;
+    img.dataset.fallbackBound = "1";
+    img.onerror = () => {
+      img.onerror = null;
       img.src = fn(img.dataset.seed || "aqua");
       img.classList.add("is-fallback");
-    }, { once: true });
+    };
   });
 }
 
@@ -628,7 +642,7 @@ function renderAccountChip() {
   const account = activeAccount();
   const img = $("#account-avatar");
   img.src = avatarFor(account);
-  img.addEventListener("error", () => { img.src = fallbackAvatar(account?.name || "?"); }, { once: true });
+  img.onerror = () => { img.onerror = null; img.src = fallbackAvatar(account?.name || "?"); };
   $("#account-name").textContent = account?.name || t("accounts.empty");
   $("#account-kind").textContent = !account
     ? t("accounts.addOffline")
@@ -749,25 +763,28 @@ function visibleBySettings(v) {
 function renderVersionMenu() {
   const menu = $("#version-menu");
   if (!menu) return;
-  menu.innerHTML = `<label class="menu-search">
+  let input = $("#version-search");
+  if (!input) {
+    menu.innerHTML = `<label class="menu-search">
       <svg class="ico"><use href="#i-search"></use></svg>
       <input id="version-search" type="search" placeholder="${esc(t("library.search"))}" autocomplete="off" spellcheck="false">
       <kbd>esc</kbd>
     </label>
     <div class="menu-list" id="version-list"></div>`;
-  const input = $("#version-search");
-  input.value = S.versionQuery || "";
-  input.addEventListener("input", () => {
-    S.versionQuery = input.value;
-    renderVersionList();
-  });
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const first = $("#version-list [data-pick]");
-      if (first) first.click();
-    }
-  });
+    input = $("#version-search");
+    input.addEventListener("input", () => {
+      S.versionQuery = input.value;
+      renderVersionList();
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const first = $("#version-list [data-pick]");
+        if (first) first.click();
+      }
+    });
+  }
+  if (input.value !== (S.versionQuery || "")) input.value = S.versionQuery || "";
   renderVersionList();
 }
 
@@ -918,9 +935,9 @@ function syncPlay() {
 /* ------------------------------------------------------------------ widgets */
 
 const WIDGET_META = {
-  stats: { w: 5, icon: "i-gauge", title: "widget.stats", sub: "widget.statsSub" },
+  stats: { w: 4, icon: "i-gauge", title: "widget.stats", sub: "widget.statsSub" },
   achievements: { w: 12, icon: "i-star", title: "achievements.title", sub: "achievements.sub" },
-  pc: { w: 3, icon: "i-cpu", title: "widget.pc", sub: "widget.pcSub" },
+  pc: { w: 4, icon: "i-cpu", title: "widget.pc", sub: "widget.pcSub" },
   latest: { w: 4, icon: "i-sparkles", title: "widget.latest", sub: "widget.latestSub" },
   instances: { w: 5, icon: "i-layers", title: "widget.instances", sub: "widget.instancesSub" },
   console: { w: 7, icon: "i-terminal", title: "widget.console", sub: "widget.consoleSub" },
@@ -1037,7 +1054,7 @@ function renderAchievements() {
   </div>`;
   host.innerHTML = `<div class="ach-hero">
       <div class="ach-ring" style="--pct:${pct}%"><b>${pct}%</b><span>${esc(t("achievements.progress", { a: unlocked, b: list.length }))}</span></div>
-      <div><h2>${esc(t("achievements.title"))}</h2><p>${esc(t("achievements.pageSub"))}</p>
+      <div class="ach-hero-copy"><p>${esc(t("achievements.pageSub"))}</p>
         <div class="ach-summary"><span>${esc(t("achievements.unlocked", { n: unlocked }))}</span><span>${esc(t("achievements.remaining", { n: list.length - unlocked }))}</span></div>
       </div>
     </div>
@@ -2217,6 +2234,8 @@ async function openProject(id, kindHint, targetProfile = "") {
     </button>`;
     const sorted = [...contents].sort((a, b) => a.title.localeCompare(b.title));
     const initialRows = sorted.filter((c) => c.kind === "mod");
+    // the page already renders the project title; drop a duplicated leading H1 from the body
+    const bodyMarkdown = String(detail.body || "").replace(/^\s*#\s+[^\n]*(?:\r?\n)+/, "");
 
     openModal(`
       <button class="win-btn pd-close" data-close aria-label="${esc(t("common.cancel"))}"><svg class="ico"><use href="#i-close"></use></svg></button>
@@ -2233,7 +2252,7 @@ async function openProject(id, kindHint, targetProfile = "") {
         </div>
         <div class="pd-actions">
           <button class="btn btn-primary" data-project-install="${esc(detail.id || id)}"><svg class="ico"><use href="#i-download"></use></svg><span>${esc(kind === "modpack" ? t("discover.installPack") : t("common.install"))}</span></button>
-          ${detail.sourceUrl ? `<button class="btn btn-soft" data-ext="${esc(detail.sourceUrl)}"><svg class="ico"><use href="#i-external"></use></svg><span>Source</span></button>` : ""}
+          ${detail.sourceUrl ? `<button class="btn btn-soft" data-ext="${esc(detail.sourceUrl)}"><svg class="ico"><use href="#i-external"></use></svg><span>${esc(t("project.source"))}</span></button>` : ""}
         </div>
       </div>
       ${tabBar}
@@ -2246,7 +2265,7 @@ async function openProject(id, kindHint, targetProfile = "") {
             <span><b>${esc(detail.license || "—")}</b>${esc(t("project.license"))}</span>
             <span><b>${esc(i18n.date(detail.updated))}</b>${esc(t("project.updated"))}</span>
           </div>
-          <div class="pd-markdown">${mdToHtml(detail.body)}</div>
+          <div class="pd-markdown">${mdToHtml(bodyMarkdown)}</div>
         </div>
         ${contentPanel}
         <div class="pd-panel" data-pdpanel="versions" hidden>
@@ -2371,15 +2390,19 @@ async function loadProjectIds(pid) {
 
 async function loadMods() {
   try {
-    S.mods = await invoke("mods_list");
-    S.modHealth = await invoke("mods_health");
     const pid = activeProfile()?.id;
+    const [mods, health] = await Promise.all([
+      invoke("mods_list"),
+      invoke("mods_health").catch(() => null),
+    ]);
+    S.mods = mods || [];
+    S.modHealth = health;
     if (pid) {
-      try {
-        const map = await invoke("profile_icons", { id: pid });
-        Object.entries(map || {}).forEach(([file, url]) => { if (url) S.icons.set(`${pid}:${file}`, url); });
-      } catch {}
-      await loadProjectIds(pid);
+      const [icons] = await Promise.all([
+        invoke("profile_icons", { id: pid }).catch(() => null),
+        loadProjectIds(pid),
+      ]);
+      Object.entries(icons || {}).forEach(([file, url]) => { if (url) S.icons.set(`${pid}:${file}`, url); });
     }
     renderMods();
     renderModHealth();
@@ -2388,6 +2411,8 @@ async function loadMods() {
     S.modHealth = null;
   }
 }
+
+let modsShown = 80;
 
 function renderMods() {
   const host = $("#mods-list");
@@ -2411,16 +2436,24 @@ function renderMods() {
   }
   const riskKey = (risk) => (risk === "high" ? "discover.risk.high" : risk === "medium" ? "discover.risk.medium" : "discover.risk.safe");
   const pid = activeProfile()?.id;
-  host.innerHTML = list.map((m) => {
+  const shown = list.slice(0, modsShown);
+  host.innerHTML = shown.map((m) => {
     const icon = pid ? (S.icons.get(`${pid}:${m.file}`) || S.icons.get(`${pid}:${m.file.replace(/\.(off|disabled)$/i, "")}`)) : null;
     return `<div class="mod-row" data-mod="${esc(m.file)}">
-    ${icon ? `<img class="micon" src="${esc(icon)}" alt="" loading="lazy">` : `<img class="micon" src="${packArt(m.name)}" alt="">`}
+    ${icon ? `<img class="micon" src="${esc(icon)}" alt="" loading="lazy" decoding="async">` : `<img class="micon" src="${packArt(m.name)}" alt="" loading="lazy" decoding="async">`}
     <div class="mname"><b title="${esc(m.name)}">${esc(m.name)}</b><small>${esc([m.version, m.loader, i18n.bytes(m.size)].filter(Boolean).join(" · "))}</small></div>
     <span class="chip ${m.risk === "high" ? "danger" : m.risk === "medium" ? "warn" : "ok"}">${esc(t(riskKey(m.risk)))}</span>
     <button class="btn btn-quiet icon-only" data-mod-remove="${esc(m.file)}" title="${esc(t("common.remove"))}"><svg class="ico"><use href="#i-trash"></use></svg></button>
   </div>`;
-  }).join("");
+  }).join("") + (shown.length < list.length
+    ? `<button class="btn btn-soft mods-more" data-mods-more>${esc(t("library.more"))} · ${list.length - shown.length}</button>`
+    : "");
   host.onclick = async (e) => {
+    if (e.target.closest("[data-mods-more]")) {
+      modsShown += 120;
+      renderMods();
+      return;
+    }
     const btn = e.target.closest("[data-mod-remove]");
     if (!btn) return;
     try {
@@ -2488,7 +2521,11 @@ function renderInstances() {
         <button class="btn btn-quiet icon-only" data-profile-delete="${esc(p.id)}" title="${esc(t("common.delete"))}"><svg class="ico"><use href="#i-trash"></use></svg></button>
       </div>
     </article>`;
-  }).join("");
+  }).join("") + `<button class="icard icard-new" data-instance-new type="button">
+      <span class="icard-new-icon"><svg class="ico"><use href="#i-plus"></use></svg></span>
+      <b>${esc(t("instances.create"))}</b>
+      <small>${esc(t("instances.createText"))}</small>
+    </button>`;
   applyImgFallback(host, "img", artFor);
 }
 
@@ -2507,6 +2544,7 @@ function bindInstances() {
     }
   });
   $("#instance-grid").addEventListener("click", async (e) => {
+    if (e.target.closest("[data-instance-new]")) return createInstance();
     const activate = e.target.closest("[data-profile-activate]");
     if (activate) return activateProfile(activate.dataset.profileActivate);
     const play = e.target.closest("[data-profile-play]");
@@ -4876,6 +4914,7 @@ function bindDiscover() {
   });
   $("#mods-search")?.addEventListener("input", (e) => {
     S.modsQuery = e.target.value;
+    modsShown = 80;
     renderMods();
   });
   $("#fabric-create").addEventListener("click", installDiscoverLoader);
@@ -5069,13 +5108,12 @@ async function bindBackend() {
     S.running = S.sessions[0]?.version || null;
     appendLog(`Exited ${p.version ?? ""} (${p.code ?? 0})`, "ok");
     syncPlay();
-    refreshBoot().then(() => renderAll());
+    refreshBoot();
   });
   await listen("auth://done", async () => {
     closeModal();
     S.msFlow = null;
     await refreshBoot();
-    renderAll();
     toast(t("toast.msSignedIn"));
   });
   await listen("auth://error", (e) => {
@@ -5091,10 +5129,7 @@ async function bindBackend() {
 function bindStatic() {
   $("#rail-nav").addEventListener("click", (e) => {
     const item = e.target.closest("[data-nav]");
-    if (item) {
-      $("#rail").classList.add("is-open");
-      go(item.dataset.nav);
-    }
+    if (item) go(item.dataset.nav);
   });
   document.addEventListener("pointerdown", (e) => {
     if (!$("#rail").contains(e.target)) $("#rail").classList.remove("is-open");
