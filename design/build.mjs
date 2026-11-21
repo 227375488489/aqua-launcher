@@ -138,7 +138,7 @@ const titlebar = () => `
       ${T(56, 32, "aqua", { size: 19, weight: 800, tracking: -0.4 })}
       ${T(112, 31, "ЛАУНЧЕР", { size: 9, weight: 700, fill: C.muted, tracking: 1.8 })}
       ${R(180, 13, 92, 26, 8, "rgba(255,255,255,0.055)", { stroke: C.line, strokeOpacity: 0.1 })}
-      ${T(226, 30, "v0.0.13 Beta", { size: 10.5, weight: 700, fill: C.dim, anchor: "middle" })}
+      ${T(226, 30, "v0.0.14 Beta", { size: 10.5, weight: 700, fill: C.dim, anchor: "middle" })}
     </g>
     <g id="Window controls">
       ${T(1340, 30, "—", { size: 14, fill: C.muted, anchor: "middle" })}
@@ -168,7 +168,7 @@ const rail = (active) => `
       ${T(72, 812, "Офлайн-аккаунт", { size: 10, fill: C.muted })}
       ${icon("settings", 214, 789, 18, C.muted)}
     </g>
-    ${T(24, 864, "v0.0.13 Beta", { size: 10, fill: C.muted, opacity: 0.7 })}
+    ${T(24, 864, "v0.0.14 Beta", { size: 10, fill: C.muted, opacity: 0.7 })}
     ${T(24, 880, "Windows · x64", { size: 10, fill: C.muted, opacity: 0.5 })}
   </g>`;
 

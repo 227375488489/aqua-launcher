@@ -12,8 +12,8 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const APP_VERSION = "0.0.13-beta";
-const APP_LABEL = "0.0.13 Beta";
+const APP_VERSION = "0.0.14-beta";
+const APP_LABEL = "0.0.14 Beta";
 const NAV_DEFAULT = ["home", "library", "instances", "discover", "accounts"];
 const WIDGET_DEFAULT = ["stats", "achievements", "pc", "latest", "instances", "console"];
 const LINKS = {
@@ -3903,7 +3903,8 @@ function fillSettings() {
   setSegmented("#radius-choice", "data-radius-choice", s.uiRadius || "soft");
   setSegmented("#density-choice", "data-density-choice", s.uiDensity || "normal");
   setSegmented("#bg-choice", "data-bg-choice", s.uiBackground || "ocean");
-  if ($("#bg-custom")) $("#bg-custom").value = s.uiBgCustom || "#071420";
+  if ($("#bg-custom")) $("#bg-custom").value = hexRgb(s.uiBgCustom) ? s.uiBgCustom : "#071420";
+  if ($("#bg-hex")) $("#bg-hex").value = String(s.uiBgCustom || "#071420").replace("#", "");
   setSegmented("#wall-choice", "data-wall", s.uiWallpaper || "deep");
   setSegmented("#side-choice", "data-side-choice", s.uiSidebar || "left");
   setSegmented("#rail-choice", "data-rail-choice", s.uiSidebarMode || "full");
@@ -3912,14 +3913,17 @@ function fillSettings() {
   $("#scale-range").value = Number(s.uiScale) || 100;
   $("#scale-value").textContent = `${Number(s.uiScale) || 100}%`;
   paintRange($("#scale-range"));
-  $("#wall-blur").value = Number(s.uiWallpaperBlur) ?? 18;
-  $("#wall-blur-value").textContent = String(Number(s.uiWallpaperBlur) || 0);
+  const blur = Number.isFinite(Number(s.uiWallpaperBlur)) ? Number(s.uiWallpaperBlur) : 18;
+  const dim = Number.isFinite(Number(s.uiWallpaperDim)) ? Number(s.uiWallpaperDim) : 45;
+  const glass = Number.isFinite(Number(s.uiGlass)) ? Number(s.uiGlass) : 62;
+  $("#wall-blur").value = blur;
+  $("#wall-blur-value").textContent = `${blur} px`;
   paintRange($("#wall-blur"));
-  $("#wall-dim").value = Number(s.uiWallpaperDim) || 45;
-  $("#wall-dim-value").textContent = `${Number(s.uiWallpaperDim) || 0}%`;
+  $("#wall-dim").value = dim;
+  $("#wall-dim-value").textContent = `${dim}%`;
   paintRange($("#wall-dim"));
-  $("#glass-range").value = Number(s.uiGlass) ?? 62;
-  $("#glass-value").textContent = `${Number(s.uiGlass) || 0}%`;
+  $("#glass-range").value = glass;
+  $("#glass-value").textContent = `${glass}%`;
   paintRange($("#glass-range"));
   $("#wall-path").textContent = s.uiWallpaperPath ? String(s.uiWallpaperPath).split(/[\\/]/).pop() : t("set.none");
 
@@ -4290,8 +4294,24 @@ function bindSettings() {
     S.settings.uiBgCustom = e.target.value;
     setSegmented("#bg-choice", "data-bg-choice", "custom");
     document.documentElement.style.setProperty("--bg-custom", e.target.value);
+    if ($("#bg-hex")) $("#bg-hex").value = e.target.value.replace("#", "");
+    applyAppearance(S.settings);
     markDirty();
   });
+  $("#bg-hex")?.addEventListener("input", (e) => {
+    const clean = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
+    e.target.value = clean;
+    if (clean.length !== 6) return;
+    const value = `#${clean.toLowerCase()}`;
+    S.settings.uiBackground = "custom";
+    S.settings.uiBgCustom = value;
+    if ($("#bg-custom")) $("#bg-custom").value = value;
+    setSegmented("#bg-choice", "data-bg-choice", "custom");
+    document.documentElement.style.setProperty("--bg-custom", value);
+    applyAppearance(S.settings);
+    markDirty();
+  });
+  $("#bg-hex")?.addEventListener("change", () => applyAppearance(S.settings));
   $("#bg-custom")?.addEventListener("change", () => applyAppearance(S.settings));
   bindSegChoice("#wall-choice", "data-wall", "uiWallpaper", () => applyAppearance(S.settings));
   bindSegChoice("#side-choice", "data-side-choice", "uiSidebar", () => applyAppearance(S.settings));
@@ -4310,7 +4330,7 @@ function bindSettings() {
   });
   $("#wall-blur").addEventListener("input", (e) => {
     S.settings.uiWallpaperBlur = Number(e.target.value);
-    $("#wall-blur-value").textContent = e.target.value;
+    $("#wall-blur-value").textContent = `${e.target.value} px`;
     applyAppearance(S.settings);
     paintRange(e.target);
     markDirty();

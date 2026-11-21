@@ -2306,11 +2306,15 @@ html[data-rail="auto"] .rail:not(:hover):not(:focus-within):not(.is-open) .nav-i
   html[data-rail="auto"] .rail{
     position:absolute;left:0;top:0;bottom:0;z-index:40;
     width:76px!important;height:auto;padding:20px 10px 14px;
-    background:color-mix(in srgb,var(--bg) 92%,transparent);
-    box-shadow:none;
+    background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 4%,rgba(8,20,28,.34)),rgba(4,12,18,.16));
+    backdrop-filter:blur(14px);box-shadow:none;
     transition:width 180ms var(--ease),padding 180ms var(--ease),box-shadow 180ms var(--ease)!important;
   }
+  html[data-theme="light"][data-rail="auto"] .rail{background:linear-gradient(180deg,rgba(255,255,255,.42),rgba(255,255,255,.2))}
   html[data-rail="auto"] .view{width:calc(100% - 76px);height:100%;margin-left:76px!important}
+  html[data-side="right"][data-rail="auto"] .rail{left:auto;right:0}
+  html[data-side="right"][data-rail="auto"] .view{margin-left:0!important;margin-right:76px!important}
+  html[data-side="right"][data-rail="auto"] .rail:hover{box-shadow:-22px 0 56px -34px rgba(0,0,0,.8)}
   html[data-rail="auto"] .rail:hover{width:238px!important;padding:20px 14px 14px;box-shadow:22px 0 56px -34px rgba(0,0,0,.8)}
   html[data-rail="auto"] .rail:focus-within:not(:hover){width:76px!important;padding:20px 10px 14px;box-shadow:none}
   html[data-rail="auto"] .rail *{
@@ -2330,4 +2334,88 @@ html[data-rail="auto"] .rail:not(:hover):not(:focus-within):not(.is-open) .nav-i
   html[data-rail="auto"] .rail:focus-visible,html[data-rail="auto"] .rail *:focus-visible{outline-offset:-2px}
 }
 
+/* ---------------------------------------------------------------
+   v0.0.14 — settings controls, hero alignment, wallpaper layer
+   --------------------------------------------------------------- */
 
+/* every settings control sits on the same vertical line */
+.field-control{gap:10px;align-items:center}
+.swatches{align-items:center}
+.swatch{flex:none}
+.accent-hex{align-self:center}
+.bg-custom-pick{align-self:center;margin:0}
+.bg-hex{display:inline-flex}
+
+/* preset tiles: compact, equal height, content truly centred */
+.theme-grid{grid-auto-rows:1fr}
+.theme-card{
+  flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  height:100%;min-height:62px;padding:6px;text-align:center;
+}
+.theme-card>span:last-child{max-width:100%;padding:0;text-align:center}
+.theme-swatch{width:46px;height:30px;flex:none}
+
+/* hero copy follows the chosen Play position, not just the buttons */
+html[data-playpos="center"] .hero-content{margin-left:auto;margin-right:auto;text-align:center}
+html[data-playpos="center"] .hero-sub{margin-left:auto;margin-right:auto}
+html[data-playpos="center"] .hero-meta{justify-content:center}
+html[data-playpos="right"] .hero-content{margin-left:auto;margin-right:0;text-align:right}
+html[data-playpos="right"] .hero-sub{margin-left:auto;margin-right:0}
+html[data-playpos="right"] .hero-meta{justify-content:flex-end}
+
+/* instance card: equal breathing room above and below */
+.icard{justify-content:center}
+.icard-new{min-height:182px}
+
+/* real wallpaper layer: sharp image by default, blur applied to the photo only */
+.wall-photo{
+  position:absolute;inset:-96px;display:none;pointer-events:none;
+  background-image:var(--wall-image);background-size:cover;background-position:center;background-repeat:no-repeat;
+  filter:blur(var(--wall-blur,0px));transform:scale(1.03);
+}
+.backdrop.has-wall .wall-photo{display:block}
+html .backdrop.has-wall{
+  background-image:none!important;
+  background-color:var(--bg);
+}
+.backdrop.has-wall::after{backdrop-filter:none}
+
+/* the dim slider also has a visible effect on the built-in backdrop */
+.aurora{filter:blur(calc(var(--wall-blur,0px) * .35))}
+
+
+
+/* mobile: theme presets must take the whole row, not the 2-column desktop field */
+@media (max-width:680px){
+  .field:has(.theme-grid){grid-template-columns:1fr;gap:8px;align-items:start}
+  .field:has(.theme-grid) .field-label{padding-top:0}
+}
+
+/* glass slider: higher value = more transparent panels and surface tiles */
+html[data-theme="dark"],html[data-theme="oled"]{
+  --panel:color-mix(in srgb,var(--accent) 9%,rgba(8,13,18,calc(.34 + (1 - var(--glass)) * .50)));
+  --panel-2:color-mix(in srgb,var(--accent) 12%,rgba(12,18,24,calc(.28 + (1 - var(--glass)) * .48)));
+  --s1:rgba(255,255,255,calc(.078 - var(--glass) * .038));
+  --s2:rgba(255,255,255,calc(.108 - var(--glass) * .042));
+  --s3:rgba(255,255,255,calc(.152 - var(--glass) * .050));
+  --field:rgba(255,255,255,calc(.095 - var(--glass) * .045));
+}
+html[data-theme="light"]{
+  --panel:color-mix(in srgb,var(--accent) 3%,rgba(255,255,255,calc(.55 + (1 - var(--glass)) * .38)));
+  --panel-2:color-mix(in srgb,var(--accent) 5%,rgba(255,255,255,calc(.48 + (1 - var(--glass)) * .38)));
+  --s1:rgba(12,44,58,calc(.062 - var(--glass) * .028));
+  --s2:rgba(12,44,58,calc(.094 - var(--glass) * .032));
+  --s3:rgba(12,44,58,calc(.132 - var(--glass) * .040));
+}
+
+/* instances: fit three builds plus the create card on one desktop row */
+.instance-grid{grid-template-columns:repeat(auto-fill,minmax(264px,1fr))}
+
+/* instance meta: label and value on separate lines so a date never breaks mid-word */
+.icard-stats{display:grid;grid-template-columns:auto auto;justify-content:space-between;gap:10px}
+.icard-stats>span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.icard-stats>span b{white-space:nowrap}
+
+/* preset tiles: let the swatch fill the tile instead of leaving a wide empty gutter */
+.theme-card .theme-swatch{width:100%;max-width:none;height:40px}
+.field-control:has(.theme-grid) .theme-card{min-height:78px;padding:7px;gap:6px}

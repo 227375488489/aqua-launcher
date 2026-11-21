@@ -210,16 +210,28 @@ const SNAPSHOT = String.raw`(() => {
       tracking: cs.letterSpacing === "normal" ? 0 : parseFloat(cs.letterSpacing) || 0,
     }));
   };
-  const visit = (el, clips = []) => {
-    if (!(el instanceof Element)) return;
+  const usedNames = new Map();
+  const layerName = (el, tag) => {
+    let raw = el.id || el.getAttribute("data-i18n") || [...el.classList].filter((c) => !c.startsWith("is-")).slice(0, 2).join(".") || tag;
+    if (el.classList.contains("titlebar")) raw = "Main menu - titlebar";
+    else if (el.classList.contains("rail")) raw = "Main menu - sidebar";
+    else if (el.id === "view") raw = "Scroll panel - below menu";
+    else if (el.id === "app") raw = "App";
+    const base = clean(raw).slice(0, 54) || tag;
+    const n = (usedNames.get(base) || 0) + 1;
+    usedNames.set(base, n);
+    return n === 1 ? base : base + " " + n;
+  };
+  const visit = (el) => {
+    if (!(el instanceof Element)) return null;
     const tag = el.tagName.toLowerCase();
-    if (["script", "style", "defs", "symbol", "title"].includes(tag)) return;
-    if (el.classList.contains("sprite") || el.classList.contains("sr-only") || el.closest("[hidden]")) return;
+    if (["script", "style", "defs", "symbol", "title"].includes(tag)) return null;
+    if (el.classList.contains("sprite") || el.classList.contains("sr-only") || el.closest("[hidden]")) return null;
     const cs = getComputedStyle(el);
-    if (!visible(el, cs)) return;
+    if (!visible(el, cs)) return null;
     const r = el.getBoundingClientRect();
-    if (r.width < 0.5 || r.height < 0.5 || r.right < 0 || r.bottom < 0 || r.left > vw || r.top > vh) return;
-    const name = clean(el.getAttribute("data-i18n") || el.className || tag).slice(0, 46) || tag;
+    if (r.width < 0.5 || r.height < 0.5 || r.right < 0 || r.bottom < 0 || r.left > vw || r.top > vh) return null;
+    const name = layerName(el, tag);
     const x = Math.round(r.left * 100) / 100;
     const y = Math.round(r.top * 100) / 100;
     const w = Math.round(r.width * 100) / 100;
@@ -230,7 +242,9 @@ const SNAPSHOT = String.raw`(() => {
     const border = splitColor(cs.borderTopColor);
     const shadow = cs.boxShadow && cs.boxShadow !== "none" && !cs.boxShadow.includes("inset") ? cs.boxShadow : "";
     const bgImage = cs.backgroundImage && cs.backgroundImage !== "none" ? cs.backgroundImage : "";
-    const push = (item) => { if (clips.length) item.clips = clips; out.push(item); };
+    const scroller = [cs.overflowX, cs.overflowY, cs.overflow].some((value) => value === "hidden" || value === "auto" || value === "scroll");
+    const children = [];
+    const push = (item) => { children.push(item); };
     const pseudo = (which) => {
       const ps = getComputedStyle(el, which);
       if (ps.display === "none" || ps.content === "none" || ps.content === "normal" || ps.visibility === "hidden") return;
@@ -248,18 +262,18 @@ const SNAPSHOT = String.raw`(() => {
       if (paint.opacity < 0.01 && strokeW < 0.5) return;
       push({ kind: "box", name: which, x: px, y: py, w: pw, h: ph, radius: parseFloat(ps.borderTopLeftRadius) || 0, fill: paint.color, fillOpacity: paint.opacity, border: stroke.color, borderOpacity: stroke.opacity, borderWidth: strokeW, shadow: "", bgImage: "" });
     };
+    const done = () => children.length ? { kind: "group", name, x, y, w, h, clip: scroller ? { x, y, w, h, r: radius } : null, children } : null;
     if ((bg.opacity > 0.01 && bg.color !== "rgba(0, 0, 0, 0)") || bgImage || (bwidth > 0 && cs.borderTopStyle !== "none") || shadow) {
       push({ kind: "box", name, x, y, w, h, radius, fill: bg.color, fillOpacity: bg.opacity, border: border.color, borderOpacity: border.opacity, borderWidth: bwidth, shadow, bgImage });
     }
     pseudo("::before");
-    pseudo("::after");
     if (tag === "img") {
       push({ kind: "image", name, x, y, w, h, radius, src: el.currentSrc || el.src, fit: cs.objectFit });
-      return;
+      return done();
     }
     if (tag === "svg" && !el.classList.contains("sprite")) {
       push({ kind: "icon", name, x, y, w, h, color: splitColor(cs.color).color, html: iconMarkup(el, splitColor(cs.color).color) });
-      return;
+      return done();
     }
     if (["input", "textarea", "select"].includes(tag)) {
       const type = (el.getAttribute("type") || "text").toLowerCase();
@@ -273,7 +287,7 @@ const SNAPSHOT = String.raw`(() => {
         push({ kind: "box", name: "range track", x: x + pad, y: cy - 2, w: Math.max(0, w - pad * 2), h: 4, radius: 2, fill: "rgb(255,255,255)", fillOpacity: 0.12, border: "none", borderOpacity: 0, borderWidth: 0, shadow: "", bgImage: "" });
         push({ kind: "box", name: "range fill", x: x + pad, y: cy - 2, w: Math.max(0, (w - pad * 2) * pct), h: 4, radius: 2, fill: accent, fillOpacity: 1, border: "none", borderOpacity: 0, borderWidth: 0, shadow: "", bgImage: "" });
         push({ kind: "box", name: "range thumb", x: x + pad + (w - pad * 2) * pct - 7, y: cy - 7, w: 14, h: 14, radius: 7, fill: accent, fillOpacity: 1, border: "rgb(5,15,23)", borderOpacity: 1, borderWidth: 2, shadow: "", bgImage: "" });
-        return;
+        return done();
       }
       if (!["checkbox", "radio", "color", "file", "hidden"].includes(type)) {
         const value = tag === "select" ? el.options[el.selectedIndex]?.text || "" : el.value || el.placeholder || "";
@@ -285,7 +299,7 @@ const SNAPSHOT = String.raw`(() => {
           const pad = parseFloat(cs.paddingLeft) || 0;
           const a = ascent(size, weight, family);
           push({
-            kind: "text", x: x + pad,
+            kind: "text", name: "value", x: x + pad,
             baseline: y + (h - (a + size * 0.22)) / 2 + a,
             text: el.value ? value : (el.placeholder || value),
             size, weight, family,
@@ -295,18 +309,20 @@ const SNAPSHOT = String.raw`(() => {
           });
         }
       }
-      return;
+      return done();
     }
     for (const node of el.childNodes) {
       if (node.nodeType === 3) textLines(node, cs, el).forEach(push);
     }
-    const clipped = (cs.overflowX === "hidden" || cs.overflowY === "hidden" || cs.overflow === "hidden");
-    const nextClips = clipped ? [...clips, { x, y, w, h, r: radius }] : clips;
-    for (const child of el.children) visit(child, nextClips);
+    for (const child of el.children) {
+      const group = visit(child);
+      if (group) children.push(group);
+    }
+    pseudo("::after");
+    return done();
   };
   const root = document.querySelector(".app") || document.body;
-  visit(root);
-  return { out, vw, vh };
+  return { out: visit(root), vw, vh };
 })()`;
 
 const snapshot = async () => {
@@ -356,8 +372,17 @@ function gradient(id, css) {
 }
 
 const imageCache = new Map();
-async function embedImages(items) {
-  for (const item of items) {
+function flatten(item, out = []) {
+  if (!item) return out;
+  if (item.kind === "group") {
+    for (const child of item.children) flatten(child, out);
+  } else {
+    out.push(item);
+  }
+  return out;
+}
+async function embedImages(rootItem) {
+  for (const item of flatten(rootItem)) {
     if (item.kind !== "image" || !/^https?:/i.test(item.src || "")) continue;
     if (!imageCache.has(item.src)) {
       try {
@@ -437,7 +462,12 @@ function toSvg(name, data, prefix) {
     return `clip-path="url(#${id})"`;
   };
 
-  for (const p of data.out) {
+  const emit = (p) => {
+    if (p.kind === "group") {
+      const clip = p.clip ? clipFor({ clips: [p.clip] }) : "";
+      const attrs = ` id="${xml(p.name)}"${clip ? ` ${clip}` : ""}`;
+      return `<g${attrs}>\n${p.children.map(emit).join("\n")}\n</g>`;
+    }
     if (p.kind === "box") {
       const fillId = p.bgImage && /gradient/.test(p.bgImage) ? nextId("grad") : "";
       if (fillId) {
@@ -445,7 +475,7 @@ function toSvg(name, data, prefix) {
         if (g) defs.push(g); else p.bgImage = "";
       }
       const useGradient = fillId && defs.length;
-      if (p.fillOpacity < 0.02 && !useGradient && !p.borderWidth && !p.shadow) continue;
+      if (p.fillOpacity < 0.02 && !useGradient && !p.borderWidth && !p.shadow) return "";
       if (p.shadow) {
         const m = /(rgba?\([^)]+\)|#[0-9a-fA-F]+)\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+([\d.]+)px(?:\s+(-?[\d.]+)px)?/.exec(p.shadow);
         if (m) {
@@ -467,24 +497,29 @@ function toSvg(name, data, prefix) {
       const filter = p.filter ? ` filter="url(#${p.filter})"` : "";
       const clip = clipFor(p);
       const rect = `<rect id="${xml(p.name)}" x="${num(p.x)}" y="${num(p.y)}" width="${num(p.w)}" height="${num(p.h)}" rx="${num(p.radius)}" fill="${fill}" fill-opacity="${num(fillOp)}"${stroke}${filter}/>`;
-      body.push(clip ? `<g ${clip}>${rect}</g>` : rect);
-    } else if (p.kind === "image") {
+      return clip ? `<g ${clip}>${rect}</g>` : rect;
+    }
+    if (p.kind === "image") {
       const id = nextId("clip");
       defs.push(`<clipPath id="${id}"><rect x="${num(p.x)}" y="${num(p.y)}" width="${num(p.w)}" height="${num(p.h)}" rx="${num(p.radius)}"/></clipPath>`);
       const fit = p.fit === "contain" ? "xMidYMid meet" : p.fit === "fill" ? "none" : "xMidYMid slice";
       const clip = clipFor(p);
       const image = `<image id="${xml(p.name)}" x="${num(p.x)}" y="${num(p.y)}" width="${num(p.w)}" height="${num(p.h)}" preserveAspectRatio="${fit}" clip-path="url(#${id})" href="${xml(p.src)}"/>`;
-      body.push(clip ? `<g ${clip}>${image}</g>` : image);
-    } else if (p.kind === "icon") {
+      return clip ? `<g ${clip}>${image}</g>` : image;
+    }
+    if (p.kind === "icon") {
       const clip = clipFor(p);
       const icon = `<g id="${xml(p.name)}" transform="translate(${num(p.x)} ${num(p.y)}) scale(${num(p.w / 24)} ${num(p.h / 24)})" fill="none" stroke="${p.color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p.html}</g>`;
-      body.push(clip ? `<g ${clip}>${icon}</g>` : icon);
-    } else if (p.kind === "text") {
-      const clip = clipFor(p);
-      const text = `<text id="${xml(p.text.slice(0, 30))}" x="${num(p.x)}" y="${num(p.baseline)}" font-family="${xml(p.family)}" font-size="${num(p.size)}" font-weight="${p.weight}" fill="${p.color}" fill-opacity="${num(p.opacity)}" letter-spacing="${num(p.tracking)}">${xml(p.text)}</text>`;
-      body.push(clip ? `<g ${clip}>${text}</g>` : text);
+      return clip ? `<g ${clip}>${icon}</g>` : icon;
     }
-  }
+    if (p.kind === "text") {
+      const clip = clipFor(p);
+      const text = `<text id="${xml(p.name)}" x="${num(p.x)}" y="${num(p.baseline)}" font-family="${xml(p.family)}" font-size="${num(p.size)}" font-weight="${p.weight}" fill="${p.color}" fill-opacity="${num(p.opacity)}" letter-spacing="${num(p.tracking)}">${xml(p.text)}</text>`;
+      return clip ? `<g ${clip}>${text}</g>` : text;
+    }
+    return "";
+  };
+  body.push(emit(data.out));
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" fill="none">
@@ -511,7 +546,8 @@ for (const [name, action] of pages) {
   const svg = toSvg(name, data, name);
   files.set(name, svg);
   writeFileSync(join(screensDir, `${name}.svg`), svg, "utf8");
-  process.stdout.write(`${name}: ${data.out.length} layers\n`);
+  const count = (item) => item ? (item.kind === "group" ? 1 + item.children.reduce((n, child) => n + count(child), 0) : 1) : 0;
+  process.stdout.write(`${name}: ${count(data.out)} separate layers\n`);
 }
 
 writeFileSync(join(here, "Aqua-Launcher.fig.svg"), buildMaster(files), "utf8");

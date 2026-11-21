@@ -54,16 +54,17 @@ jobs:
           tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
           releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('Aqua Launcher {0}', github.ref_name) || '' }}
           releaseBody: |
-            Aqua Launcher 0.0.13 Beta - faster with large modpacks, plus a cleaner, calmer interface.
+            Aqua Launcher 0.0.14 Beta - bug fixes from the latest QA pass.
 
-            - Mod scanning is cached by size and modification time, reads each jar once and runs in parallel
-            - Heavy mod, profile and system commands no longer block the UI thread; startup stops re-measuring every version folder
-            - Modrinth project and icon lookups share one SHA-1 cache with proper cache invalidation
-            - Network requests now have a read timeout, so downloads cannot hang forever
-            - Sidebar no longer shifts the page or leaves a wide stripe after a nav click; it only expands on hover
-            - Mods load in parallel and render in pages, with lazy images and a focus-safe version menu
-            - Stat tiles, widgets, catalog filters, instances, accounts, settings and pack details reworked for readability
-            - Figma kit: all eight screens exported 1:1 from the live UI into design/Aqua-Launcher.fig.svg
+            - Auto sidebar now keeps the translucent backdrop effect like the other rail modes
+            - Theme preset tiles are centered and filled; no more empty space inside each tile
+            - Accent swatches no longer touch the HEX field and sit centered on the row
+            - Background row gets a working custom color picker with a HEX field
+            - Wallpaper blur, dim and glass transparency sliders now visibly change the interface
+            - Custom wallpaper images render reliably behind the UI
+            - Sidebar side switch works in auto, icons and full modes
+            - Play button alignment now moves the whole hero copy, not only the controls
+            - Instance cards use equal spacing with stats laid out cleanly
             - 12 languages; Windows, macOS (universal) and Linux builds
           releaseDraft: false
           prerelease: ${{ startsWith(github.ref_name, 'v0.') }}

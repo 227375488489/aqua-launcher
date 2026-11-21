@@ -32,24 +32,29 @@ relative paths, so opening the file directly is simpler.
 2. In Figma: **File → Import** (or drag the file onto the canvas) and choose
    **`design/Aqua-Launcher.fig.svg`**. All eight screens arrive together, laid out 2 × 4 with labels.
    Import a file from `design/screens/` instead if you want one screen per Figma file.
-3. The file becomes an editable frame: groups such as `Title bar`, `Rail`, `Hero`,
-   `Widgets section`, `Settings panel` are preserved, and all text stays editable.
+3. The file becomes an editable frame with one layer per element: every box is a `<g>`/rect,
+   every label is live text, every icon is a vector, every image is embedded. Top-level groups are
+   **`Main menu - titlebar`**, **`Main menu - sidebar`** and **`Scroll panel - below menu`**;
+   inside the scroll panel each page keeps its own group (`page-home`, `page-library`, …).
+   The scroll panel is clipped below the menu, exactly like the app.
 4. To use the tokens as variables, install the **Tokens Studio** plugin and import
    `design/tokens.json`. Without a plugin, copy the values from the JSON into Figma variables.
-5. To keep the design in sync with code, edit `build.mjs` and run `node design/build.mjs`; re-import
-   the affected SVG. Figma does not watch local files, so re-import replaces the old frame.
+5. To keep the design in sync with code, run `node design/export.mjs` and re-import the master SVG.
+   Figma does not watch local files, so re-import replaces the old frame.
 
-> Figma's native `.fig` format is proprietary and cannot be written outside Figma. The master SVG is
-> the portable equivalent: Figma imports it as a normal editable file, with no bitmap flattening.
+> Figma's native `.fig` is a proprietary binary that only Figma itself can write. This kit gives you
+> the exact same result through SVG import: all 2,300+ elements arrive as separate, editable Figma
+> layers. After import use **File → Save local copy…** if you specifically need a `.fig` file.
 
 ### Notes
 
-- The SVG embeds a preview subset of Manrope. Figma will map the `Manrope` family to the font you
-  installed; if it reports a missing font, select the text and choose Manrope manually.
-- Images are vector placeholders (gradients and simple shapes), not screenshots. Replace the
-  media rectangles with real game art in Figma when making marketing material.
+- The SVG embeds a Manrope subset. Figma will map the `Manrope` family to the font you installed;
+  if it reports a missing font, select the text and choose Manrope manually.
+- Game covers, avatars and the hero image are embedded from the live app, so the frames show real art
+  rather than placeholders.
 - Frame size is 1440 × 900. The shipping window is 1280 × 820; the extra space keeps the page
   margins honest and gives room for annotations.
+- The backdrop is one embedded JPEG behind the vector UI; everything above it is editable.
 
 ## Regenerate
 
